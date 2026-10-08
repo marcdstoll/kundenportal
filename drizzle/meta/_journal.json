@@ -15,6 +15,13 @@
       "when": 1791461002341,
       "tag": "0001_fancy_the_stranger",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791463553382,
+      "tag": "0002_crazy_polaris",
+      "breakpoints": true
     }
   ]
 }

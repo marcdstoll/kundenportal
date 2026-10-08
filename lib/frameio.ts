@@ -6,11 +6,16 @@ const IMS = "https://ims-na1.adobelogin.com/ims";
 const SCOPES = "openid email profile offline_access additional_info.roles";
 const API = "https://api.frame.io/v4";
 
+// Name des Frame.io-Projekts, in dem die Aufträge landen
+const PROJECT_NAME = "Kundenportal";
+
 type TokenResponse = {
   access_token: string;
   refresh_token?: string;
   expires_in: number;
 };
+
+// ---------- Anmeldung bei Adobe ----------
 
 // Adresse der Adobe-Anmeldeseite
 export function getAuthorizeUrl(state: string) {
@@ -76,7 +81,8 @@ async function getAccessToken() {
   return t.access_token;
 }
 
-// Anfrage an die Frame.io-API
+// ---------- Allgemeine API-Anfrage ----------
+
 export async function frameio(path: string, init: RequestInit = {}) {
   const token = await getAccessToken();
   const res = await fetch(`${API}${path}`, {
@@ -89,4 +95,59 @@ export async function frameio(path: string, init: RequestInit = {}) {
   });
   if (!res.ok) throw new Error(`Frame.io-Fehler ${res.status} bei ${path}: ${await res.text()}`);
   return res.json();
+}
+
+// ---------- Projekt, Ordner, Uploads ----------
+
+type Target = { accountId: string; rootFolderId: string };
+let cachedTarget: Target | null = null;
+
+// Konto und Hauptordner des Projekts "Kundenportal" ermitteln (wird zwischengespeichert)
+async function getTarget(): Promise<Target> {
+  if (cachedTarget) return cachedTarget;
+
+  const accounts = await frameio("/accounts");
+  for (const account of accounts.data) {
+    const workspaces = await frameio(`/accounts/${account.id}/workspaces`);
+    for (const workspace of workspaces.data) {
+      const projects = await frameio(
+        `/accounts/${account.id}/workspaces/${workspace.id}/projects?page_size=100`
+      );
+      const project = projects.data.find(
+        (p: { name: string }) => p.name === PROJECT_NAME
+      );
+      if (project) {
+        cachedTarget = { accountId: account.id, rootFolderId: project.root_folder_id };
+        return cachedTarget;
+      }
+    }
+  }
+  throw new Error(`Frame.io-Projekt "${PROJECT_NAME}" nicht gefunden.`);
+}
+
+// Neuen Ordner für einen Auftrag anlegen
+export async function createJobFolder(name: string) {
+  const { accountId, rootFolderId } = await getTarget();
+  const res = await frameio(`/accounts/${accountId}/folders/${rootFolderId}/folders`, {
+    method: "POST",
+    body: JSON.stringify({ data: { name } }),
+  });
+  return { id: res.data.id as string, url: res.data.view_url as string };
+}
+
+export type UploadPart = { size: number; url: string };
+
+// Leere Datei in Frame.io anlegen und die Upload-Links dafür holen
+export async function createUpload(folderId: string, name: string, size: number) {
+  const { accountId } = await getTarget();
+  const res = await frameio(`/accounts/${accountId}/folders/${folderId}/files/local_upload`, {
+    method: "POST",
+    body: JSON.stringify({ data: { name, file_size: size } }),
+  });
+  return {
+    fileId: res.data.id as string,
+    viewUrl: res.data.view_url as string,
+    mediaType: res.data.media_type as string,
+    parts: res.data.upload_urls as UploadPart[],
+  };
 }
