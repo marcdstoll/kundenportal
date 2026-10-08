@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { JobView } from "@/lib/queries";
 import { BilledToggle } from "./billed-toggle";
-import { ExternalLink, FormatTag, Person, StatusBadge, shortLink } from "./ui";
+import { ExternalLink, FormatTag, Person, StatusBadge, formatDate, shortLink } from "./ui";
 
 type Props = {
   jobs: JobView[];
@@ -16,7 +16,7 @@ export function JobTable({ jobs, hrefFor, isAdmin }: Props) {
   }
   return (
     <div className="overflow-x-auto rounded-xl border border-line">
-      <table className="w-full min-w-[900px] text-left text-sm">
+      <table className="w-full min-w-[1000px] text-left text-sm">
         <thead className="bg-surface text-xs text-muted">
           <tr>
             <th className="px-4 py-2.5 font-medium">Name</th>
@@ -24,6 +24,7 @@ export function JobTable({ jobs, hrefFor, isAdmin }: Props) {
             <th className="px-4 py-2.5 font-medium">Format</th>
             <th className="px-4 py-2.5 font-medium">Client</th>
             <th className="px-4 py-2.5 font-medium">Cutter</th>
+            <th className="px-4 py-2.5 font-medium">Veröffentlichung</th>
             <th className="px-4 py-2.5 font-medium">Abgerechnet</th>
             <th className="px-4 py-2.5 font-medium">Review</th>
           </tr>
@@ -52,6 +53,7 @@ export function JobTable({ jobs, hrefFor, isAdmin }: Props) {
                   ))}
                 </div>
               </td>
+              <td className="whitespace-nowrap px-4 py-2.5 text-muted">{formatDate(job.publishDate)}</td>
               <td className="px-4 py-2.5">
                 <BilledToggle jobId={job.id} billed={job.billed} editable={isAdmin} />
               </td>

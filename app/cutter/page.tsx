@@ -17,7 +17,7 @@ export default function CutterPage() {
   );
 }
 
-const OPEN = ["warteschlange", "in_arbeit", "feedback"];
+const OPEN = ["in_arbeit", "feedback"];
 
 async function Content() {
   const me = await getCurrentUser();

@@ -3,69 +3,90 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { jobs as jobsTable } from "@/db/schema";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser, resolveCustomerView } from "@/lib/session";
 import { loadJobs } from "@/lib/queries";
-import { CUSTOMER_STATUS_LABELS } from "@/lib/status";
 import { Shell, PageHeader } from "@/app/components/shell";
 import { AutoRefresh } from "@/app/components/auto-refresh";
-import { ExternalLink, FormatTag, StatusBadge } from "@/app/components/ui";
+import { Kanban } from "@/app/components/kanban";
+import { CustomerJobDrawer } from "@/app/components/job-drawer";
+import { FormatTag, StatusBadge, buttonPrimary, formatDate } from "@/app/components/ui";
 
-export default function KundePage() {
+export default function KundePage({ searchParams }: PageProps<"/kunde">) {
   return (
     <Suspense fallback={<p className="p-8 text-muted">Lade…</p>}>
-      <Content />
+      <Content searchParams={searchParams} />
     </Suspense>
   );
 }
 
-// Ab diesen Status sieht der Client den Review-Link
-const VISIBLE_REVIEW = ["complete", "ready_to_post", "online"];
-
-async function Content() {
+async function Content({ searchParams }: { searchParams: PageProps<"/kunde">["searchParams"] }) {
   const me = await getCurrentUser();
   if (!me) redirect("/login");
-  if (me.role !== "kunde") redirect("/board");
+  const params = await searchParams;
+  const asParam = typeof params.as === "string" ? params.as : undefined;
+  const view = await resolveCustomerView(me, asParam);
+  if (!view) redirect("/board");
 
-  const myJobs = await loadJobs(eq(jobsTable.customerId, me.id));
+  const { customer, viewAs } = view;
+  const openJob = typeof params.job === "string" ? params.job : null;
+  const base = viewAs ? `/kunde?as=${viewAs.id}` : "/kunde";
+  const sep = viewAs ? "&" : "?";
+
+  const jobs = await loadJobs(eq(jobsTable.customerId, customer.id));
+  const online = jobs.filter((j) => j.status === "online");
 
   return (
-    <Shell user={me}>
+    <Shell user={me} viewAs={viewAs}>
       <AutoRefresh seconds={15} />
-      <PageHeader title="Meine Projekte">
-        <Link
-          href="/neu"
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-canvas transition-opacity hover:opacity-90"
-        >
-          Neues Projekt
+      <PageHeader title={viewAs ? `Projekte von ${customer.name}` : "Deine Projekte"}>
+        <Link href={viewAs ? `/kalender?as=${viewAs.id}` : "/kalender"} className="rounded-md border border-line px-3 py-2 text-sm hover:bg-raised">
+          Kalender
         </Link>
+        {!viewAs && (
+          <Link href="/neu" className={buttonPrimary}>
+            Neues Projekt
+          </Link>
+        )}
       </PageHeader>
 
-      <div className="max-w-3xl space-y-2 px-6 pb-10 md:px-10">
-        {myJobs.length === 0 && (
-          <div className="rounded-xl border border-dashed border-line p-8 text-center text-sm text-muted">
+      <div className="space-y-4 px-6 pb-10 md:px-10">
+        {jobs.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-line p-10 text-center text-sm text-muted">
             Noch keine Projekte. Lade dein erstes Material über „Neues Projekt“ hoch.
           </div>
+        ) : (
+          <>
+            <Kanban jobs={jobs} customerView hrefFor={(id) => `${base}${sep}job=${id}`} />
+            {online.length > 0 && (
+              <section className="space-y-2 pt-2">
+                <h2 className="flex items-center gap-2 text-sm font-medium">
+                  <StatusBadge status="online" />
+                  <span className="text-muted">{online.length}</span>
+                </h2>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {online.map((job) => (
+                    <Link
+                      key={job.id}
+                      href={`${base}${sep}job=${job.id}`}
+                      scroll={false}
+                      className="space-y-1.5 rounded-lg border border-line bg-card p-3 text-sm transition-transform hover:-translate-y-px"
+                      style={{ borderLeft: "3px solid var(--st-online)" }}
+                    >
+                      <p className="font-medium">{job.title}</p>
+                      <div className="flex flex-wrap items-center gap-x-3 text-xs text-muted">
+                        <FormatTag format={job.format} />
+                        {job.publishDate && <span>{formatDate(job.publishDate)}</span>}
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
         )}
-
-        {myJobs.map((job) => (
-          <article key={job.id} className="flex flex-wrap items-center gap-4 rounded-xl border border-line bg-surface p-4">
-            <div className="min-w-0 flex-1 space-y-1">
-              <p className="font-medium">{job.title}</p>
-              <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
-                <FormatTag format={job.format} />
-                <span>{job.platform}</span>
-                <span>{job.createdAt.toLocaleDateString("de-DE")}</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              {VISIBLE_REVIEW.includes(job.status) && job.reviewUrl && (
-                <ExternalLink href={job.reviewUrl}>Video ansehen</ExternalLink>
-              )}
-              <StatusBadge status={job.status} label={CUSTOMER_STATUS_LABELS[job.status]} />
-            </div>
-          </article>
-        ))}
       </div>
+
+      {openJob && <CustomerJobDrawer jobId={openJob} closeHref={base} customerId={customer.id} />}
     </Shell>
   );
 }

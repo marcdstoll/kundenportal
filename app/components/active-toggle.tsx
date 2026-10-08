@@ -27,7 +27,7 @@ export function ActiveToggle({ userId, active, editable }: { userId: string; act
         router.refresh();
       }}
       className={`relative h-5 w-9 rounded-full transition-colors disabled:cursor-not-allowed ${
-        value ? "bg-emerald-500/80" : "bg-raised"
+        value ? "bg-[var(--st-online)]" : "bg-raised"
       } ${!editable ? "opacity-60" : ""}`}
     >
       <span

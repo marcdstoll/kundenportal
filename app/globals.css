@@ -1,36 +1,72 @@
 @import "tailwindcss";
 
-/* Farben der App – ruhiges Dunkel, angelehnt an die Notion-Ansicht */
+/* ---------- Farben ----------
+   Dunkel ist Standard, hell über <html data-theme="light">.
+   Jede Status-Farbe gibt es als --st-<status>; Spalten, Karten und Badges mischen sie ein. */
 :root {
-  --canvas: #16171b;
-  --surface: #1d1f24;
-  --raised: #25272d;
-  --line: #2e3138;
-  --text: #e8e9ec;
-  --muted: #8b909b;
-  --accent: #8fa8ff;
+  --canvas: #121318;
+  --surface: #1a1c23;
+  --raised: #232631;
+  --card: #252834;
+  --line: #2c303c;
+  --text: #ecedf2;
+  --muted: #8c92a3;
+  --accent: #7b93ff;
+  --accent-ink: #0d1020;
+  --rec: #ff5a5f;
+
+  --st-todo: #a3a9b8;
+  --st-in_arbeit: #ff6f8e;
+  --st-feedback: #ae8bff;
+  --st-ready_to_post: #ffc14f;
+  --st-online: #43dc9c;
+  --st-storniert: #6f7686;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --canvas: #f4f5f8;
+  --surface: #ffffff;
+  --raised: #eef0f5;
+  --card: #ffffff;
+  --line: #e0e3ea;
+  --text: #171923;
+  --muted: #636a7c;
+  --accent: #3d5df5;
+  --accent-ink: #ffffff;
+  --rec: #e5383f;
+
+  --st-todo: #6b7282;
+  --st-in_arbeit: #e0365c;
+  --st-feedback: #7a4ae6;
+  --st-ready_to_post: #c48500;
+  --st-online: #0f9f66;
+  --st-storniert: #98a0ae;
+
+  color-scheme: light;
 }
 
 @theme inline {
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
   --color-raised: var(--raised);
+  --color-card: var(--card);
   --color-line: var(--line);
   --color-text: var(--text);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-rec: var(--rec);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-html {
-  color-scheme: dark;
 }
 
 body {
   background: var(--canvas);
   color: var(--text);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 :focus-visible {
@@ -44,6 +80,15 @@ summary::-webkit-details-marker {
 }
 summary {
   list-style: none;
+}
+
+/* Der rote Aufnahme-Punkt im Logo – die einzige Animation der App */
+@keyframes rec {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.rec-dot {
+  animation: rec 2.4s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

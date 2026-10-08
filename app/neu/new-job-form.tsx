@@ -183,9 +183,9 @@ export function NewJobForm({ clients, isAdmin }: Props) {
       )}
 
       {step && <p className="text-sm text-muted">{step}</p>}
-      {error && <p className="text-sm text-rose-300">{error}</p>}
+      {error && <p className="text-sm text-[var(--st-in_arbeit)]">{error}</p>}
 
-      <button disabled={busy} className="w-full rounded-md bg-accent py-2.5 text-sm font-medium text-canvas transition-opacity hover:opacity-90 disabled:opacity-40">
+      <button disabled={busy} className="w-full rounded-md bg-accent py-2.5 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-40">
         {busy ? "Wird hochgeladen – Fenster bitte offen lassen" : "Projekt absenden"}
       </button>
     </form>

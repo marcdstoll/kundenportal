@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { listUsers } from "@/lib/queries";
 
 export type Role = "kunde" | "cutter" | "admin";
 
@@ -31,4 +32,21 @@ export async function requireUser(...roles: Role[]) {
     throw new Error("Keine Berechtigung.");
   }
   return user;
+}
+
+// Wessen Kundenansicht wird gezeigt? Kunden sehen sich selbst,
+// Admins können über ?as=<id> die Ansicht eines Kunden öffnen.
+export async function resolveCustomerView(
+  me: { id: string; name: string; role: Role },
+  asParam: string | undefined
+) {
+  if (me.role === "kunde") return { customer: { id: me.id, name: me.name }, viewAs: null };
+  if (me.role === "admin" && asParam) {
+    const client = (await listUsers("kunde")).find((c) => c.id === asParam);
+    if (client) {
+      const customer = { id: client.id, name: client.name };
+      return { customer, viewAs: customer };
+    }
+  }
+  return null;
 }

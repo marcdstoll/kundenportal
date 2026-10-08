@@ -4,20 +4,21 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   addCutter,
-  approveJob,
   claimJob,
-  rejectJob,
+  markOnline,
+  markReady,
   removeCutter,
+  sendBack,
   setFormat,
   setStatus,
-  startJob,
   submitForReview,
   updateReviewUrl,
   type Result,
 } from "@/app/actions";
 import { uploadFile } from "@/lib/upload";
-import { BilledToggle } from "./billed-toggle";
 import { FORMATS, STATUSES, STATUS_LABELS } from "@/lib/status";
+import { BilledToggle } from "./billed-toggle";
+import { buttonPrimary, buttonSecondary, inputField } from "./ui";
 
 type Props = {
   job: {
@@ -27,18 +28,12 @@ type Props = {
     billed: boolean;
     reviewUrl: string | null;
     cutterIds: string[];
+    hasVideo: boolean;
   };
   isAdmin: boolean;
   isAssigned: boolean;
   staff: { id: string; name: string }[];
 };
-
-const primary =
-  "w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-canvas transition-opacity hover:opacity-90 disabled:opacity-40";
-const secondary =
-  "rounded-md border border-line px-3 py-2 text-sm transition-colors hover:bg-raised disabled:opacity-40";
-const field =
-  "w-full rounded-md border border-line bg-canvas px-3 py-2 text-sm placeholder:text-muted/70";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -55,7 +50,6 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
-  const [note, setNote] = useState("");
   const [link, setLink] = useState("");
   const [editLink, setEditLink] = useState(job.reviewUrl ?? "");
   const [newCutter, setNewCutter] = useState("");
@@ -75,8 +69,8 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
     return res.ok;
   }
 
-  // Fertiges Video hochladen → danach automatisch "Wartet auf Feedback"
-  async function uploadFinal(file: File) {
+  // Video hochladen → landet in "ToBeReviewed", danach automatisch "Wartet auf Feedback"
+  async function uploadVideo(file: File) {
     setBusy(true);
     setError(null);
     try {
@@ -97,23 +91,22 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
     <div className="space-y-6 border-t border-line pt-5">
       {/* ---------- Nächster Schritt im Ablauf ---------- */}
       {job.status === "todo" && (
-        <button disabled={busy} onClick={() => run(() => claimJob(job.id))} className={primary}>
-          Projekt übernehmen
-        </button>
-      )}
-
-      {job.status === "warteschlange" && canWork && (
-        <button disabled={busy} onClick={() => run(() => startJob(job.id))} className={primary}>
-          Bearbeitung starten
+        <button disabled={busy} onClick={() => run(() => claimJob(job.id))} className={`${buttonPrimary} w-full`}>
+          Übernehmen und loslegen
         </button>
       )}
 
       {job.status === "in_arbeit" && canWork && (
-        <Section title="Zur Freigabe schicken">
-          <label className="block space-y-1.5 rounded-lg border border-dashed border-line p-3 text-sm">
-            <span className="block">Fertiges Video hochladen</span>
+        <Section title={job.hasVideo ? "Neue Version hochladen" : "Video hochladen"}>
+          {job.hasVideo && (
+            <p className="text-xs text-muted">
+              Das Projekt wurde zurückgeschickt. Feedback steht als Kommentar am Video in Frame.io.
+            </p>
+          )}
+          <label className="block cursor-pointer space-y-1.5 rounded-lg border border-dashed border-line p-4 text-sm transition-colors hover:bg-raised/50">
+            <span className="block font-medium">Fertiges Video auswählen</span>
             <span className="block text-xs text-muted">
-              Landet im Frame.io-Ordner des Projekts. Der Review-Link wird automatisch gesetzt.
+              Landet in Frame.io im Ordner „ToBeReviewed“. Der Review-Link wird automatisch gesetzt.
             </span>
             <input
               type="file"
@@ -122,7 +115,7 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
               className="block w-full text-xs file:mr-3 file:rounded-md file:border-0 file:bg-raised file:px-3 file:py-1.5 file:text-text"
               onChange={(e) => {
                 const file = e.target.files?.[0];
-                if (file) uploadFinal(file);
+                if (file) uploadVideo(file);
               }}
             />
             {progress !== null && (
@@ -133,55 +126,46 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
           </label>
           <p className="text-center text-xs text-muted">oder vorhandenen Review-Link einfügen</p>
           <div className="flex gap-2">
-            <input
-              className={field}
-              placeholder="https://f.io/…"
-              value={link}
-              onChange={(e) => setLink(e.target.value)}
-              disabled={busy}
-            />
-            <button
-              disabled={busy || link.trim() === ""}
-              onClick={() => run(() => submitForReview(job.id, link))}
-              className={secondary}
-            >
+            <input className={inputField} placeholder="https://f.io/…" value={link} onChange={(e) => setLink(e.target.value)} disabled={busy} />
+            <button disabled={busy || link.trim() === ""} onClick={() => run(() => submitForReview(job.id, link))} className={buttonSecondary}>
               Senden
             </button>
           </div>
         </Section>
       )}
 
+      {job.status === "feedback" && !isAdmin && (
+        <p className="rounded-lg border border-line p-3 text-sm text-muted">
+          Die Admins schauen sich das Video an. Feedback kommt als Kommentar in Frame.io.
+        </p>
+      )}
+
       {job.status === "feedback" && isAdmin && (
         <Section title="Feedback">
-          <button disabled={busy} onClick={() => run(() => approveJob(job.id))} className={primary}>
-            Freigeben
-          </button>
-          <textarea
-            className={field}
-            rows={3}
-            placeholder="Was soll der Cutter ändern? (z. B. „Schnitt bei 0:42 zu hart“)"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            disabled={busy}
-          />
-          <button
-            disabled={busy}
-            onClick={async () => {
-              if (await run(() => rejectJob(job.id, note))) setNote("");
-            }}
-            className={`${secondary} w-full`}
-          >
-            Zurück in die Warteschlange
-          </button>
+          <p className="text-xs text-muted">Kommentare direkt am Video in Frame.io hinterlassen, dann entscheiden:</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button disabled={busy} onClick={() => run(() => sendBack(job.id))} className={buttonSecondary}>
+              Zurückschicken
+            </button>
+            <button disabled={busy} onClick={() => run(() => markReady(job.id))} className={buttonPrimary}>
+              Ready to post
+            </button>
+          </div>
         </Section>
+      )}
+
+      {job.status === "ready_to_post" && isAdmin && (
+        <button disabled={busy} onClick={() => run(() => markOnline(job.id))} className={`${buttonSecondary} w-full`}>
+          Als online markieren
+        </button>
       )}
 
       {/* ---------- Cutter verwalten ---------- */}
       {canWork && otherStaff.length > 0 && job.status !== "todo" && (
         <Section title="Cutter hinzufügen">
           <div className="flex gap-2">
-            <select className={field} value={newCutter} onChange={(e) => setNewCutter(e.target.value)} disabled={busy}>
-              <option value="">Cutter wählen…</option>
+            <select className={inputField} value={newCutter} onChange={(e) => setNewCutter(e.target.value)} disabled={busy}>
+              <option value="">Cutter wählen …</option>
               {otherStaff.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -193,7 +177,7 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
               onClick={async () => {
                 if (await run(() => addCutter(job.id, newCutter))) setNewCutter("");
               }}
-              className={secondary}
+              className={buttonSecondary}
             >
               Hinzufügen
             </button>
@@ -201,12 +185,12 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
         </Section>
       )}
 
-      {/* ---------- Review-Link nachträglich ändern ---------- */}
-      {canWork && !["todo", "warteschlange", "in_arbeit"].includes(job.status) && (
+      {/* ---------- Review-Link von Hand ändern ---------- */}
+      {canWork && !["todo", "in_arbeit"].includes(job.status) && (
         <Section title="Review-Link ändern">
           <div className="flex gap-2">
-            <input className={field} value={editLink} onChange={(e) => setEditLink(e.target.value)} disabled={busy} />
-            <button disabled={busy} onClick={() => run(() => updateReviewUrl(job.id, editLink))} className={secondary}>
+            <input className={inputField} value={editLink} onChange={(e) => setEditLink(e.target.value)} disabled={busy} />
+            <button disabled={busy} onClick={() => run(() => updateReviewUrl(job.id, editLink))} className={buttonSecondary}>
               Speichern
             </button>
           </div>
@@ -220,7 +204,7 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
             <label className="space-y-1 text-xs text-muted">
               <span>Status</span>
               <select
-                className={field}
+                className={inputField}
                 value={statusValue}
                 disabled={busy}
                 onChange={(e) => {
@@ -239,7 +223,7 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
             <label className="space-y-1 text-xs text-muted">
               <span>Format</span>
               <select
-                className={field}
+                className={inputField}
                 value={formatValue}
                 disabled={busy}
                 onChange={(e) => {
@@ -269,7 +253,7 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
                     key={s.id}
                     disabled={busy}
                     onClick={() => run(() => removeCutter(job.id, s.id))}
-                    className="rounded-md border border-line px-2 py-1 text-xs text-muted hover:border-rose-400/50 hover:text-rose-300"
+                    className="rounded-md border border-line px-2 py-1 text-xs text-muted hover:text-[var(--st-in_arbeit)]"
                     title="Cutter entfernen"
                   >
                     {s.name} entfernen
@@ -280,7 +264,7 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
         </Section>
       )}
 
-      {error && <p className="text-sm text-rose-300">{error}</p>}
+      {error && <p className="text-sm text-[var(--st-in_arbeit)]">{error}</p>}
     </div>
   );
 }

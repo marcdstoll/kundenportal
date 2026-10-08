@@ -4,7 +4,7 @@ import { frameioConnection } from "@/db/schema";
 
 const IMS = "https://ims-na1.adobelogin.com/ims";
 const SCOPES = "openid email profile offline_access additional_info.roles";
-const API = "https://api.frame.io/v4";
+const API = process.env.FRAMEIO_API_URL ?? "https://api.frame.io/v4";
 
 // Name des Frame.io-Projekts, in dem die Aufträge landen
 const PROJECT_NAME = "Kundenportal";
@@ -125,14 +125,22 @@ async function getTarget(): Promise<Target> {
   throw new Error(`Frame.io-Projekt "${PROJECT_NAME}" nicht gefunden.`);
 }
 
-// Neuen Ordner für einen Auftrag anlegen
-export async function createJobFolder(name: string) {
-  const { accountId, rootFolderId } = await getTarget();
-  const res = await frameio(`/accounts/${accountId}/folders/${rootFolderId}/folders`, {
+// Ordner in einem anderen Ordner anlegen
+export async function createFolder(parentId: string, name: string) {
+  const { accountId } = await getTarget();
+  const res = await frameio(`/accounts/${accountId}/folders/${parentId}/folders`, {
     method: "POST",
     body: JSON.stringify({ data: { name } }),
   });
   return { id: res.data.id as string, url: res.data.view_url as string };
+}
+
+// Projektordner mit Unterordner "Raw" für die Dateien des Kunden anlegen
+export async function createJobFolder(name: string) {
+  const { rootFolderId } = await getTarget();
+  const folder = await createFolder(rootFolderId, name);
+  const raw = await createFolder(folder.id, "Raw");
+  return { id: folder.id, url: folder.url, rawId: raw.id };
 }
 
 export type UploadPart = { size: number; url: string };
@@ -149,5 +157,16 @@ export async function createUpload(folderId: string, name: string, size: number)
     viewUrl: res.data.view_url as string,
     mediaType: res.data.media_type as string,
     parts: res.data.upload_urls as UploadPart[],
+  };
+}
+
+// Zeitlich begrenzte Links zum Herunterladen und Abspielen der Originaldatei
+export async function getFileLinks(fileId: string) {
+  const { accountId } = await getTarget();
+  const res = await frameio(`/accounts/${accountId}/files/${fileId}?include=media_links.original`);
+  const original = res.data.media_links?.original;
+  return {
+    downloadUrl: (original?.download_url as string | undefined) ?? null,
+    inlineUrl: (original?.inline_url as string | undefined) ?? null,
   };
 }

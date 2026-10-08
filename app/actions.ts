@@ -5,7 +5,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { db } from "@/db";
 import { jobCutters, jobFiles, jobs, user } from "@/db/schema";
-import { createJobFolder, createUpload } from "@/lib/frameio";
+import { createFolder, createJobFolder, createUpload } from "@/lib/frameio";
 import { requireUser } from "@/lib/session";
 import { FORMATS, STATUSES } from "@/lib/status";
 
@@ -123,6 +123,7 @@ export async function createJob(input: NewJobInput) {
       status: "entwurf",
       frameioFolderId: folder.id,
       frameioFolderUrl: folder.url,
+      rawFolderId: folder.rawId,
     });
     return { jobId: id };
   });
@@ -151,7 +152,17 @@ export async function requestUpload(
       }
     }
 
-    const upload = await createUpload(job.frameioFolderId!, file.name, file.size);
+    // Rohmaterial → Ordner "Raw", fertige Videos → Ordner "ToBeReviewed" (wird bei Bedarf angelegt)
+    let folderId = job.rawFolderId ?? job.frameioFolderId!;
+    if (kind === "fertig") {
+      folderId = job.reviewFolderId ?? "";
+      if (!folderId) {
+        const created = await createFolder(job.frameioFolderId!, "ToBeReviewed");
+        folderId = created.id;
+        await db.update(jobs).set({ reviewFolderId: folderId }).where(eq(jobs.id, jobId));
+      }
+    }
+    const upload = await createUpload(folderId, file.name, file.size);
     const id = randomUUID();
     await db.insert(jobFiles).values({
       id,
@@ -199,22 +210,12 @@ export async function submitJob(jobId: string) {
 
 // ---------- Cutter ----------
 
-// To Dos → Warteschlange: Projekt übernehmen
+// To Dos → Wird jetzt gemacht: Projekt übernehmen
 export async function claimJob(jobId: string) {
   return run(async () => {
     const me = await requireUser("cutter", "admin");
-    await changeStatus(jobId, "todo", "warteschlange");
+    await changeStatus(jobId, "todo", "in_arbeit");
     await addCutterRow(jobId, me.id);
-    refresh();
-    return null;
-  });
-}
-
-// Warteschlange → Wird jetzt gemacht
-export async function startJob(jobId: string) {
-  return run(async () => {
-    await requireCutterOf(jobId);
-    await changeStatus(jobId, "warteschlange", "in_arbeit");
     refresh();
     return null;
   });
@@ -222,7 +223,7 @@ export async function startJob(jobId: string) {
 
 // Wird jetzt gemacht → Wartet auf Feedback
 // Mit Link: Cutter fügt einen vorhandenen Review-Link ein.
-// Ohne Link: der Link des zuletzt in der App hochgeladenen fertigen Videos wird genommen.
+// Ohne Link: der Link des zuletzt in der App hochgeladenen Videos wird genommen.
 export async function submitForReview(jobId: string, reviewUrl?: string) {
   return run(async () => {
     await requireCutterOf(jobId);
@@ -239,7 +240,7 @@ export async function submitForReview(jobId: string, reviewUrl?: string) {
     if (!url || !/^https?:\/\//.test(url)) {
       throw new Error("Bitte das Video hochladen oder einen gültigen Review-Link einfügen.");
     }
-    await changeStatus(jobId, "in_arbeit", "feedback", { reviewUrl: url, feedbackNote: null });
+    await changeStatus(jobId, "in_arbeit", "feedback", { reviewUrl: url });
     refresh();
     return null;
   });
@@ -270,30 +271,51 @@ export async function setActive(userId: string, active: boolean) {
   });
 }
 
+// Review-Link nachträglich ändern (Admin oder zugeordneter Cutter)
+export async function updateReviewUrl(jobId: string, reviewUrl: string) {
+  return run(async () => {
+    await requireCutterOf(jobId);
+    const url = reviewUrl.trim();
+    if (url && !/^https?:\/\//.test(url)) throw new Error("Bitte einen gültigen Link einfügen.");
+    await db.update(jobs).set({ reviewUrl: url || null }).where(eq(jobs.id, jobId));
+    refresh();
+    return null;
+  });
+}
+
 // ---------- Admin ----------
 
-// Wartet auf Feedback → Complete
-export async function approveJob(jobId: string) {
+// Wartet auf Feedback → zurück an den Cutter (Feedback steht als Kommentar in Frame.io)
+export async function sendBack(jobId: string) {
   return run(async () => {
     await requireUser("admin");
-    await changeStatus(jobId, "feedback", "complete", { feedbackNote: null });
+    await changeStatus(jobId, "feedback", "in_arbeit");
     refresh();
     return null;
   });
 }
 
-// Wartet auf Feedback → zurück in die Warteschlange, mit Hinweis für den Cutter
-export async function rejectJob(jobId: string, note: string) {
+// Wartet auf Feedback → Ready to post
+export async function markReady(jobId: string) {
   return run(async () => {
     await requireUser("admin");
-    if (note.trim().length === 0) throw new Error("Bitte einen Hinweis für den Cutter angeben.");
-    await changeStatus(jobId, "feedback", "warteschlange", { feedbackNote: note.trim() });
+    await changeStatus(jobId, "feedback", "ready_to_post");
     refresh();
     return null;
   });
 }
 
-// Status frei setzen (z. B. Ready to post, Online, Storniert)
+// Ready to post → Online
+export async function markOnline(jobId: string) {
+  return run(async () => {
+    await requireUser("admin");
+    await changeStatus(jobId, "ready_to_post", "online");
+    refresh();
+    return null;
+  });
+}
+
+// Status frei setzen (z. B. Storniert)
 export async function setStatus(jobId: string, status: string) {
   return run(async () => {
     await requireUser("admin");
@@ -324,24 +346,30 @@ export async function setBilled(jobId: string, billed: boolean) {
   });
 }
 
-// Review-Link nachträglich ändern (Admin oder zugeordneter Cutter)
-export async function updateReviewUrl(jobId: string, reviewUrl: string) {
-  return run(async () => {
-    await requireCutterOf(jobId);
-    const url = reviewUrl.trim();
-    if (url && !/^https?:\/\//.test(url)) throw new Error("Bitte einen gültigen Link einfügen.");
-    await db.update(jobs).set({ reviewUrl: url || null }).where(eq(jobs.id, jobId));
-    refresh();
-    return null;
-  });
-}
-
 export async function removeCutter(jobId: string, cutterId: string) {
   return run(async () => {
     await requireUser("admin");
     await db
       .delete(jobCutters)
       .where(and(eq(jobCutters.jobId, jobId), eq(jobCutters.userId, cutterId)));
+    refresh();
+    return null;
+  });
+}
+
+// ---------- Admin oder Kunde ----------
+
+// Veröffentlichungsdatum setzen ("YYYY-MM-DD" oder leer zum Entfernen)
+export async function setPublishDate(jobId: string, date: string) {
+  return run(async () => {
+    const me = await requireUser("kunde", "admin");
+    const job = await getJob(jobId);
+    if (me.role !== "admin" && job.customerId !== me.id) throw new Error("Keine Berechtigung.");
+    if (!["ready_to_post", "online"].includes(job.status)) {
+      throw new Error("Ein Datum kann erst ab „Ready to post“ eingetragen werden.");
+    }
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Ungültiges Datum.");
+    await db.update(jobs).set({ publishDate: date || null }).where(eq(jobs.id, jobId));
     refresh();
     return null;
   });

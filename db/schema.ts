@@ -1,4 +1,4 @@
-import { bigint, boolean, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { bigint, boolean, date, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 export * from "./auth-schema";
@@ -13,8 +13,7 @@ export const frameioConnection = pgTable("frameio_connection", {
 });
 
 // Ein Projekt eines Clients
-// status: entwurf → todo → warteschlange → in_arbeit → feedback → complete → ready_to_post → online
-//         (oder storniert)
+// status: entwurf → todo → in_arbeit → feedback → ready_to_post → online (oder storniert)
 // format: shortform | longform | clipping
 export const jobs = pgTable("jobs", {
   id: text("id").primaryKey(),
@@ -33,6 +32,11 @@ export const jobs = pgTable("jobs", {
   billed: boolean("billed").notNull().default(false),
   frameioFolderId: text("frameio_folder_id"),
   frameioFolderUrl: text("frameio_folder_url"),
+  // Unterordner in Frame.io: "Raw" (Kundendateien) und "ToBeReviewed" (Cutter-Videos)
+  rawFolderId: text("raw_folder_id"),
+  reviewFolderId: text("review_folder_id"),
+  // Geplantes oder tatsächliches Veröffentlichungsdatum (für den Kalender)
+  publishDate: date("publish_date"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
