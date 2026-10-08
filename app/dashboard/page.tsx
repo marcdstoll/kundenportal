@@ -23,6 +23,16 @@ async function UserInfo() {
       <h1 className="text-2xl font-semibold">Hallo {session.user.name}</h1>
       <p>E-Mail: {session.user.email}</p>
       <p>Rolle: {session.user.role}</p>
+      {session.user.role === "admin" && (
+  <div className="flex gap-2">
+    <a href="/api/frameio/connect" className="rounded bg-blue-600 text-white px-4 py-2">
+      Mit Frame.io verbinden
+    </a>
+    <a href="/api/frameio/test" className="rounded border px-4 py-2">
+      Frame.io testen
+    </a>
+  </div>
+)}
       <SignOutButton />
     </div>
   );
