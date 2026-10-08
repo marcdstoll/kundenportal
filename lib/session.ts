@@ -19,6 +19,7 @@ export async function getCurrentUser() {
     name: session.user.name,
     email: session.user.email,
     role: (session.user.role ?? "kunde") as Role,
+    active: session.user.active ?? true,
   };
 }
 

@@ -9,12 +9,6 @@ export async function GET(req: NextRequest) {
   }
   const state = randomBytes(16).toString("hex");
   const res = NextResponse.redirect(getAuthorizeUrl(state));
-  res.cookies.set("frameio_state", state, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    maxAge: 600,
-    path: "/",
-  });
+  res.cookies.set("frameio_state", state, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 600, path: "/" });
   return res;
 }

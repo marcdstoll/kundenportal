@@ -22,6 +22,13 @@
       "when": 1791463553382,
       "tag": "0002_crazy_polaris",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791469679010,
+      "tag": "0003_special_eternity",
+      "breakpoints": true
     }
   ]
 }

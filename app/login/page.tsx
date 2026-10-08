@@ -34,54 +34,21 @@ export default function LoginPage() {
 
   return (
     <main className="min-h-screen flex items-center justify-center p-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 border rounded-lg p-6">
-        <h1 className="text-xl font-semibold">
+      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 rounded-xl border border-line bg-surface p-6">
+        <p className="text-sm font-semibold tracking-tight text-muted">Contenthaus</p>
+        <h1 className="text-xl font-semibold tracking-tight">
           {mode === "login" ? "Anmelden" : "Registrieren"}
         </h1>
-
         {mode === "register" && (
-          <input
-            className="w-full border rounded px-3 py-2"
-            placeholder="Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
+          <input className="w-full rounded-md border border-line bg-canvas px-3 py-2 text-sm placeholder:text-muted/70" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} required />
         )}
-
-        <input
-          type="email"
-          className="w-full border rounded px-3 py-2"
-          placeholder="E-Mail"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-
-        <input
-          type="password"
-          className="w-full border rounded px-3 py-2"
-          placeholder="Passwort (mind. 8 Zeichen)"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          minLength={8}
-          required
-        />
-
-        {error && <p className="text-sm text-red-600">{error}</p>}
-
-        <button
-          disabled={loading}
-          className="w-full rounded bg-blue-600 text-white py-2 disabled:opacity-50"
-        >
+        <input type="email" className="w-full rounded-md border border-line bg-canvas px-3 py-2 text-sm placeholder:text-muted/70" placeholder="E-Mail" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <input type="password" className="w-full rounded-md border border-line bg-canvas px-3 py-2 text-sm placeholder:text-muted/70" placeholder="Passwort (mind. 8 Zeichen)" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required />
+        {error && <p className="text-sm text-rose-300">{error}</p>}
+        <button disabled={loading} className="w-full rounded-md bg-accent py-2 text-sm font-medium text-canvas transition-opacity hover:opacity-90 disabled:opacity-40">
           {loading ? "Bitte warten…" : mode === "login" ? "Anmelden" : "Konto erstellen"}
         </button>
-
-        <button
-          type="button"
-          onClick={() => setMode(mode === "login" ? "register" : "login")}
-          className="w-full text-sm underline"
-        >
+        <button type="button" onClick={() => setMode(mode === "login" ? "register" : "login")} className="w-full text-sm text-muted hover:text-text">
           {mode === "login" ? "Noch kein Konto? Registrieren" : "Schon registriert? Anmelden"}
         </button>
       </form>

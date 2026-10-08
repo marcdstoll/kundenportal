@@ -8,7 +8,7 @@ export function SignOutButton() {
 
   return (
     <button
-      className="rounded border px-4 py-2"
+      className="w-full rounded-md px-2.5 py-1.5 text-left text-sm text-muted transition-colors hover:bg-raised/60 hover:text-text"
       onClick={async () => {
         await authClient.signOut();
         router.push("/login");

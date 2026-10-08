@@ -1,102 +1,71 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, desc, eq, inArray } from "drizzle-orm";
-import { db } from "@/db";
-import { jobFiles, jobs } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { jobs as jobsTable } from "@/db/schema";
 import { getCurrentUser } from "@/lib/session";
-import { STATUS_LABELS } from "@/lib/status";
-import { TopBar } from "@/app/components/top-bar";
+import { loadJobs } from "@/lib/queries";
+import { CUSTOMER_STATUS_LABELS } from "@/lib/status";
+import { Shell, PageHeader } from "@/app/components/shell";
 import { AutoRefresh } from "@/app/components/auto-refresh";
+import { ExternalLink, FormatTag, StatusBadge } from "@/app/components/ui";
 
 export default function KundePage() {
   return (
-    <Suspense fallback={<p className="p-8">Lade…</p>}>
-      <KundeContent />
+    <Suspense fallback={<p className="p-8 text-muted">Lade…</p>}>
+      <Content />
     </Suspense>
   );
 }
 
-async function KundeContent() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
+// Ab diesen Status sieht der Client den Review-Link
+const VISIBLE_REVIEW = ["complete", "ready_to_post", "online"];
 
-  const myJobs = await db
-    .select()
-    .from(jobs)
-    .where(eq(jobs.customerId, user.id))
-    .orderBy(desc(jobs.createdAt));
+async function Content() {
+  const me = await getCurrentUser();
+  if (!me) redirect("/login");
+  if (me.role !== "kunde") redirect("/board");
 
-  // Fertige Videos zu abgeschlossenen Aufträgen
-  const doneIds = myJobs.filter((j) => j.status === "abgeschlossen").map((j) => j.id);
-  const finals =
-    doneIds.length > 0
-      ? await db
-          .select()
-          .from(jobFiles)
-          .where(
-            and(
-              inArray(jobFiles.jobId, doneIds),
-              eq(jobFiles.kind, "fertig"),
-              eq(jobFiles.uploaded, true)
-            )
-          )
-      : [];
+  const myJobs = await loadJobs(eq(jobsTable.customerId, me.id));
 
   return (
-    <>
-      <TopBar user={user} />
+    <Shell user={me}>
       <AutoRefresh seconds={15} />
-      <main className="mx-auto max-w-4xl space-y-6 p-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Meine Aufträge</h1>
-          <Link href="/kunde/neu" className="rounded bg-blue-600 px-4 py-2 text-white">
-            + Neuer Auftrag
-          </Link>
-        </div>
+      <PageHeader title="Meine Projekte">
+        <Link
+          href="/neu"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-canvas transition-opacity hover:opacity-90"
+        >
+          Neues Projekt
+        </Link>
+      </PageHeader>
 
+      <div className="max-w-3xl space-y-2 px-6 pb-10 md:px-10">
         {myJobs.length === 0 && (
-          <p className="opacity-70">Noch keine Aufträge. Leg deinen ersten Auftrag an.</p>
+          <div className="rounded-xl border border-dashed border-line p-8 text-center text-sm text-muted">
+            Noch keine Projekte. Lade dein erstes Material über „Neues Projekt“ hoch.
+          </div>
         )}
 
-        <ul className="space-y-3">
-          {myJobs.map((job) => (
-            <li key={job.id} className="rounded-lg border p-4">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="font-medium">{job.title}</p>
-                  <p className="text-sm opacity-70">
-                    {job.platform} · {job.videoLength} ·{" "}
-                    {job.createdAt.toLocaleDateString("de-DE")}
-                  </p>
-                </div>
-                <span className="rounded-full border px-3 py-1 text-sm">
-                  {STATUS_LABELS[job.status] ?? job.status}
-                </span>
+        {myJobs.map((job) => (
+          <article key={job.id} className="flex flex-wrap items-center gap-4 rounded-xl border border-line bg-surface p-4">
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="font-medium">{job.title}</p>
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
+                <FormatTag format={job.format} />
+                <span>{job.platform}</span>
+                <span>{job.createdAt.toLocaleDateString("de-DE")}</span>
               </div>
-
-              {job.status === "abgeschlossen" && (
-                <div className="mt-3 space-y-1 text-sm">
-                  <p className="font-medium">Dein fertiges Video:</p>
-                  {finals
-                    .filter((f) => f.jobId === job.id)
-                    .map((f) => (
-                      <a
-                        key={f.id}
-                        href={f.frameioUrl ?? "#"}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block underline"
-                      >
-                        {f.name} ansehen
-                      </a>
-                    ))}
-                </div>
+            </div>
+            <div className="flex items-center gap-4">
+              {VISIBLE_REVIEW.includes(job.status) && job.reviewUrl && (
+                <ExternalLink href={job.reviewUrl}>Video ansehen</ExternalLink>
               )}
-            </li>
-          ))}
-        </ul>
-      </main>
-    </>
+              <StatusBadge status={job.status} label={CUSTOMER_STATUS_LABELS[job.status]} />
+            </div>
+          </article>
+        ))}
+      </div>
+    </Shell>
   );
 }

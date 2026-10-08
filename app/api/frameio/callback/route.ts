@@ -15,16 +15,12 @@ export async function GET(req: NextRequest) {
   if (!code || !state || state !== req.cookies.get("frameio_state")?.value) {
     return new Response("Ungültige Anfrage", { status: 400 });
   }
-
   try {
     await connectWithCode(code);
   } catch (e) {
     return new Response(String(e), { status: 500 });
   }
-
-  const res = NextResponse.redirect(
-    new URL("/dashboard?frameio=verbunden", process.env.BETTER_AUTH_URL)
-  );
+  const res = NextResponse.redirect(new URL("/dashboard?frameio=verbunden", process.env.BETTER_AUTH_URL));
   res.cookies.delete("frameio_state");
   return res;
 }
