@@ -9,14 +9,11 @@ import {
   markReady,
   removeCutter,
   sendBack,
-  setFormat,
-  setStatus,
   submitForReview,
   updateReviewUrl,
   type Result,
 } from "@/app/actions";
 import { uploadFile } from "@/lib/upload";
-import { FORMATS, STATUSES, STATUS_LABELS } from "@/lib/status";
 import { BilledToggle } from "./billed-toggle";
 import { buttonPrimary, buttonSecondary, inputField } from "./ui";
 
@@ -53,9 +50,6 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
   const [link, setLink] = useState("");
   const [editLink, setEditLink] = useState(job.reviewUrl ?? "");
   const [newCutter, setNewCutter] = useState("");
-  // Sofort anzeigen, was gewählt wurde (der Server bestätigt kurz danach)
-  const [statusValue, setStatusValue] = useState(job.status);
-  const [formatValue, setFormatValue] = useState(job.format);
 
   const canWork = isAssigned || isAdmin;
 
@@ -200,46 +194,7 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
       {/* ---------- Nur Admins ---------- */}
       {isAdmin && (
         <Section title="Verwaltung">
-          <div className="grid grid-cols-2 gap-2">
-            <label className="space-y-1 text-xs text-muted">
-              <span>Status</span>
-              <select
-                className={inputField}
-                value={statusValue}
-                disabled={busy}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setStatusValue(next);
-                  run(() => setStatus(job.id, next));
-                }}
-              >
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_LABELS[s]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="space-y-1 text-xs text-muted">
-              <span>Format</span>
-              <select
-                className={inputField}
-                value={formatValue}
-                disabled={busy}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setFormatValue(next);
-                  run(() => setFormat(job.id, next));
-                }}
-              >
-                {FORMATS.map((f) => (
-                  <option key={f.value} value={f.value}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          <p className="text-xs text-muted">Status und Format änderst du direkt oben am Badge.</p>
           <label className="flex items-center gap-2 py-1 text-sm">
             <BilledToggle jobId={job.id} billed={job.billed} editable />
             Abgerechnet (Cutter)

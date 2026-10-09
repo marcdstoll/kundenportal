@@ -6,6 +6,7 @@ import { JobControls } from "./job-controls";
 import { VideoBlock } from "./video-block";
 import { DownloadAll } from "./download-all";
 import { PublishDateField } from "./publish-date-field";
+import { InlinePicker } from "./inline-picker";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -29,7 +30,7 @@ function Section({ title, children, action }: { title: string; children: React.R
 }
 
 // Seitenpanel mit Overlay; schließt per Klick daneben
-function DrawerFrame({ job, closeHref, children }: { job: JobView; closeHref: string; children: React.ReactNode }) {
+function DrawerFrame({ job, closeHref, editable = false, children }: { job: JobView; closeHref: string; editable?: boolean; children: React.ReactNode }) {
   const color = statusColor(job.status);
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
@@ -40,8 +41,17 @@ function DrawerFrame({ job, closeHref, children }: { job: JobView; closeHref: st
           <div className="min-w-0 space-y-2">
             <h2 className="text-xl font-semibold tracking-tight">{job.title}</h2>
             <div className="flex flex-wrap items-center gap-3">
-              <StatusBadge status={job.status} />
-              <FormatTag format={job.format} />
+              {editable ? (
+                <>
+                  <InlinePicker key={`s-${job.status}`} jobId={job.id} kind="status" value={job.status} />
+                  <InlinePicker key={`f-${job.format}`} jobId={job.id} kind="format" value={job.format} />
+                </>
+              ) : (
+                <>
+                  <StatusBadge status={job.status} />
+                  <FormatTag format={job.format} />
+                </>
+              )}
             </div>
           </div>
           <Link href={closeHref} scroll={false} className="rounded-md px-2 py-1 text-sm text-muted hover:bg-raised hover:text-text">
@@ -96,7 +106,7 @@ export async function JobDrawer({
   const versions = job.files.filter((f) => f.kind === "fertig").length;
 
   return (
-    <DrawerFrame job={job} closeHref={closeHref}>
+    <DrawerFrame job={job} closeHref={closeHref} editable={isAdmin}>
       <section>
         <Row label="Client">
           <Person name={job.customerName} />

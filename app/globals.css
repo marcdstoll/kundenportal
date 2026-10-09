@@ -14,6 +14,7 @@
   --accent: #7b93ff;
   --accent-ink: #0d1020;
   --rec: #ff5a5f;
+  --danger: #ff5c6c;
 
   --st-todo: #a3a9b8;
   --st-in_arbeit: #ff6f8e;
@@ -36,6 +37,7 @@
   --accent: #3d5df5;
   --accent-ink: #ffffff;
   --rec: #e5383f;
+  --danger: #d92d3a;
 
   --st-todo: #6b7282;
   --st-in_arbeit: #e0365c;
@@ -58,6 +60,7 @@
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
   --color-rec: var(--rec);
+  --color-danger: var(--danger);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
