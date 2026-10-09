@@ -193,8 +193,7 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
 
       {/* ---------- Nur Admins ---------- */}
       {isAdmin && (
-        <Section title="Verwaltung">
-          <p className="text-xs text-muted">Status und Format änderst du direkt oben am Badge.</p>
+                <Section title="">
           <label className="flex items-center gap-2 py-1 text-sm">
             <BilledToggle jobId={job.id} billed={job.billed} editable />
             Abgerechnet (Cutter)
