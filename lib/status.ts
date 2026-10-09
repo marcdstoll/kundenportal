@@ -54,10 +54,8 @@ export const FORMAT_LABELS: Record<string, string> = {
 };
 
 export const PLATFORMS = [
-  "Instagram Reels",
+  "Instagram",
   "TikTok",
   "YouTube",
-  "YouTube Shorts",
-  "LinkedIn",
-  "Sonstiges",
+  "Sonstiges"
 ];
