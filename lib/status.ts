@@ -57,7 +57,5 @@ export const PLATFORMS = [
   "Instagram Reels",
   "TikTok",
   "YouTube",
-  "YouTube Shorts",
-  "LinkedIn",
   "Sonstiges",
 ];
