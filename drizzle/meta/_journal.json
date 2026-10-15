@@ -43,6 +43,13 @@
       "when": 1792075969026,
       "tag": "0005_warm_hairball",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792079177545,
+      "tag": "0006_complex_rhodey",
+      "breakpoints": true
     }
   ]
 }
