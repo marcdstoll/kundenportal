@@ -5,6 +5,7 @@ import { getCurrentUser, resolveCustomerView } from "@/lib/session";
 import { listUsers, loadJobs } from "@/lib/queries";
 import { CUSTOMER_VIDEO_STATUSES } from "@/lib/status";
 import { ClientFilter } from "@/app/components/client-filter";
+import { both, clientIdsOfCutter, jobScope } from "@/lib/access";
 import { PageHeader, ViewAsBanner } from "@/app/components/shell";
 import { Calendar, monthKey, parseMonth } from "@/app/components/calendar";
 import { CustomerJobDrawer, JobDrawer } from "@/app/components/job-drawer";
@@ -26,7 +27,10 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
   const customerId = customerView?.customer.id ?? null;
 
   // Staff: optionaler Kunden-Filter (?k=id1,id2), Kunden sehen ohnehin nur sich selbst
-  const clients = customerId ? [] : await listUsers("kunde");
+  // Cutter sehen im Filter nur ihre freigegebenen Kunden
+  const allClients = customerId ? [] : await listUsers("kunde");
+  const allowed = me.role === "cutter" ? await clientIdsOfCutter(me.id) : null;
+  const clients = allowed ? allClients.filter((c) => allowed.includes(c.id)) : allClients;
   const pickedClients = typeof params.k === "string" ? params.k.split(",").filter((id) => clients.some((c) => c.id === id)) : [];
 
   const filter = customerId
@@ -34,7 +38,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
     : pickedClients.length > 0
       ? and(isNotNull(jobsTable.publishDate), inArray(jobsTable.customerId, pickedClients))
       : isNotNull(jobsTable.publishDate);
-  const jobs = await loadJobs(filter);
+  const jobs = await loadJobs(me.role === "cutter" ? both(await jobScope(me), filter) : filter);
 
   // Verschieben: Admins immer, Kunden ihre eigenen Projekte ab "Ready to post", Cutter nie.
   // Rückgabe: null = darf verschieben, sonst der Grund, warum nicht (erscheint als Hinweis am Termin)
@@ -59,7 +63,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
     <>
       <ViewAsBanner viewAs={customerView?.viewAs ?? null} />
       <PageHeader title="Kalender" />
-      <div className="px-6 pb-10 md:px-10">
+      <div className="px-4 pb-10 sm:px-6 md:px-10">
         <Calendar
           month={month}
           jobs={jobs}

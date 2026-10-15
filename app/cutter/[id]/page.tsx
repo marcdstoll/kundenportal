@@ -1,0 +1,66 @@
+import { notFound, redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/session";
+import { loadAssignments, loadPeople, loadPerson, logoUrl } from "@/lib/queries";
+import { PageHeader } from "@/app/components/shell";
+import { Avatar } from "@/app/components/ui";
+import { AssignmentToggle, ProfileForm, RegenerateInvite } from "@/app/components/admin-forms";
+
+// Cutter bearbeiten (nur Admins): Kontakt, freigegebene Kunden, Zugang
+export default async function CutterDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const me = await getCurrentUser();
+  if (!me) redirect("/login");
+  if (me.role !== "admin") redirect("/dashboard");
+
+  const { id } = await params;
+  const [cutter, clients, assignments] = await Promise.all([loadPerson(id), loadPeople("kunde"), loadAssignments()]);
+  if (!cutter || cutter.role === "kunde") notFound();
+  const assigned = new Set(assignments.filter((a) => a.cutterId === id).map((a) => a.clientId));
+
+  return (
+    <>
+      <PageHeader title={cutter.name} />
+      <div className="grid max-w-5xl gap-8 px-4 pb-10 sm:px-6 md:px-10 lg:grid-cols-[1fr_20rem]">
+        <section className="space-y-3">
+          <h2 className="text-sm font-medium">Profil</h2>
+          <p className="text-sm text-muted">
+            Login-E-Mail: <span className="text-text">{cutter.email}</span>
+          </p>
+          <ProfileForm key={cutter.logoVersion} person={cutter} logoUrl={logoUrl(cutter)} showNotes={false} />
+        </section>
+        <aside className="space-y-8">
+          {cutter.role === "cutter" && (
+            <section className="space-y-2">
+              <h2 className="text-sm font-medium">Freigegebene Kunden</h2>
+              <p className="text-xs text-muted">
+                Der Cutter sieht nur Projekte dieser Kunden (und Projekte, denen er direkt zugeordnet ist).
+              </p>
+              <div className="space-y-1.5">
+                {clients.map((c) => (
+                  <AssignmentToggle
+                    key={c.id}
+                    cutterId={id}
+                    clientId={c.id}
+                    on={assigned.has(c.id)}
+                    label={
+                      <span className="inline-flex items-center gap-2">
+                        <Avatar name={c.name} logoUrl={logoUrl(c)} />
+                        {c.name}
+                      </span>
+                    }
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+          <section className="space-y-2">
+            <h2 className="text-sm font-medium">Zugang</h2>
+            <p className="text-sm text-muted">
+              {cutter.invited ? "Eingeladen – Passwort noch nicht gesetzt." : "Aktiv – Passwort gesetzt."}
+            </p>
+            <RegenerateInvite userId={id} invited={cutter.invited} />
+          </section>
+        </aside>
+      </div>
+    </>
+  );
+}

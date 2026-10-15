@@ -1,76 +1,88 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { jobCutters, jobs } from "@/db/schema";
 import { getCurrentUser } from "@/lib/session";
-import { listUsers } from "@/lib/queries";
+import { loadAssignments, loadPeople, logoUrl } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
-import { Person } from "@/app/components/ui";
+import { Avatar } from "@/app/components/ui";
 import { ActiveToggle } from "@/app/components/active-toggle";
-
-export default function CutterPage() {
-  return (
-    <Content />
-  );
-}
+import { NewUserForm } from "@/app/components/admin-forms";
 
 const OPEN = ["warteschlange", "in_arbeit", "feedback"];
 
-async function Content() {
+// Cutter-Verwaltung (nur Admins): Verfügbarkeit, Kontakt, freigegebene Kunden, offene Projekte
+export default async function CutterPage() {
   const me = await getCurrentUser();
   if (!me) redirect("/login");
   if (me.role === "kunde") redirect("/kunde");
+  if (me.role !== "admin") redirect("/meine-clients"); // Verwaltung nur für Admins
 
-  const people = await listUsers("cutter", "admin");
-
-  // Anzahl offener Projekte je Cutter
-  const open = await db
-    .select({ userId: jobCutters.userId })
-    .from(jobCutters)
-    .innerJoin(jobs, eq(jobCutters.jobId, jobs.id))
-    .where(and(inArray(jobs.status, OPEN)));
+  const [people, clients, assignments, open] = await Promise.all([
+    loadPeople("cutter", "admin"),
+    loadPeople("kunde"),
+    loadAssignments(),
+    db
+      .select({ userId: jobCutters.userId })
+      .from(jobCutters)
+      .innerJoin(jobs, eq(jobCutters.jobId, jobs.id))
+      .where(inArray(jobs.status, OPEN)),
+  ]);
   const openCount = (id: string) => open.filter((o) => o.userId === id).length;
-
-  // Aktive zuerst
+  const clientName = new Map(clients.map((c) => [c.id, c.name]));
   const sorted = [...people].sort((a, b) => Number(b.active ?? true) - Number(a.active ?? true));
 
   return (
     <>
-      <PageHeader title="Cutter" />
-      <div className="px-6 pb-10 md:px-10">
+      <PageHeader title="Cutter">
+        <NewUserForm role="cutter" />
+      </PageHeader>
+      <div className="px-4 pb-10 sm:px-6 md:px-10">
         <div className="overflow-x-auto rounded-xl border border-line">
-          <table className="w-full min-w-[560px] text-left text-sm">
+          <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="bg-surface text-xs text-muted">
               <tr>
                 <th className="px-4 py-2.5 font-medium">Person</th>
-                <th className="px-4 py-2.5 font-medium">E-Mail</th>
-                <th className="px-4 py-2.5 font-medium">Offene Projekte</th>
+                <th className="px-4 py-2.5 font-medium">Kontakt</th>
+                <th className="px-4 py-2.5 font-medium">Freigegebene Kunden</th>
+                <th className="px-4 py-2.5 font-medium">Offen</th>
                 <th className="px-4 py-2.5 font-medium">Aktiv</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {sorted.map((p) => (
-                <tr key={p.id} className={p.active === false ? "text-muted" : ""}>
-                  <td className="px-4 py-2.5">
-                    <Person name={p.name} />
-                    {p.role === "admin" && <span className="ml-2 text-xs text-muted">Admin</span>}
-                  </td>
-                  <td className="px-4 py-2.5 text-muted">{p.email}</td>
-                  <td className="px-4 py-2.5">{openCount(p.id)}</td>
-                  <td className="px-4 py-2.5">
-                    <ActiveToggle
-                      userId={p.id}
-                      active={p.active ?? true}
-                      editable={me.role === "admin" || me.id === p.id}
-                    />
-                  </td>
-                </tr>
-              ))}
+              {sorted.map((p) => {
+                const own = assignments
+                  .filter((a) => a.cutterId === p.id)
+                  .map((a) => clientName.get(a.clientId))
+                  .filter(Boolean);
+                return (
+                  <tr key={p.id} className={p.active === false ? "text-muted" : ""}>
+                    <td className="px-4 py-2.5">
+                      <Link href={`/cutter/${p.id}`} className="inline-flex items-center gap-2 font-medium hover:underline">
+                        <Avatar name={p.name} logoUrl={logoUrl(p)} />
+                        {p.name}
+                      </Link>
+                      {p.role === "admin" && <span className="ml-2 text-xs text-muted">Admin</span>}
+                      {p.invited && <span className="ml-2 text-xs text-[var(--st-ready_to_post)]">eingeladen</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-muted">
+                      <div>{p.email}</div>
+                      {p.phone && <div className="text-xs">{p.phone}</div>}
+                    </td>
+                    <td className="px-4 py-2.5 text-muted">{p.role === "admin" ? "alle (Admin)" : own.join(", ") || "–"}</td>
+                    <td className="px-4 py-2.5">{openCount(p.id)}</td>
+                    <td className="px-4 py-2.5">
+                      <ActiveToggle userId={p.id} active={p.active ?? true} editable />
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
         <p className="mt-3 text-xs text-muted">
-          Aktiv heißt: gerade verfügbar für neue Projekte. Jeder Cutter kann das für sich selbst umschalten.
+          Aktiv heißt: gerade verfügbar für neue Projekte. Jeder Cutter kann das unter „Meine Projekte“ selbst umschalten.
         </p>
       </div>
     </>

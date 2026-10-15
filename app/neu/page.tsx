@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { listUsers } from "@/lib/queries";
+import { clientIdsOfCutter } from "@/lib/access";
 import { PageHeader } from "@/app/components/shell";
 import { NewJobForm } from "./new-job-form";
 
@@ -16,12 +17,15 @@ async function Content() {
 
   // Admins und Cutter legen ein Projekt für einen Client an
   const isStaff = me.role !== "kunde";
-  const clients = isStaff ? await listUsers("kunde") : [];
+  const all = isStaff ? await listUsers("kunde") : [];
+  // Cutter legen nur für ihre freigegebenen Kunden an
+  const allowed = me.role === "cutter" ? await clientIdsOfCutter(me.id) : null;
+  const clients = allowed ? all.filter((c) => allowed.includes(c.id)) : all;
 
   return (
     <>
       <PageHeader title="Neues Projekt" />
-      <div className="max-w-2xl px-6 pb-10 md:px-10">
+      <div className="max-w-2xl px-4 pb-10 sm:px-6 md:px-10">
         <NewJobForm clients={clients.map((c) => ({ id: c.id, name: c.name }))} isStaff={isStaff} />
       </div>
     </>

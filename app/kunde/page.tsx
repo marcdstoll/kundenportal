@@ -47,7 +47,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kunde">["se
         )}
       </PageHeader>
 
-      <div className="space-y-4 px-6 pb-10 md:px-10">
+      <div className="space-y-4 px-4 pb-10 sm:px-6 md:px-10">
         {jobs.length === 0 ? (
           <div className="rounded-xl border border-dashed border-line p-10 text-center text-sm text-muted">
             Noch keine Projekte. Lade dein erstes Material über „Neues Projekt“ hoch.

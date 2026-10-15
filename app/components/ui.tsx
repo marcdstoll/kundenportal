@@ -37,8 +37,15 @@ export function personHue(name: string) {
   return [...name].reduce((a, c) => a + c.charCodeAt(0) * 7, 0) % 360;
 }
 
-// Runde Initialen statt Profilbild
-export function Avatar({ name, size = "sm" }: { name: string; size?: "sm" | "lg" }) {
+// Logo (falls hinterlegt), sonst runde Initialen
+export function Avatar({ name, size = "sm", logoUrl }: { name: string; size?: "sm" | "md" | "lg"; logoUrl?: string | null }) {
+  const dims = size === "lg" ? "size-14 text-lg" : size === "md" ? "size-8 text-xs" : "size-5 text-[10px]";
+  if (logoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- kleine Logos aus der eigenen API, kein Bild-Optimierer nötig
+      <img src={logoUrl} alt="" className={`shrink-0 rounded-full border border-line bg-white object-cover ${dims}`} />
+    );
+  }
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -46,7 +53,6 @@ export function Avatar({ name, size = "sm" }: { name: string; size?: "sm" | "lg"
     .map((p) => p[0]?.toUpperCase())
     .join("");
   const hue = personHue(name);
-  const dims = size === "lg" ? "size-14 text-lg" : "size-5 text-[10px]";
   return (
     <span
       className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white ${dims}`}
@@ -58,10 +64,10 @@ export function Avatar({ name, size = "sm" }: { name: string; size?: "sm" | "lg"
   );
 }
 
-export function Person({ name }: { name: string }) {
+export function Person({ name, logoUrl }: { name: string; logoUrl?: string | null }) {
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-      <Avatar name={name} />
+      <Avatar name={name} logoUrl={logoUrl} />
       <span>{name}</span>
     </span>
   );

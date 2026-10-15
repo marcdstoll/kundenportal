@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, inArray, isNull, ne, or, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { jobComments, jobCutters, jobFiles, jobs, notifications, user } from "@/db/schema";
+import { account, cutterClients, jobComments, jobCutters, jobFiles, jobs, notifications, profiles, user } from "@/db/schema";
 
 export type JobFileView = typeof jobFiles.$inferSelect & { uploaderName: string | null };
 
@@ -148,4 +148,73 @@ export async function loadComments(jobId: string) {
     .innerJoin(user, eq(jobComments.authorId, user.id))
     .where(eq(jobComments.jobId, jobId))
     .orderBy(asc(jobComments.createdAt));
+}
+
+// ---------- Personen mit Profil (Verwaltung, Meine Clients) ----------
+
+export type PersonView = {
+  id: string;
+  name: string;
+  email: string;
+  role: string | null;
+  active: boolean | null;
+  phone: string | null;
+  links: string | null;
+  notes: string | null;
+  hasLogo: boolean;
+  logoVersion: number;
+  // eingeladen = Passwort noch nicht gesetzt
+  invited: boolean;
+};
+
+export async function loadPeople(...roles: ("kunde" | "cutter" | "admin")[]): Promise<PersonView[]> {
+  const rows = await db
+    .select({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      active: user.active,
+      phone: profiles.phone,
+      links: profiles.links,
+      notes: profiles.notes,
+      hasLogo: sql<boolean>`${profiles.logo} is not null`,
+      logoUpdated: profiles.updatedAt,
+      accountId: account.id,
+    })
+    .from(user)
+    .leftJoin(profiles, eq(profiles.userId, user.id))
+    .leftJoin(account, and(eq(account.userId, user.id), eq(account.providerId, "credential")))
+    .where(inArray(user.role, roles))
+    .orderBy(asc(user.name));
+  return rows.map(({ logoUpdated, accountId, ...r }) => ({
+    ...r,
+    hasLogo: !!r.hasLogo,
+    logoVersion: logoUpdated ? logoUpdated.getTime() : 0,
+    invited: !accountId,
+  }));
+}
+
+export async function loadPerson(id: string) {
+  const [row] = (await loadPeople("kunde", "cutter", "admin")).filter((p) => p.id === id);
+  return row ?? null;
+}
+
+// Logo-URL für <img>, oder null wenn kein Logo hinterlegt ist
+export function logoUrl(p: { id: string; hasLogo: boolean; logoVersion: number }) {
+  return p.hasLogo ? `/api/logo/${p.id}?v=${p.logoVersion}` : null;
+}
+
+// Freigaben: welche Cutter betreuen welchen Kunden
+export async function loadAssignments() {
+  return db.select().from(cutterClients);
+}
+
+// Kunden mit Logo-Info als Map (für Karten, Seitenleiste usw.)
+export async function clientLogos() {
+  const rows = await db
+    .select({ id: profiles.userId, updated: profiles.updatedAt })
+    .from(profiles)
+    .where(isNotNull(profiles.logo));
+  return new Map(rows.map((r) => [r.id, `/api/logo/${r.id}?v=${r.updated.getTime()}`]));
 }

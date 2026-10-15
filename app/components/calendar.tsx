@@ -73,8 +73,8 @@ export function Calendar({ month, jobs, hrefFor, monthHref, showClient, lockReas
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="whitespace-nowrap text-lg font-semibold tracking-tight">{title}</h2>
         <div className="flex flex-wrap items-center gap-1 text-sm">
           {toolbar}
           <Link

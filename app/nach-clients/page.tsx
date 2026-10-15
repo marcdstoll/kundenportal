@@ -17,6 +17,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/nach-client
   const me = await getCurrentUser();
   if (!me) redirect("/login");
   if (me.role === "kunde") redirect("/kunde");
+  if (me.role !== "admin") redirect("/meine-clients"); // Verwaltung nur für Admins
 
   const params = await searchParams;
   const clients = await listUsers("kunde");
@@ -32,7 +33,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/nach-client
   return (
     <>
       <PageHeader title="Projekte nach Clients" />
-      <div className="space-y-4 px-6 pb-10 md:px-10">
+      <div className="space-y-4 px-4 pb-10 sm:px-6 md:px-10">
         <PersonTabs people={clients} activeId={activeId} hrefFor={(id) => `/nach-clients?c=${id}${sortQuery}`} />
         <JobTable
           jobs={jobs}

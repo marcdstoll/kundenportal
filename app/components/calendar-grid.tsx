@@ -53,7 +53,10 @@ export function CalendarGrid({ days, items, showClient }: { days: CalendarDay[];
           {error}
         </p>
       )}
-      <div className="overflow-x-auto">
+      {/* Handy: Terminliste statt Monatsraster (Verschieben geht am Computer) */}
+      <AgendaList days={days} items={optimisticItems} showClient={showClient} />
+
+      <div className="hidden overflow-x-auto md:block">
         <div className="grid min-w-[840px] grid-cols-7 gap-px overflow-hidden rounded-xl border border-line bg-line">
           {WEEKDAYS.map((d) => (
             <div key={d} className="bg-surface px-2 py-1.5 text-center text-xs text-muted">
@@ -149,6 +152,49 @@ export function CalendarGrid({ days, items, showClient }: { days: CalendarDay[];
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Liste der Tage mit Terminen – für schmale Bildschirme
+function AgendaList({ days, items, showClient }: { days: CalendarDay[]; items: CalendarItem[]; showClient: boolean }) {
+  const withItems = days.filter((d) => d.inMonth && items.some((it) => it.date === d.key));
+  return (
+    <div className="space-y-3 md:hidden">
+      {withItems.length === 0 && (
+        <p className="rounded-xl border border-dashed border-line p-6 text-center text-sm text-muted">Keine Termine in diesem Monat.</p>
+      )}
+      {withItems.map((d) => {
+        const date = new Date(`${d.key}T12:00:00`);
+        return (
+          <section key={d.key} className="space-y-1.5">
+            <h3 className={`text-sm font-medium ${d.isToday ? "text-rec" : ""}`}>
+              {date.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" })}
+              {d.isToday && " · heute"}
+            </h3>
+            {items
+              .filter((it) => it.date === d.key)
+              .map((it) => {
+                const color = statusColor(it.status);
+                return (
+                  <Link
+                    key={it.id}
+                    href={it.href}
+                    scroll={false}
+                    className="flex items-center justify-between gap-3 rounded-lg border-l-2 p-2.5 text-sm"
+                    style={{ background: `color-mix(in oklab, ${color} 12%, var(--raised))`, borderColor: color }}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{it.title}</span>
+                      {showClient && <span className="block truncate text-xs text-muted">{it.customerName}</span>}
+                    </span>
+                    <StatusBadge status={it.status} />
+                  </Link>
+                );
+              })}
+          </section>
+        );
+      })}
     </div>
   );
 }

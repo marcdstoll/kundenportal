@@ -4,6 +4,7 @@ import { listUsers, loadJobsOfCutter } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
 import { JobTable, PersonTabs, parseSort } from "@/app/components/job-table";
 import { JobDrawer } from "@/app/components/job-drawer";
+import { ActiveToggle } from "@/app/components/active-toggle";
 
 export default function NachCutterPage({ searchParams }: PageProps<"/nach-cutter">) {
   return (
@@ -17,7 +18,9 @@ async function Content({ searchParams }: { searchParams: PageProps<"/nach-cutter
   if (me.role === "kunde") redirect("/kunde");
 
   const params = await searchParams;
-  const cutters = await listUsers("cutter", "admin");
+  // Cutter sehen nur sich selbst ("Meine Projekte"), Admins alle
+  const isCutter = me.role === "cutter";
+  const cutters = isCutter ? [{ id: me.id, name: me.name, role: me.role, email: me.email, active: me.active }] : await listUsers("cutter", "admin");
   // Standard: man selbst (falls Cutter), sonst der erste Cutter
   const requested = typeof params.c === "string" ? params.c : null;
   const activeId =
@@ -35,9 +38,16 @@ async function Content({ searchParams }: { searchParams: PageProps<"/nach-cutter
 
   return (
     <>
-      <PageHeader title="Projekte nach Cutter" />
-      <div className="space-y-4 px-6 pb-10 md:px-10">
-        <PersonTabs people={cutters} activeId={activeId} hrefFor={(id) => `/nach-cutter?c=${id}${sortQuery}`} />
+      <PageHeader title={isCutter ? "Meine Projekte" : "Projekte nach Cutter"}>
+        {isCutter && (
+          <label className="flex items-center gap-2 text-sm text-muted">
+            <ActiveToggle userId={me.id} active={me.active ?? true} editable />
+            Verfügbar für neue Projekte
+          </label>
+        )}
+      </PageHeader>
+      <div className="space-y-4 px-4 pb-10 sm:px-6 md:px-10">
+        {!isCutter && <PersonTabs people={cutters} activeId={activeId} hrefFor={(id) => `/nach-cutter?c=${id}${sortQuery}`} />}
         <JobTable
           jobs={jobs}
           isAdmin={me.role === "admin"}

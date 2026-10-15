@@ -8,6 +8,7 @@ import { jobComments, jobCutters, jobFiles, jobs, notifications, user } from "@/
 import { createFolder, createJobFolder, createUpload, deleteFile, deleteFolder, moveFile } from "@/lib/frameio";
 import { requireUser } from "@/lib/session";
 import { nextPartTitle } from "@/lib/queries";
+import { canSeeJob, clientIdsOfCutter } from "@/lib/access";
 import { FORMATS, STATUSES } from "@/lib/status";
 
 // ---------- Hilfsfunktionen ----------
@@ -71,9 +72,9 @@ async function addCutterRow(jobId: string, userId: string) {
 type Job = typeof jobs.$inferSelect;
 type Me = Awaited<ReturnType<typeof requireUser>>;
 
-// Darf dieser Nutzer das Projekt sehen? Kunden nur ihre eigenen, Staff alle.
-function assertCanSee(me: Me, job: Job) {
-  if (me.role === "kunde" && job.customerId !== me.id) throw new Error("Keine Berechtigung.");
+// Darf dieser Nutzer das Projekt sehen? Kunden nur ihre eigenen, Cutter nur freigegebene Kunden (lib/access.ts)
+async function assertCanSee(me: Me, job: Job) {
+  if (!(await canSeeJob(me, job))) throw new Error("Keine Berechtigung.");
 }
 
 // Solange eine Stornierung angefragt ist, ruht die Arbeit am Projekt
@@ -197,6 +198,9 @@ export async function createJob(input: NewJobInput) {
         .from(user)
         .where(and(eq(user.id, input.customerId), eq(user.role, "kunde")));
       if (!c) throw new Error("Client nicht gefunden.");
+      if (me.role === "cutter" && !(await clientIdsOfCutter(me.id)).includes(c.id)) {
+        throw new Error("Dieser Kunde ist für dich nicht freigegeben.");
+      }
       customer = c;
     }
 
@@ -233,7 +237,7 @@ export async function requestUpload(
     const job = await getJob(jobId);
 
     if (kind === "roh") {
-      assertCanSee(me, job);
+      await assertCanSee(me, job);
       if (job.status === "storniert") throw new Error("Das Projekt ist storniert.");
     } else {
       await requireCutterOf(jobId);
@@ -279,7 +283,7 @@ export async function confirmUpload(fileRowId: string) {
     const [file] = await db.select().from(jobFiles).where(eq(jobFiles.id, fileRowId));
     if (!file) throw new Error("Datei nicht gefunden.");
     const job = await getJob(file.jobId);
-    assertCanSee(me, job);
+    await assertCanSee(me, job);
     if (file.uploadedBy && file.uploadedBy !== me.id && me.role !== "admin") throw new Error("Keine Berechtigung.");
     await db.update(jobFiles).set({ uploaded: true }).where(eq(jobFiles.id, fileRowId));
     if (file.late) {
@@ -313,7 +317,9 @@ export async function submitJob(jobId: string) {
 export async function claimJob(jobId: string) {
   return run(async () => {
     const me = await requireUser("cutter", "admin");
-    assertNotPaused(await getJob(jobId));
+    const job = await getJob(jobId);
+    await assertCanSee(me, job);
+    assertNotPaused(job);
     await changeStatus(jobId, "todo", "in_arbeit");
     await addCutterRow(jobId, me.id);
     refresh();
@@ -325,7 +331,9 @@ export async function claimJob(jobId: string) {
 export async function reserveJob(jobId: string) {
   return run(async () => {
     const me = await requireUser("cutter", "admin");
-    assertNotPaused(await getJob(jobId));
+    const job = await getJob(jobId);
+    await assertCanSee(me, job);
+    assertNotPaused(job);
     await changeStatus(jobId, "todo", "warteschlange");
     await addCutterRow(jobId, me.id);
     refresh();
@@ -514,7 +522,7 @@ export async function addComment(jobId: string, body: string) {
   return run(async () => {
     const me = await requireUser();
     const job = await getJob(jobId);
-    assertCanSee(me, job);
+    await assertCanSee(me, job);
     const text = body.trim();
     if (!text) throw new Error("Bitte einen Kommentar eingeben.");
     if (text.length > 5000) throw new Error("Der Kommentar ist zu lang (max. 5000 Zeichen).");
@@ -557,8 +565,9 @@ export async function markAllRead() {
 // Neues Projekt mit gleichem Briefing und Rohmaterial – jeder Clip einzeln abrechenbar
 export async function duplicateJob(jobId: string, title?: string) {
   return run(async () => {
-    await requireUser("cutter", "admin");
+    const me = await requireUser("cutter", "admin");
     const job = await getJob(jobId);
+    await assertCanSee(me, job);
     if (job.status === "entwurf") throw new Error("Das Projekt wird noch hochgeladen.");
     const newTitle = (title ?? "").trim() || (await nextPartTitle(job));
     const id = randomUUID();
@@ -604,7 +613,7 @@ export async function deleteJob(jobId: string) {
   return run(async () => {
     const me = await requireUser("kunde", "admin");
     const job = await getJob(jobId);
-    assertCanSee(me, job);
+    await assertCanSee(me, job);
     if (!DELETABLE.includes(job.status)) {
       throw new Error("Löschen geht nur in „To Dos“. Danach kannst du eine Stornierung anfragen.");
     }
@@ -624,7 +633,7 @@ export async function deleteJobFile(fileRowId: string) {
     const [file] = await db.select().from(jobFiles).where(eq(jobFiles.id, fileRowId));
     if (!file) throw new Error("Datei nicht gefunden.");
     const job = await getJob(file.jobId);
-    assertCanSee(me, job);
+    await assertCanSee(me, job);
     if (!DELETABLE.includes(job.status)) throw new Error("Dateien lassen sich nur in „To Dos“ löschen.");
     if (file.kind !== "roh") throw new Error("Nur Rohmaterial kann gelöscht werden.");
     const sameFile = await db
@@ -645,7 +654,7 @@ export async function requestCancel(jobId: string, reason: string) {
   return run(async () => {
     const me = await requireUser("kunde", "admin");
     const job = await getJob(jobId);
-    assertCanSee(me, job);
+    await assertCanSee(me, job);
     if (!CANCELLABLE.includes(job.status)) throw new Error("In diesem Status kann keine Stornierung angefragt werden.");
     if (job.cancelRequestedAt) throw new Error("Eine Stornierung ist bereits angefragt.");
     const why = reason.trim();

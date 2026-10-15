@@ -35,7 +35,7 @@ export function ColumnRow({ order, columns }: { order: string[]; columns: Column
   const byId = new Map(columns.map((c) => [c.id, c]));
 
   return (
-    <div className="flex gap-3 overflow-x-auto pb-3">
+    <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-3 sm:mx-0 sm:snap-none sm:px-0">
       {current
         .map((id) => byId.get(id))
         .filter((c): c is Column => !!c)
@@ -56,7 +56,7 @@ export function ColumnRow({ order, columns }: { order: string[]; columns: Column
                 drop(col.id, id);
               }
             }}
-            className={`flex min-w-[13rem] flex-1 basis-0 flex-col gap-2 rounded-xl p-2 transition-[opacity,box-shadow] ${
+            className={`flex min-w-[80vw] flex-1 basis-0 snap-start flex-col gap-2 rounded-xl p-2 sm:min-w-[13rem] transition-[opacity,box-shadow] ${
               dragging === col.id ? "opacity-40" : ""
             } ${over === col.id && dragging !== col.id ? "ring-2 ring-accent/60" : ""}`}
             style={col.style}

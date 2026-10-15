@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { loadComments, loadJob, listUsers, nextPartTitle, unreadByJob, type JobFileView, type JobView } from "@/lib/queries";
+import { clientLogos, loadComments, loadJob, listUsers, nextPartTitle, unreadByJob, type JobFileView, type JobView } from "@/lib/queries";
 import { CUSTOMER_VIDEO_STATUSES, statusColor } from "@/lib/status";
+import { canSeeJob } from "@/lib/access";
 import { Avatar, ExternalLink, FormatTag, Person, StatusBadge, formatDate, formatDateTime, formatSize, shortLink } from "./ui";
 import { JobControls } from "./job-controls";
 import { VideoBlock } from "./video-block";
@@ -63,7 +64,7 @@ function DrawerFrame({
       <Link href={closeHref} scroll={false} aria-label="Schließen" className="absolute inset-0 bg-black/45" />
       <aside className="relative flex h-full w-full max-w-lg flex-col overflow-y-auto border-l border-line bg-surface shadow-2xl">
         <div className="h-1 w-full shrink-0" style={{ background: color }} />
-        <div className="flex items-start justify-between gap-4 border-b border-line px-6 py-5">
+        <div className="flex items-start justify-between gap-4 border-b border-line px-4 py-5 sm:px-6">
           <div className="min-w-0 space-y-2">
             <h2 className="text-xl font-semibold tracking-tight">{job.title}</h2>
             <div className="flex flex-wrap items-center gap-3">
@@ -88,7 +89,7 @@ function DrawerFrame({
             Schließen
           </Link>
         </div>
-        <div className="space-y-6 px-6 py-5">{children}</div>
+        <div className="space-y-6 px-4 py-5 sm:px-6">{children}</div>
       </aside>
     </div>
   );
@@ -214,8 +215,8 @@ export async function JobDrawer({
   closeHref: string;
   me: { id: string; role: string };
 }) {
-  const [job, staff, unread] = await Promise.all([loadJob(jobId), listUsers("cutter", "admin"), unreadByJob(me.id)]);
-  if (!job) return null;
+  const [job, staff, unread, logos] = await Promise.all([loadJob(jobId), listUsers("cutter", "admin"), unreadByJob(me.id), clientLogos()]);
+  if (!job || !(await canSeeJob(me, job))) return null;
 
   const isAdmin = me.role === "admin";
   const isAssigned = job.cutters.some((c) => c.id === me.id);
@@ -231,7 +232,7 @@ export async function JobDrawer({
 
       <section>
         <Row label="Client">
-          <Person name={job.customerName} />
+          <Person name={job.customerName} logoUrl={logos.get(job.customerId)} />
         </Row>
         <Row label="Cutter">
           {job.cutters.length === 0 ? (

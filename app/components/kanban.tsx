@@ -14,11 +14,13 @@ type Props = {
   customerView?: boolean;
   // Anzahl ungelesener Inbox-Einträge je Projekt (für die "Neu"-Markierung)
   unread?: Map<string, number>;
+  // Logo-URLs der Kunden (Kunden-ID → URL)
+  logos?: Map<string, string>;
 };
 
 // Kanban-Spalten wie in Notion, jede Spalte in ihrer Status-Farbe.
 // Die Reihenfolge der Spalten kann jeder Nutzer per Drag & Drop ändern.
-export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread }: Props) {
+export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread, logos }: Props) {
   const order = await boardColumnOrder();
   const columns = BOARD_COLUMNS.map((status) => {
     const items = jobs.filter((j) => j.status === status);
@@ -72,7 +74,7 @@ export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread
                   <p className="rounded bg-danger/10 px-1.5 py-0.5 text-xs font-medium text-danger">⏸ Storno angefragt – pausiert</p>
                 )}
                 <div className="space-y-1.5 text-xs text-muted">
-                  {!customerView && <Person name={job.customerName} />}
+                  {!customerView && <Person name={job.customerName} logoUrl={logos?.get(job.customerId)} />}
                   {!customerView && job.cutters.length > 0 && (
                     <div className="flex flex-wrap gap-x-3 gap-y-1">
                       {job.cutters.map((c) => (

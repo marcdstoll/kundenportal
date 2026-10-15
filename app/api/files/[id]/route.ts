@@ -5,6 +5,7 @@ import { jobFiles, jobs } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { getFileLinks } from "@/lib/frameio";
 import { CUSTOMER_VIDEO_STATUSES } from "@/lib/status";
+import { canSeeJob } from "@/lib/access";
 
 // Leitet zu einem kurzlebigen Frame.io-Link weiter, nachdem die Berechtigung geprüft wurde.
 // ?mode=download → Datei herunterladen, ?mode=play → im Player abspielen
@@ -21,13 +22,12 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/files/[id]">
   if (!row) return new Response("Datei nicht gefunden", { status: 404 });
 
   const role = session.user.role ?? "kunde";
-  const isStaff = role === "cutter" || role === "admin";
-  const isOwner = row.job.customerId === session.user.id;
-  const customerMayView =
-    row.file.kind === "roh" || CUSTOMER_VIDEO_STATUSES.includes(row.job.status);
-  if (!isStaff && !(isOwner && customerMayView)) {
-    return new Response("Keine Berechtigung", { status: 403 });
-  }
+  const me = { id: session.user.id, role };
+  // Kunden: eigene Rohdateien immer, das fertige Video erst ab "Ready to post".
+  // Cutter: nur Projekte freigegebener Kunden. Admins: alles.
+  const customerMayView = row.file.kind === "roh" || CUSTOMER_VIDEO_STATUSES.includes(row.job.status);
+  const allowed = (await canSeeJob(me, row.job)) && (role !== "kunde" || customerMayView);
+  if (!allowed) return new Response("Keine Berechtigung", { status: 403 });
 
   try {
     const links = await getFileLinks(row.file.frameioFileId);

@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
-import { loadJobs, unreadByJob } from "@/lib/queries";
+import { clientLogos, loadJobs, unreadByJob } from "@/lib/queries";
 import { isConnected } from "@/lib/frameio";
+import { jobScope } from "@/lib/access";
 import { BOARD_COLUMNS, FORMATS } from "@/lib/status";
 import { parseFormatFilter } from "@/lib/board-prefs";
 import { FormatFilter } from "@/app/components/format-filter";
@@ -46,8 +47,8 @@ async function Board({ searchParams }: { searchParams: PageProps<"/board">["sear
   };
 
   // Online und Storniert stehen nicht auf dem Board, sondern in den Listen
-  const unread = (await unreadByJob(me.id)).jobs;
-  const jobs = (await loadJobs()).filter(
+  const [unread, logos] = await Promise.all([unreadByJob(me.id).then((u) => u.jobs), clientLogos()]);
+  const jobs = (await loadJobs(await jobScope(me))).filter(
     (j) => (BOARD_COLUMNS as readonly string[]).includes(j.status) && formats.includes(j.format),
   );
   const main = jobs.filter((j) => j.format !== "clipping");
@@ -65,7 +66,7 @@ async function Board({ searchParams }: { searchParams: PageProps<"/board">["sear
       {/* Nur falls Frame.io (noch) nicht verbunden ist – sonst unsichtbar */}
       {me.role === "admin" && !(await isConnected()) && (
         <div
-          className="mx-6 mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm md:mx-10"
+          className="mx-4 mb-6 flex sm:mx-6 flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm md:mx-10"
           style={{
             borderColor: "var(--st-ready_to_post)",
             background: "color-mix(in oklab, var(--st-ready_to_post) 10%, transparent)",
@@ -78,7 +79,7 @@ async function Board({ searchParams }: { searchParams: PageProps<"/board">["sear
         </div>
       )}
 
-      <div className="space-y-8 px-6 pb-10 md:px-10">
+      <div className="space-y-8 px-4 pb-10 sm:px-6 md:px-10">
         {showMain && (
           <Group
             title={
@@ -90,12 +91,12 @@ async function Board({ searchParams }: { searchParams: PageProps<"/board">["sear
             }
             count={main.length}
           >
-            <Kanban jobs={main} meId={me.id} unread={unread} hrefFor={(id) => href(`job=${id}`)} />
+            <Kanban jobs={main} meId={me.id} unread={unread} logos={logos} hrefFor={(id) => href(`job=${id}`)} />
           </Group>
         )}
         {showClipping && (
           <Group title="Projekte (Clipping)" count={clipping.length}>
-            <Kanban jobs={clipping} meId={me.id} unread={unread} hrefFor={(id) => href(`job=${id}`)} />
+            <Kanban jobs={clipping} meId={me.id} unread={unread} logos={logos} hrefFor={(id) => href(`job=${id}`)} />
           </Group>
         )}
       </div>

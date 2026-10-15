@@ -124,3 +124,45 @@ export const notifications = pgTable(
   },
   (t) => [index("notifications_user_idx").on(t.userId, t.readAt)]
 );
+
+// Freigaben: welcher Cutter betreut welche Kunden (sieht nur deren Projekte)
+export const cutterClients = pgTable(
+  "cutter_clients",
+  {
+    cutterId: text("cutter_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.cutterId, t.clientId] })]
+);
+
+// Zusatzangaben zu Kunden und Cuttern (Logo, Telefon, Links, Infos für Cutter)
+export const profiles = pgTable("profiles", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  phone: text("phone"),
+  // Logo als kleines, verkleinertes Bild (data:image/webp;base64,…), max. ca. 100 KB
+  logo: text("logo"),
+  // Wichtige Links (Instagram, TikTok, Drive …), eine pro Zeile
+  links: text("links"),
+  // Infos für die betreuenden Cutter (Stil, Do's & Don'ts …)
+  notes: text("notes"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Einladungslinks: Admin legt Nutzer an, die Person setzt über den Link ihr Passwort
+export const invites = pgTable("invites", {
+  token: text("token").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  createdBy: text("created_by"),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});

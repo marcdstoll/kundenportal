@@ -25,7 +25,7 @@ export default async function InboxPage() {
   return (
     <>
       <PageHeader title="Inbox">{unread > 0 && <MarkAllReadButton />}</PageHeader>
-      <div className="max-w-3xl px-6 pb-10 md:px-10">
+      <div className="max-w-3xl px-4 pb-10 sm:px-6 md:px-10">
         {items.length === 0 ? (
           <div className="rounded-xl border border-dashed border-line p-10 text-center text-sm text-muted">
             Alles ruhig. Neue Kommentare und nachgereichte Dateien erscheinen hier.

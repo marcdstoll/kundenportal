@@ -3,7 +3,7 @@
 import Link, { useLinkStatus } from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
-export type NavItem = { href: string; label: string; color?: string; badge?: number };
+export type NavItem = { href: string; label: string; color?: string; logo?: string; badge?: number };
 
 // Kleiner pulsierender Punkt, solange die angeklickte Seite lädt
 export function LinkPending({ className = "" }: { className?: string }) {
@@ -25,7 +25,7 @@ export function NavLinks({ items }: { items: NavItem[] }) {
   const as = useSearchParams().get("as");
 
   return (
-    <nav className="flex gap-0.5 overflow-x-auto md:flex-col">
+    <nav className="flex flex-col gap-0.5">
       {items.map((item) => {
         const [path, query] = item.href.split("?");
         const itemAs = query ? new URLSearchParams(query).get("as") : null;
@@ -39,7 +39,12 @@ export function NavLinks({ items }: { items: NavItem[] }) {
               active ? "bg-raised font-medium text-text" : "text-muted hover:bg-raised/60 hover:text-text"
             }`}
           >
-            {item.color && <span className="size-2 shrink-0 rounded-full" style={{ background: item.color }} />}
+            {item.logo ? (
+              // eslint-disable-next-line @next/next/no-img-element -- kleines Logo aus der eigenen API
+              <img src={item.logo} alt="" className="size-4 shrink-0 rounded-full border border-line bg-white object-cover" />
+            ) : (
+              item.color && <span className="size-2 shrink-0 rounded-full" style={{ background: item.color }} />
+            )}
             <span className="flex-1">{item.label}</span>
             <LinkPending />
             {!!item.badge && (
