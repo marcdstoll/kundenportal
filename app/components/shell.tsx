@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { SignOutButton } from "@/app/dashboard/sign-out-button";
-import { listUsers } from "@/lib/queries";
+import { listUsers, unreadByJob } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/session";
 import { Avatar, personHue } from "./ui";
 import { NavLinks, type NavItem } from "./nav-links";
@@ -12,15 +12,18 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
 };
 
-function navFor(role: string): NavItem[] {
+function navFor(role: string, unread: number): NavItem[] {
+  const inbox: NavItem = { href: "/inbox", label: "Inbox", badge: unread };
   if (role === "kunde") {
     return [
+      inbox,
       { href: "/kunde", label: "Projekte" },
       { href: "/kalender", label: "Kalender" },
       { href: "/neu", label: "Neues Projekt" },
     ];
   }
   const items: NavItem[] = [
+    inbox,
     { href: "/board", label: "Board" },
     { href: "/kalender", label: "Kalender" },
     { href: "/nach-cutter", label: "Nach Cutter" },
@@ -28,7 +31,7 @@ function navFor(role: string): NavItem[] {
     { href: "/cutter", label: "Cutter" },
     { href: "/clients", label: "Clients" },
   ];
-  if (role === "admin") items.push({ href: "/neu", label: "Neues Projekt" });
+  items.push({ href: "/neu", label: "Neues Projekt" });
   return items;
 }
 
@@ -40,7 +43,10 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
   if (!user) return <>{children}</>;
 
   // Admins sehen links alle Kunden und können deren Ansicht öffnen
-  const clients = user.role === "admin" ? await listUsers("kunde") : [];
+  const [clients, unread] = await Promise.all([
+    user.role === "admin" ? listUsers("kunde") : Promise.resolve([]),
+    unreadByJob(user.id),
+  ]);
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
@@ -50,7 +56,7 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
           Contenthaus
         </Link>
 
-        <NavLinks items={navFor(user.role)} />
+        <NavLinks items={navFor(user.role, unread.total)} />
 
         {clients.length > 0 && (
           <div className="space-y-1">

@@ -36,9 +36,15 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
       : isNotNull(jobsTable.publishDate);
   const jobs = await loadJobs(filter);
 
-  // Verschieben dürfen Admins und Kunden (eigene Projekte), sobald es ein Datum geben darf
-  const canMove = (job: { customerId: string; status: string }) =>
-    CUSTOMER_VIDEO_STATUSES.includes(job.status) && (me.role === "admin" || job.customerId === me.id);
+  // Verschieben: Admins immer, Kunden ihre eigenen Projekte ab "Ready to post", Cutter nie.
+  // Rückgabe: null = darf verschieben, sonst der Grund, warum nicht (erscheint als Hinweis am Termin)
+  const lockReason = (job: { customerId: string; status: string }) => {
+    if (me.role === "admin") return null;
+    if (me.role === "cutter") return "Termine verschieben nur Admins und Kunden.";
+    if (job.customerId !== me.id) return "Nur eigene Projekte lassen sich verschieben.";
+    if (!CUSTOMER_VIDEO_STATUSES.includes(job.status)) return "Das Datum lässt sich ab „Ready to post“ ändern.";
+    return null;
+  };
 
   const query = (extra: Record<string, string>) => {
     const p = new URLSearchParams();
@@ -58,7 +64,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
           month={month}
           jobs={jobs}
           showClient={!customerId}
-          canMove={canMove}
+          lockReason={lockReason}
           toolbar={
             clients.length > 0 ? (
               <ClientFilter clients={clients.map((c) => ({ id: c.id, name: c.name }))} selected={pickedClients} />
@@ -74,7 +80,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
       </div>
       {openJob &&
         (customerId ? (
-          <CustomerJobDrawer jobId={openJob} closeHref={query({})} customerId={customerId} />
+          <CustomerJobDrawer jobId={openJob} closeHref={query({})} customerId={customerId} viewerId={me.id} />
         ) : (
           <JobDrawer jobId={openJob} closeHref={query({})} me={me} />
         ))}

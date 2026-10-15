@@ -13,16 +13,16 @@ export default function NeuesProjektPage() {
 async function Content() {
   const me = await getCurrentUser();
   if (!me) redirect("/login");
-  if (me.role === "cutter") redirect("/board");
 
-  // Admins können ein Projekt für einen Client anlegen
-  const clients = me.role === "admin" ? await listUsers("kunde") : [];
+  // Admins und Cutter legen ein Projekt für einen Client an
+  const isStaff = me.role !== "kunde";
+  const clients = isStaff ? await listUsers("kunde") : [];
 
   return (
     <>
       <PageHeader title="Neues Projekt" />
       <div className="max-w-2xl px-6 pb-10 md:px-10">
-        <NewJobForm clients={clients.map((c) => ({ id: c.id, name: c.name }))} isAdmin={me.role === "admin"} />
+        <NewJobForm clients={clients.map((c) => ({ id: c.id, name: c.name }))} isStaff={isStaff} />
       </div>
     </>
   );

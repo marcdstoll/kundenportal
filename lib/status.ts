@@ -56,11 +56,5 @@ export const FORMAT_LABELS: Record<string, string> = {
   clipping: "Clipping",
 };
 
-export const PLATFORMS = [
-  "Instagram Reels",
-  "TikTok",
-  "YouTube",
-  "YouTube Shorts",
-  "LinkedIn",
-  "Sonstiges",
-];
+// Auswahl im Formular "Neues Projekt" (mehrere möglich) – hier einfach Einträge ergänzen oder löschen
+export const PLATFORMS = ["Instagram", "TikTok", "YouTube", "Sonstiges"];

@@ -1,12 +1,27 @@
 import Link from "next/link";
-import { loadJob, listUsers, type JobView } from "@/lib/queries";
+import { loadComments, loadJob, listUsers, nextPartTitle, unreadByJob, type JobFileView, type JobView } from "@/lib/queries";
 import { CUSTOMER_VIDEO_STATUSES, statusColor } from "@/lib/status";
-import { ExternalLink, FormatTag, Person, StatusBadge, formatDate, formatSize, shortLink } from "./ui";
+import { Avatar, ExternalLink, FormatTag, Person, StatusBadge, formatDate, formatDateTime, formatSize, shortLink } from "./ui";
 import { JobControls } from "./job-controls";
 import { VideoBlock } from "./video-block";
 import { DownloadAll } from "./download-all";
 import { PublishDateField } from "./publish-date-field";
 import { InlinePicker } from "./inline-picker";
+import {
+  AddFiles,
+  CancelDecision,
+  CancelRequestForm,
+  CommentForm,
+  DeleteFileButton,
+  DeleteJobButton,
+  DuplicateForm,
+  MarkRead,
+  NewMarker,
+} from "./project-actions";
+
+// Status, in denen Kunden noch löschen dürfen bzw. eine Stornierung anfragen können
+const DELETABLE = ["entwurf", "todo"];
+const CANCELLABLE = ["warteschlange", "in_arbeit", "feedback"];
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -17,7 +32,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-function Section({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
+function Section({ title, children, action }: { title: React.ReactNode; children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between gap-2">
@@ -30,10 +45,21 @@ function Section({ title, children, action }: { title: string; children: React.R
 }
 
 // Seitenpanel mit Overlay; schließt per Klick daneben
-function DrawerFrame({ job, closeHref, editable = false, children }: { job: JobView; closeHref: string; editable?: boolean; children: React.ReactNode }) {
+function DrawerFrame({
+  job,
+  closeHref,
+  editable = false,
+  children,
+}: {
+  job: JobView;
+  closeHref: string;
+  editable?: boolean;
+  children: React.ReactNode;
+}) {
   const color = statusColor(job.status);
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
+      <MarkRead jobId={job.id} />
       <Link href={closeHref} scroll={false} aria-label="Schließen" className="absolute inset-0 bg-black/45" />
       <aside className="relative flex h-full w-full max-w-lg flex-col overflow-y-auto border-l border-line bg-surface shadow-2xl">
         <div className="h-1 w-full shrink-0" style={{ background: color }} />
@@ -54,7 +80,11 @@ function DrawerFrame({ job, closeHref, editable = false, children }: { job: JobV
               )}
             </div>
           </div>
-          <Link href={closeHref} scroll={false} className="rounded-md px-2 py-1 text-sm text-muted hover:bg-raised hover:text-text">
+          <Link
+            href={closeHref}
+            scroll={false}
+            className="rounded-md px-2 py-1 text-sm text-muted hover:bg-raised hover:text-text"
+          >
             Schließen
           </Link>
         </div>
@@ -68,7 +98,7 @@ function Briefing({ job }: { job: JobView }) {
   return (
     <Section title="Briefing">
       <div className="rounded-lg border border-line bg-canvas/40 px-3 py-1.5 text-sm">
-        <Row label="Plattform">{job.platform}</Row>
+        <Row label="Plattformen">{job.platform}</Row>
         <Row label="Videolänge">{job.videoLength}</Row>
         <Row label="Inhalt">
           <p className="whitespace-pre-wrap">{job.content}</p>
@@ -81,8 +111,96 @@ function Briefing({ job }: { job: JobView }) {
   );
 }
 
+// Hinweis, solange eine Stornierung angefragt ist – die Arbeit ruht
+function CancelBanner({ job, isAdmin }: { job: JobView; isAdmin: boolean }) {
+  if (!job.cancelRequestedAt) return null;
+  return (
+    <div className="space-y-2 rounded-lg border border-danger/50 bg-danger/5 p-3 text-sm">
+      <p className="font-medium text-danger">⏸ Stornierung angefragt – Arbeit bitte pausieren</p>
+      <p className="text-muted">
+        Angefragt am {formatDateTime(job.cancelRequestedAt)}
+        {job.cancelReason ? ` · Grund: „${job.cancelReason}“` : ""}
+      </p>
+      {isAdmin ? <CancelDecision jobId={job.id} /> : <p className="text-muted">Ein Admin entscheidet in Kürze.</p>}
+    </div>
+  );
+}
+
+// Dateiübersicht: Name, Größe, Upload-Datum, wer, "Neu"-Markierung, ggf. Löschen
+function FileList({
+  files,
+  unread,
+  canDownload,
+  canDelete,
+}: {
+  files: JobFileView[];
+  unread: Set<string>;
+  canDownload: boolean;
+  canDelete: boolean;
+}) {
+  if (files.length === 0) return <p className="text-sm text-muted">Noch keine Dateien.</p>;
+  return (
+    <ul className="divide-y divide-line rounded-lg border border-line text-sm">
+      {files.map((f) => (
+        <li key={f.id} className="flex items-center gap-3 px-3 py-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="truncate">{f.name}</span>
+              <NewMarker show={unread.has(f.id)} />
+            </div>
+            <p className="text-xs text-muted">
+              {formatDateTime(f.createdAt)}
+              {f.uploaderName ? ` · ${f.uploaderName}` : ""}
+              {f.late ? " · nachgereicht" : ""}
+            </p>
+          </div>
+          <span className="shrink-0 text-xs text-muted">{formatSize(f.size)}</span>
+          {canDownload && (
+            <a href={`/api/files/${f.id}?mode=download`} className="shrink-0 text-xs text-accent hover:underline">
+              Laden
+            </a>
+          )}
+          {canDelete && <DeleteFileButton fileId={f.id} name={f.name} />}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+const ROLE_LABELS: Record<string, string> = { kunde: "Client", cutter: "Cutter", admin: "Admin" };
+
+// Kommentarverlauf + Eingabe
+async function Comments({ jobId, meId, canWrite }: { jobId: string; meId: string; canWrite: boolean }) {
+  const comments = await loadComments(jobId);
+  return (
+    <Section title={`Kommentare${comments.length ? ` (${comments.length})` : ""}`}>
+      {comments.length === 0 && <p className="text-sm text-muted">Noch keine Kommentare. Änderungswünsche gerne hier hinein.</p>}
+      <ul className="space-y-3">
+        {comments.map((c) => (
+          <li key={c.id} className="flex gap-2.5">
+            <Avatar name={c.authorName} />
+            <div className="min-w-0 flex-1 space-y-0.5">
+              <p className="text-xs text-muted">
+                <span className="font-medium text-text">{c.authorId === meId ? "Du" : c.authorName}</span> ·{" "}
+                {ROLE_LABELS[c.authorRole ?? ""] ?? c.authorRole} · {formatDateTime(c.createdAt)}
+              </p>
+              <p className="whitespace-pre-wrap text-sm">{c.body}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {canWrite && <CommentForm jobId={jobId} />}
+    </Section>
+  );
+}
+
 function latestVideo(job: JobView) {
   return job.files.filter((f) => f.kind === "fertig").at(-1) ?? null;
+}
+
+// Link-Vorlage, um nach dem Duplizieren direkt das neue Projekt zu öffnen
+function jobHrefTemplate(closeHref: string) {
+  return `${closeHref}${closeHref.includes("?") ? "&" : "?"}job=JOBID`;
 }
 
 // ---------- Ansicht für Cutter und Admins ----------
@@ -96,7 +214,7 @@ export async function JobDrawer({
   closeHref: string;
   me: { id: string; role: string };
 }) {
-  const [job, staff] = await Promise.all([loadJob(jobId), listUsers("cutter", "admin")]);
+  const [job, staff, unread] = await Promise.all([loadJob(jobId), listUsers("cutter", "admin"), unreadByJob(me.id)]);
   if (!job) return null;
 
   const isAdmin = me.role === "admin";
@@ -104,9 +222,13 @@ export async function JobDrawer({
   const rawFiles = job.files.filter((f) => f.kind === "roh");
   const video = latestVideo(job);
   const versions = job.files.filter((f) => f.kind === "fertig").length;
+  const paused = !!job.cancelRequestedAt;
+  const suggestion = job.status !== "entwurf" ? await nextPartTitle(job) : "";
 
   return (
     <DrawerFrame job={job} closeHref={closeHref} editable={isAdmin}>
+      <CancelBanner job={job} isAdmin={isAdmin} />
+
       <section>
         <Row label="Client">
           <Person name={job.customerName} />
@@ -141,7 +263,9 @@ export async function JobDrawer({
         </Row>
         <Row label="Abgerechnet">
           <span className="flex flex-wrap gap-x-4">
-            <span className={job.billedCustomer ? "text-[var(--st-online)]" : "text-muted"}>Kunde: {job.billedCustomer ? "Ja" : "Nein"}</span>
+            <span className={job.billedCustomer ? "text-[var(--st-online)]" : "text-muted"}>
+              Kunde: {job.billedCustomer ? "Ja" : "Nein"}
+            </span>
             <span className={job.billed ? "text-[var(--st-online)]" : "text-muted"}>Cutter: {job.billed ? "Ja" : "Nein"}</span>
           </span>
         </Row>
@@ -155,30 +279,34 @@ export async function JobDrawer({
 
       <Briefing job={job} />
 
-      {rawFiles.length > 0 && (
-        <Section title="Rohmaterial" action={rawFiles.length > 1 ? <DownloadAll fileIds={rawFiles.map((f) => f.id)} /> : undefined}>
-          <ul className="divide-y divide-line rounded-lg border border-line text-sm">
-            {rawFiles.map((f) => (
-              <li key={f.id} className="flex items-center gap-3 px-3 py-2">
-                <span className="min-w-0 flex-1 truncate">{f.name}</span>
-                <span className="shrink-0 text-xs text-muted">{formatSize(f.size)}</span>
-                <a href={`/api/files/${f.id}?mode=download`} className="shrink-0 text-xs text-accent hover:underline">
-                  Laden
-                </a>
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
+      <Section
+        title={
+          <span className="flex items-center gap-2">
+            Rohmaterial <NewMarker show={rawFiles.some((f) => unread.files.has(f.id))} />
+          </span>
+        }
+        action={rawFiles.length > 1 ? <DownloadAll fileIds={rawFiles.map((f) => f.id)} /> : undefined}
+      >
+        <FileList files={rawFiles} unread={unread.files} canDownload canDelete={isAdmin && DELETABLE.includes(job.status)} />
+        {job.status !== "storniert" && <AddFiles jobId={job.id} />}
+      </Section>
 
-      {isAdmin && CUSTOMER_VIDEO_STATUSES.includes(job.status) && (
+      <Comments jobId={job.id} meId={me.id} canWrite={job.status !== "storniert"} />
+
+      {isAdmin && (
         <Section title="Veröffentlichungsdatum">
           <PublishDateField jobId={job.id} value={job.publishDate} />
         </Section>
       )}
 
+      {job.status !== "entwurf" && (
+        <Section title="Weiteren Teil anlegen">
+          <DuplicateForm key={suggestion} jobId={job.id} suggestion={suggestion} hrefFor={jobHrefTemplate(closeHref)} />
+        </Section>
+      )}
+
       <JobControls
-        key={`${job.id}-${job.status}-${job.format}-${job.billed}-${job.billedCustomer}-${job.cutters.length}`}
+        key={`${job.id}-${job.status}-${job.format}-${job.billed}-${job.billedCustomer}-${job.cutters.length}-${paused}`}
         job={{
           id: job.id,
           status: job.status,
@@ -188,33 +316,57 @@ export async function JobDrawer({
           reviewUrl: job.reviewUrl,
           cutterIds: job.cutters.map((c) => c.id),
           hasVideo: versions > 0,
+          paused,
         }}
         isAdmin={isAdmin}
         isAssigned={isAssigned}
         staff={staff.map((s) => ({ id: s.id, name: s.name }))}
       />
+
+      {isAdmin && DELETABLE.includes(job.status) && <DeleteJobButton jobId={job.id} title={job.title} afterHref={closeHref} />}
     </DrawerFrame>
   );
 }
 
-// ---------- Ansicht für Kunden ----------
+// ---------- Ansicht für Kunden (und Admins in der Kundenansicht) ----------
 
-export async function CustomerJobDrawer({ jobId, closeHref, customerId }: { jobId: string; closeHref: string; customerId: string }) {
-  const job = await loadJob(jobId);
+export async function CustomerJobDrawer({
+  jobId,
+  closeHref,
+  customerId,
+  viewerId,
+}: {
+  jobId: string;
+  closeHref: string;
+  customerId: string;
+  viewerId: string;
+}) {
+  const [job, unread] = await Promise.all([loadJob(jobId), unreadByJob(viewerId)]);
   if (!job || job.customerId !== customerId) return null;
 
   const video = CUSTOMER_VIDEO_STATUSES.includes(job.status) ? latestVideo(job) : null;
   const rawFiles = job.files.filter((f) => f.kind === "roh");
+  const canDelete = DELETABLE.includes(job.status);
+  const canRequestCancel = CANCELLABLE.includes(job.status) && !job.cancelRequestedAt;
 
   return (
     <DrawerFrame job={job} closeHref={closeHref}>
+      {job.cancelRequestedAt && (
+        <div className="rounded-lg border border-danger/50 bg-danger/5 p-3 text-sm">
+          <p className="font-medium text-danger">Stornierung angefragt</p>
+          <p className="text-muted">Die Arbeit ist pausiert. Unser Team meldet sich mit einer Entscheidung.</p>
+        </div>
+      )}
+
       {video ? (
         <Section title="Dein Video">
           <VideoBlock fileId={video.id} name={video.name} />
         </Section>
       ) : (
         <p className="rounded-lg border border-dashed border-line p-4 text-sm text-muted">
-          Sobald dein Video fertig und freigegeben ist, kannst du es hier ansehen und herunterladen.
+          {job.status === "storniert"
+            ? "Dieses Projekt wurde storniert."
+            : "Sobald dein Video fertig und freigegeben ist, kannst du es hier ansehen und herunterladen."}
         </p>
       )}
 
@@ -227,18 +379,21 @@ export async function CustomerJobDrawer({ jobId, closeHref, customerId }: { jobI
 
       <Briefing job={job} />
 
-      {rawFiles.length > 0 && (
-        <Section title="Hochgeladene Dateien">
-          <ul className="space-y-1 text-sm">
-            {rawFiles.map((f) => (
-              <li key={f.id} className="flex justify-between gap-3">
-                <span className="truncate">{f.name}</span>
-                <span className="shrink-0 text-xs text-muted">{formatSize(f.size)}</span>
-              </li>
-            ))}
-          </ul>
+      <Section title="Deine Dateien">
+        <FileList files={rawFiles} unread={unread.files} canDownload canDelete={canDelete} />
+        {job.status !== "storniert" && <AddFiles jobId={job.id} label="Weiteres Material hochladen" />}
+        <p className="text-xs text-muted">Alles landet im selben Projektordner – du kannst jederzeit etwas nachreichen.</p>
+      </Section>
+
+      <Comments jobId={job.id} meId={viewerId} canWrite={job.status !== "storniert"} />
+
+      {canDelete && (
+        <Section title="Projekt löschen">
+          <p className="text-xs text-muted">Solange noch niemand angefangen hat, kannst du das Projekt komplett löschen.</p>
+          <DeleteJobButton jobId={job.id} title={job.title} afterHref={closeHref} />
         </Section>
       )}
+      {canRequestCancel && <CancelRequestForm jobId={job.id} />}
     </DrawerFrame>
   );
 }

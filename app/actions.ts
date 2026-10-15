@@ -1,12 +1,13 @@
 "use server";
 
 import { randomUUID } from "crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, ne } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { db } from "@/db";
-import { jobCutters, jobFiles, jobs, user } from "@/db/schema";
-import { createFolder, createJobFolder, createUpload } from "@/lib/frameio";
+import { jobComments, jobCutters, jobFiles, jobs, notifications, user } from "@/db/schema";
+import { createFolder, createJobFolder, createUpload, deleteFile, deleteFolder, moveFile } from "@/lib/frameio";
 import { requireUser } from "@/lib/session";
+import { nextPartTitle } from "@/lib/queries";
 import { FORMATS, STATUSES } from "@/lib/status";
 
 // ---------- Hilfsfunktionen ----------
@@ -67,26 +68,115 @@ async function addCutterRow(jobId: string, userId: string) {
   await db.insert(jobCutters).values({ jobId, userId }).onConflictDoNothing();
 }
 
+type Job = typeof jobs.$inferSelect;
+type Me = Awaited<ReturnType<typeof requireUser>>;
+
+// Darf dieser Nutzer das Projekt sehen? Kunden nur ihre eigenen, Staff alle.
+function assertCanSee(me: Me, job: Job) {
+  if (me.role === "kunde" && job.customerId !== me.id) throw new Error("Keine Berechtigung.");
+}
+
+// Solange eine Stornierung angefragt ist, ruht die Arbeit am Projekt
+function assertNotPaused(job: Job) {
+  if (job.cancelRequestedAt) {
+    throw new Error("Stornierung angefragt – die Arbeit ist pausiert, bis ein Admin entschieden hat.");
+  }
+}
+
+async function cutterIdsOf(jobId: string) {
+  const rows = await db.select({ id: jobCutters.userId }).from(jobCutters).where(eq(jobCutters.jobId, jobId));
+  return rows.map((r) => r.id);
+}
+
+async function adminIds() {
+  const rows = await db.select({ id: user.id }).from(user).where(eq(user.role, "admin"));
+  return rows.map((r) => r.id);
+}
+
+// Inbox-Einträge erzeugen. Wer bekommt was?
+// - "beteiligte": Kunde + zugeordnete Cutter (gibt es noch keinen Cutter, die Admins)
+// - "storno_request": Cutter + alle Admins (Admins entscheiden)
+// - "storno_decision": Kunde + Cutter
+// Wer die Aktion selbst ausgelöst hat, bekommt nichts.
+async function notify(
+  job: Job,
+  actor: { id: string },
+  type: "file" | "comment" | "storno_request" | "storno_decision",
+  text: string,
+  fileId?: string
+) {
+  const cutters = await cutterIdsOf(job.id);
+  let recipients: string[];
+  if (type === "storno_request") recipients = [...cutters, ...(await adminIds())];
+  else if (type === "storno_decision") recipients = [job.customerId, ...cutters];
+  else recipients = [job.customerId, ...(cutters.length > 0 ? cutters : await adminIds())];
+
+  const unique = [...new Set(recipients)].filter((id) => id !== actor.id);
+  if (unique.length === 0) return;
+  await db.insert(notifications).values(
+    unique.map((userId) => ({ id: randomUUID(), userId, jobId: job.id, type, text, actorId: actor.id, fileId: fileId ?? null }))
+  );
+}
+
+// Teilen sich mehrere Projekte (Duplikate) denselben Frame.io-Ordner?
+async function folderShared(job: Job) {
+  if (!job.frameioFolderId) return false;
+  const others = await db
+    .select({ id: jobs.id })
+    .from(jobs)
+    .where(and(eq(jobs.frameioFolderId, job.frameioFolderId), ne(jobs.id, job.id)));
+  return others.length > 0;
+}
+
+// Finales Video beim Status "Online" aus "ToBeReviewed" in den Ordner "Online" verschieben.
+// Schlägt das fehl (z. B. Frame.io kurz nicht erreichbar), bleibt der Status trotzdem gesetzt.
+async function moveFinalToOnline(jobId: string) {
+  try {
+    const job = await getJob(jobId);
+    const [latest] = await db
+      .select()
+      .from(jobFiles)
+      .where(and(eq(jobFiles.jobId, jobId), eq(jobFiles.kind, "fertig"), eq(jobFiles.uploaded, true)))
+      .orderBy(desc(jobFiles.createdAt))
+      .limit(1);
+    if (!latest || !job.frameioFolderId) return;
+    let folderId = job.onlineFolderId;
+    if (!folderId) {
+      // Duplikate teilen sich den Projektordner – und damit auch den Online-Ordner
+      const [sibling] = await db
+        .select({ id: jobs.onlineFolderId })
+        .from(jobs)
+        .where(and(eq(jobs.frameioFolderId, job.frameioFolderId), ne(jobs.id, job.id)));
+      folderId = sibling?.id ?? (await createFolder(job.frameioFolderId, "Online")).id;
+      await db.update(jobs).set({ onlineFolderId: folderId }).where(eq(jobs.frameioFolderId, job.frameioFolderId));
+    }
+    await moveFile(latest.frameioFileId, folderId);
+  } catch (e) {
+    console.error("Verschieben nach Online fehlgeschlagen:", e);
+  }
+}
+
 // ---------- Client: Projekt anlegen und hochladen ----------
 
 export type NewJobInput = {
   title: string;
   format: string;
-  platform: string;
+  platforms: string[]; // mehrere möglich, z. B. Instagram + TikTok
   videoLength: string;
   content: string;
   specialNotes: string;
-  customerId?: string; // nur Admins: Projekt für einen Client anlegen
+  customerId?: string; // nur Admins/Cutter: Projekt für einen Client anlegen
 };
 
 // Schritt 1: Projekt als Entwurf anlegen, inkl. Ordner in Frame.io
 export async function createJob(input: NewJobInput) {
   return run(async () => {
-    const me = await requireUser("kunde", "admin");
+    const me = await requireUser("kunde", "cutter", "admin");
+    const platforms = [...new Set(input.platforms.map((p) => p.trim()).filter(Boolean))];
+    if (platforms.length === 0) throw new Error("Bitte mindestens eine Plattform auswählen.");
 
     const required = [
       input.title,
-      input.platform,
       input.videoLength,
       input.content,
       input.specialNotes,
@@ -98,9 +188,10 @@ export async function createJob(input: NewJobInput) {
       throw new Error("Bitte ein Format auswählen.");
     }
 
-    // Für wen ist das Projekt? Kunden immer für sich selbst, Admins wahlweise für einen Client
+    // Für wen ist das Projekt? Kunden immer für sich selbst, Admins und Cutter für einen Client
     let customer = { id: me.id, name: me.name };
-    if (me.role === "admin" && input.customerId) {
+    if (me.role !== "kunde") {
+      if (!input.customerId) throw new Error("Bitte einen Client auswählen.");
       const [c] = await db
         .select({ id: user.id, name: user.name })
         .from(user)
@@ -116,7 +207,7 @@ export async function createJob(input: NewJobInput) {
       customerId: customer.id,
       title: input.title.trim(),
       format: input.format,
-      platform: input.platform.trim(),
+      platform: platforms.join(", "),
       videoLength: input.videoLength.trim(),
       content: input.content.trim(),
       specialNotes: input.specialNotes.trim(),
@@ -130,7 +221,7 @@ export async function createJob(input: NewJobInput) {
 }
 
 // Upload-Links für eine Datei holen
-// "roh": Rohmaterial (nur im Entwurf, vom Ersteller)
+// "roh": Rohmaterial – vom Kunden oder Staff, in jedem Status (danach gilt es als "nachgereicht")
 // "fertig": fertiges Video (vom zugeordneten Cutter, während "Wird jetzt gemacht")
 export async function requestUpload(
   jobId: string,
@@ -142,11 +233,11 @@ export async function requestUpload(
     const job = await getJob(jobId);
 
     if (kind === "roh") {
-      const allowed = job.customerId === me.id || me.role === "admin";
-      if (!allowed) throw new Error("Keine Berechtigung.");
-      if (job.status !== "entwurf") throw new Error("Projekt wurde bereits abgeschickt.");
+      assertCanSee(me, job);
+      if (job.status === "storniert") throw new Error("Das Projekt ist storniert.");
     } else {
       await requireCutterOf(jobId);
+      assertNotPaused(job);
       if (job.status !== "in_arbeit") {
         throw new Error("Hochladen geht nur, solange das Projekt in Arbeit ist.");
       }
@@ -157,7 +248,9 @@ export async function requestUpload(
     if (kind === "fertig") {
       folderId = job.reviewFolderId ?? "";
       if (!folderId) {
-        const created = await createFolder(job.frameioFolderId!, "ToBeReviewed");
+        // Duplikate ("Teil 2") teilen sich den Projektordner – jedes bekommt seinen eigenen Review-Ordner
+        const name = job.parentJobId || (await folderShared(job)) ? `ToBeReviewed – ${job.title}` : "ToBeReviewed";
+        const created = await createFolder(job.frameioFolderId!, name);
         folderId = created.id;
         await db.update(jobs).set({ reviewFolderId: folderId }).where(eq(jobs.id, jobId));
       }
@@ -172,6 +265,8 @@ export async function requestUpload(
       size: file.size,
       frameioFileId: upload.fileId,
       frameioUrl: upload.viewUrl,
+      uploadedBy: me.id,
+      late: kind === "roh" && job.status !== "entwurf",
     });
     return { fileRowId: id, mediaType: upload.mediaType, parts: upload.parts };
   });
@@ -184,10 +279,13 @@ export async function confirmUpload(fileRowId: string) {
     const [file] = await db.select().from(jobFiles).where(eq(jobFiles.id, fileRowId));
     if (!file) throw new Error("Datei nicht gefunden.");
     const job = await getJob(file.jobId);
-    const allowed =
-      me.role === "admin" || job.customerId === me.id || (await isCutterOf(job.id, me.id));
-    if (!allowed) throw new Error("Keine Berechtigung.");
+    assertCanSee(me, job);
+    if (file.uploadedBy && file.uploadedBy !== me.id && me.role !== "admin") throw new Error("Keine Berechtigung.");
     await db.update(jobFiles).set({ uploaded: true }).where(eq(jobFiles.id, fileRowId));
+    if (file.late) {
+      await notify(job, me, "file", `${me.name} hat „${file.name}“ nachgereicht`, file.id);
+      refresh();
+    }
     return null;
   });
 }
@@ -197,13 +295,14 @@ export async function submitJob(jobId: string) {
   return run(async () => {
     const me = await requireUser();
     const job = await getJob(jobId);
-    if (job.customerId !== me.id && me.role !== "admin") throw new Error("Keine Berechtigung.");
+    if (job.customerId !== me.id && me.role === "kunde") throw new Error("Keine Berechtigung.");
     const files = await db
       .select({ id: jobFiles.id })
       .from(jobFiles)
       .where(and(eq(jobFiles.jobId, jobId), eq(jobFiles.kind, "roh"), eq(jobFiles.uploaded, true)));
-    if (files.length === 0) throw new Error("Bitte mindestens eine Datei hochladen.");
-    await changeStatus(jobId, "entwurf", "todo");
+    // Kunden müssen Material mitschicken; Staff darf ohne Dateien anlegen (z. B. Material liegt schon in Frame.io)
+    if (files.length === 0 && me.role === "kunde") throw new Error("Bitte mindestens eine Datei hochladen.");
+    await changeStatus(jobId, "entwurf", "todo", { submittedAt: new Date() });
     return null;
   });
 }
@@ -214,6 +313,7 @@ export async function submitJob(jobId: string) {
 export async function claimJob(jobId: string) {
   return run(async () => {
     const me = await requireUser("cutter", "admin");
+    assertNotPaused(await getJob(jobId));
     await changeStatus(jobId, "todo", "in_arbeit");
     await addCutterRow(jobId, me.id);
     refresh();
@@ -225,6 +325,7 @@ export async function claimJob(jobId: string) {
 export async function reserveJob(jobId: string) {
   return run(async () => {
     const me = await requireUser("cutter", "admin");
+    assertNotPaused(await getJob(jobId));
     await changeStatus(jobId, "todo", "warteschlange");
     await addCutterRow(jobId, me.id);
     refresh();
@@ -236,6 +337,7 @@ export async function reserveJob(jobId: string) {
 export async function startJob(jobId: string) {
   return run(async () => {
     await requireCutterOf(jobId);
+    assertNotPaused(await getJob(jobId));
     await changeStatus(jobId, "warteschlange", "in_arbeit");
     refresh();
     return null;
@@ -248,6 +350,7 @@ export async function startJob(jobId: string) {
 export async function submitForReview(jobId: string, reviewUrl?: string) {
   return run(async () => {
     await requireCutterOf(jobId);
+    assertNotPaused(await getJob(jobId));
     let url = reviewUrl?.trim();
     if (!url) {
       const [latest] = await db
@@ -331,6 +434,7 @@ export async function markOnline(jobId: string) {
   return run(async () => {
     await requireUser("admin");
     await changeStatus(jobId, "ready_to_post", "online");
+    await moveFinalToOnline(jobId);
     refresh();
     return null;
   });
@@ -341,7 +445,9 @@ export async function setStatus(jobId: string, status: string) {
   return run(async () => {
     await requireUser("admin");
     if (!(STATUSES as readonly string[]).includes(status)) throw new Error("Unbekannter Status.");
+    const before = await getJob(jobId);
     await db.update(jobs).set({ status, updatedAt: new Date() }).where(eq(jobs.id, jobId));
+    if (status === "online" && before.status !== "online") await moveFinalToOnline(jobId);
     refresh();
     return null;
   });
@@ -390,11 +496,195 @@ export async function setPublishDate(jobId: string, date: string) {
     const me = await requireUser("kunde", "admin");
     const job = await getJob(jobId);
     if (me.role !== "admin" && job.customerId !== me.id) throw new Error("Keine Berechtigung.");
-    if (!["ready_to_post", "online"].includes(job.status)) {
+    // Admins planen frei; Kunden tragen ihr Datum ein, sobald das Video freigegeben ist
+    if (me.role !== "admin" && !["ready_to_post", "online"].includes(job.status)) {
       throw new Error("Ein Datum kann erst ab „Ready to post“ eingetragen werden.");
     }
     if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Ungültiges Datum.");
     await db.update(jobs).set({ publishDate: date || null }).where(eq(jobs.id, jobId));
+    refresh();
+    return null;
+  });
+}
+
+// ---------- Kommentare & Inbox ----------
+
+// Kommentar am Projekt schreiben – landet bei den Beteiligten in der Inbox
+export async function addComment(jobId: string, body: string) {
+  return run(async () => {
+    const me = await requireUser();
+    const job = await getJob(jobId);
+    assertCanSee(me, job);
+    const text = body.trim();
+    if (!text) throw new Error("Bitte einen Kommentar eingeben.");
+    if (text.length > 5000) throw new Error("Der Kommentar ist zu lang (max. 5000 Zeichen).");
+    await db.insert(jobComments).values({ id: randomUUID(), jobId, authorId: me.id, body: text });
+    const preview = text.length > 80 ? `${text.slice(0, 80)} …` : text;
+    await notify(job, me, "comment", `${me.name}: „${preview}“`);
+    refresh();
+    return null;
+  });
+}
+
+// Projekt geöffnet → alle Benachrichtigungen dazu als gelesen markieren
+export async function markJobRead(jobId: string) {
+  return run(async () => {
+    const me = await requireUser();
+    const updated = await db
+      .update(notifications)
+      .set({ readAt: new Date() })
+      .where(and(eq(notifications.userId, me.id), eq(notifications.jobId, jobId), isNull(notifications.readAt)))
+      .returning({ id: notifications.id });
+    if (updated.length > 0) refresh();
+    return null;
+  });
+}
+
+export async function markAllRead() {
+  return run(async () => {
+    const me = await requireUser();
+    await db
+      .update(notifications)
+      .set({ readAt: new Date() })
+      .where(and(eq(notifications.userId, me.id), isNull(notifications.readAt)));
+    refresh();
+    return null;
+  });
+}
+
+// ---------- Duplizieren ("Teil 2") ----------
+
+// Neues Projekt mit gleichem Briefing und Rohmaterial – jeder Clip einzeln abrechenbar
+export async function duplicateJob(jobId: string, title?: string) {
+  return run(async () => {
+    await requireUser("cutter", "admin");
+    const job = await getJob(jobId);
+    if (job.status === "entwurf") throw new Error("Das Projekt wird noch hochgeladen.");
+    const newTitle = (title ?? "").trim() || (await nextPartTitle(job));
+    const id = randomUUID();
+    await db.insert(jobs).values({
+      id,
+      customerId: job.customerId,
+      title: newTitle,
+      format: job.format,
+      platform: job.platform,
+      videoLength: job.videoLength,
+      content: job.content,
+      specialNotes: job.specialNotes,
+      status: "todo",
+      // gleicher Frame.io-Ordner und gleiches Rohmaterial, eigener Review-Ordner beim ersten Upload
+      frameioFolderId: job.frameioFolderId,
+      frameioFolderUrl: job.frameioFolderUrl,
+      rawFolderId: job.rawFolderId,
+      onlineFolderId: job.onlineFolderId,
+      parentJobId: job.parentJobId ?? job.id,
+      submittedAt: new Date(),
+    });
+    const raw = await db
+      .select()
+      .from(jobFiles)
+      .where(and(eq(jobFiles.jobId, jobId), eq(jobFiles.kind, "roh"), eq(jobFiles.uploaded, true)));
+    if (raw.length > 0) {
+      await db.insert(jobFiles).values(
+        raw.map((f) => ({ ...f, id: randomUUID(), jobId: id, late: false, createdAt: f.createdAt }))
+      );
+    }
+    refresh();
+    return { jobId: id, title: newTitle };
+  });
+}
+
+// ---------- Löschen (nur in To-do) & Stornierung ----------
+
+const DELETABLE = ["entwurf", "todo"];
+const CANCELLABLE = ["warteschlange", "in_arbeit", "feedback"];
+
+// Ganzes Projekt löschen – inkl. Ordner in Frame.io (außer ein Duplikat nutzt ihn noch)
+export async function deleteJob(jobId: string) {
+  return run(async () => {
+    const me = await requireUser("kunde", "admin");
+    const job = await getJob(jobId);
+    assertCanSee(me, job);
+    if (!DELETABLE.includes(job.status)) {
+      throw new Error("Löschen geht nur in „To Dos“. Danach kannst du eine Stornierung anfragen.");
+    }
+    if (job.frameioFolderId && !(await folderShared(job))) {
+      await deleteFolder(job.frameioFolderId).catch((e) => console.error("Frame.io-Ordner nicht gelöscht:", e));
+    }
+    await db.delete(jobs).where(eq(jobs.id, jobId));
+    refresh();
+    return null;
+  });
+}
+
+// Einzelne Datei löschen (nur in To-do) – in Frame.io nur, wenn kein Duplikat sie noch nutzt
+export async function deleteJobFile(fileRowId: string) {
+  return run(async () => {
+    const me = await requireUser("kunde", "admin");
+    const [file] = await db.select().from(jobFiles).where(eq(jobFiles.id, fileRowId));
+    if (!file) throw new Error("Datei nicht gefunden.");
+    const job = await getJob(file.jobId);
+    assertCanSee(me, job);
+    if (!DELETABLE.includes(job.status)) throw new Error("Dateien lassen sich nur in „To Dos“ löschen.");
+    if (file.kind !== "roh") throw new Error("Nur Rohmaterial kann gelöscht werden.");
+    const sameFile = await db
+      .select({ id: jobFiles.id })
+      .from(jobFiles)
+      .where(and(eq(jobFiles.frameioFileId, file.frameioFileId), ne(jobFiles.id, file.id)));
+    if (sameFile.length === 0) {
+      await deleteFile(file.frameioFileId).catch((e) => console.error("Frame.io-Datei nicht gelöscht:", e));
+    }
+    await db.delete(jobFiles).where(eq(jobFiles.id, fileRowId));
+    refresh();
+    return null;
+  });
+}
+
+// Kunde fragt Stornierung an → Cutter wird informiert, Arbeit pausiert, Admins entscheiden
+export async function requestCancel(jobId: string, reason: string) {
+  return run(async () => {
+    const me = await requireUser("kunde", "admin");
+    const job = await getJob(jobId);
+    assertCanSee(me, job);
+    if (!CANCELLABLE.includes(job.status)) throw new Error("In diesem Status kann keine Stornierung angefragt werden.");
+    if (job.cancelRequestedAt) throw new Error("Eine Stornierung ist bereits angefragt.");
+    const why = reason.trim();
+    await db
+      .update(jobs)
+      .set({ cancelRequestedAt: new Date(), cancelRequestedBy: me.id, cancelReason: why || null, updatedAt: new Date() })
+      .where(eq(jobs.id, jobId));
+    await notify(
+      job,
+      me,
+      "storno_request",
+      `${me.name} möchte „${job.title}“ stornieren – Arbeit bitte pausieren${why ? `. Grund: ${why}` : ""}`
+    );
+    refresh();
+    return null;
+  });
+}
+
+// Admin entscheidet: stornieren oder weitermachen
+export async function decideCancel(jobId: string, approve: boolean) {
+  return run(async () => {
+    const me = await requireUser("admin");
+    const job = await getJob(jobId);
+    if (!job.cancelRequestedAt) throw new Error("Es liegt keine Storno-Anfrage vor.");
+    await db
+      .update(jobs)
+      .set({
+        status: approve ? "storniert" : job.status,
+        cancelRequestedAt: null,
+        cancelRequestedBy: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(jobs.id, jobId));
+    await notify(
+      job,
+      me,
+      "storno_decision",
+      approve ? `„${job.title}“ wurde storniert.` : `Stornierung von „${job.title}“ abgelehnt – die Arbeit geht weiter.`
+    );
     refresh();
     return null;
   });

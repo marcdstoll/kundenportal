@@ -103,6 +103,20 @@ export function formatDate(iso: string | null) {
   return new Date(y, m - 1, d).toLocaleDateString("de-DE", { day: "numeric", month: "short", year: "numeric" });
 }
 
+// Zeitpunkt kurz: "15.10., 14:32" (mit Jahr, wenn nicht aktuelles Jahr)
+export function formatDateTime(value: Date | string) {
+  const d = new Date(value);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    ...(sameYear ? {} : { year: "numeric" }),
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Berlin",
+  });
+}
+
 export const buttonPrimary =
   "rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-40";
 export const buttonSecondary =

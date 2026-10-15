@@ -12,11 +12,13 @@ type Props = {
   meId?: string;
   // Kunden sehen keine Cutter-Namen und keinen Client (sie sind es selbst)
   customerView?: boolean;
+  // Anzahl ungelesener Inbox-Einträge je Projekt (für die "Neu"-Markierung)
+  unread?: Map<string, number>;
 };
 
 // Kanban-Spalten wie in Notion, jede Spalte in ihrer Status-Farbe.
 // Die Reihenfolge der Spalten kann jeder Nutzer per Drag & Drop ändern.
-export async function Kanban({ jobs, hrefFor, meId, customerView = false }: Props) {
+export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread }: Props) {
   const order = await boardColumnOrder();
   const columns = BOARD_COLUMNS.map((status) => {
     const items = jobs.filter((j) => j.status === status);
@@ -53,8 +55,22 @@ export async function Kanban({ jobs, hrefFor, meId, customerView = false }: Prop
               >
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-medium leading-snug">{job.title}</p>
-                  <LinkPending className="mt-1.5" />
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    <LinkPending />
+                    {!!unread?.get(job.id) && (
+                      <span
+                        className="rounded px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-white"
+                        style={{ background: "var(--rec)" }}
+                        title={`${unread.get(job.id)} neue Einträge in der Inbox`}
+                      >
+                        Neu
+                      </span>
+                    )}
+                  </span>
                 </div>
+                {job.cancelRequestedAt && (
+                  <p className="rounded bg-danger/10 px-1.5 py-0.5 text-xs font-medium text-danger">⏸ Storno angefragt – pausiert</p>
+                )}
                 <div className="space-y-1.5 text-xs text-muted">
                   {!customerView && <Person name={job.customerName} />}
                   {!customerView && job.cutters.length > 0 && (

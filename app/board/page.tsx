@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
-import { loadJobs } from "@/lib/queries";
+import { loadJobs, unreadByJob } from "@/lib/queries";
 import { isConnected } from "@/lib/frameio";
 import { BOARD_COLUMNS, FORMATS } from "@/lib/status";
 import { parseFormatFilter } from "@/lib/board-prefs";
@@ -46,6 +46,7 @@ async function Board({ searchParams }: { searchParams: PageProps<"/board">["sear
   };
 
   // Online und Storniert stehen nicht auf dem Board, sondern in den Listen
+  const unread = (await unreadByJob(me.id)).jobs;
   const jobs = (await loadJobs()).filter(
     (j) => (BOARD_COLUMNS as readonly string[]).includes(j.status) && formats.includes(j.format),
   );
@@ -89,12 +90,12 @@ async function Board({ searchParams }: { searchParams: PageProps<"/board">["sear
             }
             count={main.length}
           >
-            <Kanban jobs={main} meId={me.id} hrefFor={(id) => href(`job=${id}`)} />
+            <Kanban jobs={main} meId={me.id} unread={unread} hrefFor={(id) => href(`job=${id}`)} />
           </Group>
         )}
         {showClipping && (
           <Group title="Projekte (Clipping)" count={clipping.length}>
-            <Kanban jobs={clipping} meId={me.id} hrefFor={(id) => href(`job=${id}`)} />
+            <Kanban jobs={clipping} meId={me.id} unread={unread} hrefFor={(id) => href(`job=${id}`)} />
           </Group>
         )}
       </div>

@@ -29,6 +29,8 @@ type Props = {
     reviewUrl: string | null;
     cutterIds: string[];
     hasVideo: boolean;
+    // Stornierung angefragt: Arbeit ruht, bis ein Admin entscheidet
+    paused: boolean;
   };
   isAdmin: boolean;
   isAssigned: boolean;
@@ -87,7 +89,7 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
   return (
     <div className="space-y-6 border-t border-line pt-5">
       {/* ---------- Nächster Schritt im Ablauf ---------- */}
-      {job.status === "todo" && (
+      {job.status === "todo" && !job.paused && (
         <Section title="Projekt übernehmen">
           <div className="grid grid-cols-2 gap-2">
             <button disabled={busy} onClick={() => run(() => reserveJob(job.id))} className={buttonSecondary} title="Kommt in deine Warteschlange, du startest später">
@@ -101,7 +103,7 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
         </Section>
       )}
 
-      {job.status === "warteschlange" && canWork && (
+      {job.status === "warteschlange" && canWork && !job.paused && (
         <Section title={job.hasVideo ? "Änderungen umsetzen" : "Aus der Warteschlange starten"}>
           {job.hasVideo && (
             <p className="text-xs text-muted">
@@ -120,7 +122,7 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
         </p>
       )}
 
-      {job.status === "in_arbeit" && canWork && (
+      {job.status === "in_arbeit" && canWork && !job.paused && (
         <Section title={job.hasVideo ? "Neue Version hochladen" : "Video hochladen"}>
           {job.hasVideo && (
             <p className="text-xs text-muted">Lade die überarbeitete Version hoch – die alte bleibt in Frame.io erhalten.</p>

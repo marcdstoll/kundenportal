@@ -1,4 +1,4 @@
-import { bigint, boolean, date, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { bigint, boolean, date, index, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 export * from "./auth-schema";
@@ -37,8 +37,18 @@ export const jobs = pgTable("jobs", {
   // Unterordner in Frame.io: "Raw" (Kundendateien) und "ToBeReviewed" (Cutter-Videos)
   rawFolderId: text("raw_folder_id"),
   reviewFolderId: text("review_folder_id"),
+  // Ordner "Online": finale Videos wandern beim Status Online dorthin
+  onlineFolderId: text("online_folder_id"),
   // Geplantes oder tatsächliches Veröffentlichungsdatum (für den Kalender)
   publishDate: date("publish_date"),
+  // Duplikat ("Teil 2"): verweist auf das ursprüngliche Projekt, teilt dessen Frame.io-Ordner
+  parentJobId: text("parent_job_id"),
+  // Wann das Projekt abgeschickt wurde – Dateien danach gelten als "nachgereicht"
+  submittedAt: timestamp("submitted_at"),
+  // Storno-Anfrage des Kunden: solange gesetzt, ist die Arbeit pausiert, bis ein Admin entscheidet
+  cancelRequestedAt: timestamp("cancel_requested_at"),
+  cancelRequestedBy: text("cancel_requested_by"),
+  cancelReason: text("cancel_reason"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -70,5 +80,47 @@ export const jobFiles = pgTable("job_files", {
   frameioFileId: text("frameio_file_id").notNull(),
   frameioUrl: text("frameio_url"),
   uploaded: boolean("uploaded").notNull().default(false),
+  // Wer hochgeladen hat und ob es nach dem Abschicken nachgereicht wurde
+  uploadedBy: text("uploaded_by"),
+  late: boolean("late").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+// Kommentare am Projekt (Kunde, Cutter und Admins schreiben im selben Verlauf)
+export const jobComments = pgTable(
+  "job_comments",
+  {
+    id: text("id").primaryKey(),
+    jobId: text("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    authorId: text("author_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("job_comments_job_idx").on(t.jobId)]
+);
+
+// Inbox: eine Benachrichtigung pro Empfänger
+// type: file (Material nachgereicht) | comment | storno_request | storno_decision
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    jobId: text("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    text: text("text").notNull(),
+    actorId: text("actor_id"),
+    fileId: text("file_id"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    readAt: timestamp("read_at"),
+  },
+  (t) => [index("notifications_user_idx").on(t.userId, t.readAt)]
+);

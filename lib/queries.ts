@@ -1,11 +1,13 @@
-import { and, asc, desc, eq, inArray, ne, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, or, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { jobCutters, jobFiles, jobs, user } from "@/db/schema";
+import { jobComments, jobCutters, jobFiles, jobs, notifications, user } from "@/db/schema";
+
+export type JobFileView = typeof jobFiles.$inferSelect & { uploaderName: string | null };
 
 export type JobView = typeof jobs.$inferSelect & {
   customerName: string;
   cutters: { id: string; name: string }[];
-  files: (typeof jobFiles.$inferSelect)[];
+  files: JobFileView[];
 };
 
 // Projekte inkl. Client-Name, Cuttern und hochgeladenen Dateien laden
@@ -34,13 +36,22 @@ export async function loadJobs(filter?: SQL): Promise<JobView[]> {
       .orderBy(asc(jobFiles.createdAt)),
   ]);
 
+  // Namen derer, die Dateien hochgeladen haben
+  const uploaderIds = [...new Set(fileRows.map((f) => f.uploadedBy).filter((id): id is string => !!id))];
+  const uploaders = uploaderIds.length
+    ? await db.select({ id: user.id, name: user.name }).from(user).where(inArray(user.id, uploaderIds))
+    : [];
+  const nameOf = new Map(uploaders.map((u) => [u.id, u.name]));
+
   return rows.map(({ job, customerName }) => ({
     ...job,
     customerName,
     cutters: cutterRows
       .filter((c) => c.jobId === job.id)
       .map((c) => ({ id: c.id, name: c.name })),
-    files: fileRows.filter((f) => f.jobId === job.id),
+    files: fileRows
+      .filter((f) => f.jobId === job.id)
+      .map((f) => ({ ...f, uploaderName: f.uploadedBy ? (nameOf.get(f.uploadedBy) ?? null) : null })),
   }));
 }
 
@@ -71,4 +82,70 @@ export async function listUsers(...roles: ("kunde" | "cutter" | "admin")[]) {
     .from(user)
     .where(inArray(user.role, roles))
     .orderBy(asc(user.name));
+}
+
+// ---------- Duplikate ("Teil 2", "Teil 3" …) ----------
+
+// "Baustelle – Teil 2" → { base: "Baustelle", part: 2 }; ohne Zusatz → part 1
+export function splitPart(title: string) {
+  const m = title.match(/^(.*?)\s*(?:[–-]\s*)?\(?Teil\s+(\d+)\)?$/i);
+  return m ? { base: m[1].trim(), part: Number(m[2]) } : { base: title.trim(), part: 1 };
+}
+
+// Vorschlag für den Titel des nächsten Teils: höchste vorhandene Teilnummer + 1
+export async function nextPartTitle(job: { id: string; title: string; parentJobId: string | null }) {
+  const rootId = job.parentJobId ?? job.id;
+  const family = await db
+    .select({ title: jobs.title })
+    .from(jobs)
+    .where(or(eq(jobs.id, rootId), eq(jobs.parentJobId, rootId)));
+  const { base } = splitPart(job.title);
+  const highest = Math.max(1, ...family.map((j) => splitPart(j.title).part));
+  return `${base} – Teil ${highest + 1}`;
+}
+
+// ---------- Inbox ----------
+
+// Ungelesene Benachrichtigungen je Projekt (für "Neu"-Markierungen auf Board und Karten)
+export async function unreadByJob(userId: string) {
+  const rows = await db
+    .select({ jobId: notifications.jobId, fileId: notifications.fileId })
+    .from(notifications)
+    .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
+  const jobsMap = new Map<string, number>();
+  const files = new Set<string>();
+  for (const r of rows) {
+    jobsMap.set(r.jobId, (jobsMap.get(r.jobId) ?? 0) + 1);
+    if (r.fileId) files.add(r.fileId);
+  }
+  return { jobs: jobsMap, files, total: rows.length };
+}
+
+export async function loadInbox(userId: string) {
+  return db
+    .select({
+      id: notifications.id,
+      jobId: notifications.jobId,
+      type: notifications.type,
+      text: notifications.text,
+      createdAt: notifications.createdAt,
+      readAt: notifications.readAt,
+      jobTitle: jobs.title,
+      jobStatus: jobs.status,
+    })
+    .from(notifications)
+    .innerJoin(jobs, eq(notifications.jobId, jobs.id))
+    .where(eq(notifications.userId, userId))
+    .orderBy(desc(notifications.createdAt))
+    .limit(200);
+}
+
+// Kommentare eines Projekts mit Namen und Rolle der Verfasser
+export async function loadComments(jobId: string) {
+  return db
+    .select({ id: jobComments.id, body: jobComments.body, createdAt: jobComments.createdAt, authorId: user.id, authorName: user.name, authorRole: user.role })
+    .from(jobComments)
+    .innerJoin(user, eq(jobComments.authorId, user.id))
+    .where(eq(jobComments.jobId, jobId))
+    .orderBy(asc(jobComments.createdAt));
 }

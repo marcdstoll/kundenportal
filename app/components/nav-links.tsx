@@ -3,7 +3,7 @@
 import Link, { useLinkStatus } from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
-export type NavItem = { href: string; label: string; color?: string };
+export type NavItem = { href: string; label: string; color?: string; badge?: number };
 
 // Kleiner pulsierender Punkt, solange die angeklickte Seite lädt
 export function LinkPending({ className = "" }: { className?: string }) {
@@ -42,6 +42,11 @@ export function NavLinks({ items }: { items: NavItem[] }) {
             {item.color && <span className="size-2 shrink-0 rounded-full" style={{ background: item.color }} />}
             <span className="flex-1">{item.label}</span>
             <LinkPending />
+            {!!item.badge && (
+              <span className="min-w-5 rounded-full px-1.5 text-center text-[11px] font-semibold leading-5 text-white" style={{ background: "var(--rec)" }}>
+                {item.badge > 99 ? "99+" : item.badge}
+              </span>
+            )}
           </Link>
         );
       })}

@@ -103,6 +103,7 @@ export async function frameio(path: string, init: RequestInit = {}) {
     },
   });
   if (!res.ok) throw new Error(`Frame.io-Fehler ${res.status} bei ${path}: ${await res.text()}`);
+  if (res.status === 204) return null; // z. B. nach dem Löschen: keine Antwort
   return res.json();
 }
 
@@ -178,4 +179,24 @@ export async function getFileLinks(fileId: string) {
     downloadUrl: (original?.download_url as string | undefined) ?? null,
     inlineUrl: (original?.inline_url as string | undefined) ?? null,
   };
+}
+
+// Datei in einen anderen Ordner verschieben (z. B. von "ToBeReviewed" nach "Online")
+export async function moveFile(fileId: string, folderId: string) {
+  const { accountId } = await getTarget();
+  await frameio(`/accounts/${accountId}/files/${fileId}/move`, {
+    method: "PATCH",
+    body: JSON.stringify({ data: { parent_id: folderId } }),
+  });
+}
+
+// Datei bzw. Ordner (samt Inhalt) in Frame.io löschen
+export async function deleteFile(fileId: string) {
+  const { accountId } = await getTarget();
+  await frameio(`/accounts/${accountId}/files/${fileId}`, { method: "DELETE" });
+}
+
+export async function deleteFolder(folderId: string) {
+  const { accountId } = await getTarget();
+  await frameio(`/accounts/${accountId}/folders/${folderId}`, { method: "DELETE" });
 }

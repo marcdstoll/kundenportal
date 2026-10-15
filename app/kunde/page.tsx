@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { jobs as jobsTable } from "@/db/schema";
 import { getCurrentUser, resolveCustomerView } from "@/lib/session";
-import { loadJobs } from "@/lib/queries";
+import { loadJobs, unreadByJob } from "@/lib/queries";
 import { PageHeader, ViewAsBanner } from "@/app/components/shell";
 import { AutoRefresh } from "@/app/components/auto-refresh";
 import { Kanban } from "@/app/components/kanban";
@@ -29,7 +29,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kunde">["se
   const base = viewAs ? `/kunde?as=${viewAs.id}` : "/kunde";
   const sep = viewAs ? "&" : "?";
 
-  const jobs = await loadJobs(eq(jobsTable.customerId, customer.id));
+  const [jobs, unread] = await Promise.all([loadJobs(eq(jobsTable.customerId, customer.id)), unreadByJob(me.id)]);
   const online = jobs.filter((j) => j.status === "online");
 
   return (
@@ -54,7 +54,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kunde">["se
           </div>
         ) : (
           <>
-            <Kanban jobs={jobs} customerView hrefFor={(id) => `${base}${sep}job=${id}`} />
+            <Kanban jobs={jobs} unread={unread.jobs} customerView hrefFor={(id) => `${base}${sep}job=${id}`} />
             {online.length > 0 && (
               <section className="space-y-2 pt-2">
                 <h2 className="flex items-center gap-2 text-sm font-medium">
@@ -84,7 +84,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kunde">["se
         )}
       </div>
 
-      {openJob && <CustomerJobDrawer jobId={openJob} closeHref={base} customerId={customer.id} />}
+      {openJob && <CustomerJobDrawer jobId={openJob} closeHref={base} customerId={customer.id} viewerId={me.id} />}
     </>
   );
 }

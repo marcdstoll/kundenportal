@@ -10,10 +10,11 @@ type FileState = { file: File; progress: number };
 
 type Props = {
   clients: { id: string; name: string }[];
-  isAdmin: boolean;
+  // Admins und Cutter legen Projekte für einen Client an (Dateien optional)
+  isStaff: boolean;
 };
 
-type FieldName = "customerId" | "title" | "videoLength" | "content" | "specialNotes" | "files";
+type FieldName = "customerId" | "title" | "platforms" | "videoLength" | "content" | "specialNotes" | "files";
 type Errors = Partial<Record<FieldName, string>>;
 
 // Rahmen normal oder rot (wie ValueState "Error" in Fiori)
@@ -35,11 +36,11 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 
 const EMPTY = { customerId: "", title: "", videoLength: "", content: "", specialNotes: "" };
 
-export function NewJobForm({ clients, isAdmin }: Props) {
+export function NewJobForm({ clients, isStaff }: Props) {
   const router = useRouter();
   const [values, setValues] = useState(EMPTY);
   const [format, setFormat] = useState<string>(FORMATS[0].value);
-  const [platform, setPlatform] = useState(PLATFORMS[0]);
+  const [platforms, setPlatforms] = useState<string[]>([]);
   const [files, setFiles] = useState<FileState[]>([]);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -57,12 +58,13 @@ export function NewJobForm({ clients, isAdmin }: Props) {
 
   function validate(): Errors {
     const e: Errors = {};
-    if (isAdmin && !values.customerId) e.customerId = "Bitte einen Client auswählen.";
+    if (isStaff && !values.customerId) e.customerId = "Bitte einen Client auswählen.";
     if (!values.title.trim()) e.title = "Bitte einen Titel eingeben.";
+    if (platforms.length === 0) e.platforms = "Bitte mindestens eine Plattform wählen.";
     if (!values.videoLength.trim()) e.videoLength = "Bitte die gewünschte Länge angeben.";
     if (!values.content.trim()) e.content = "Bitte kurz beschreiben, worum es geht.";
     if (!values.specialNotes.trim()) e.specialNotes = "Bitte ausfüllen – sonst einfach „keine“.";
-    if (files.length === 0) e.files = "Bitte mindestens eine Datei auswählen.";
+    if (files.length === 0 && !isStaff) e.files = "Bitte mindestens eine Datei auswählen.";
     return e;
   }
 
@@ -85,11 +87,11 @@ export function NewJobForm({ clients, isAdmin }: Props) {
       const created = await createJob({
         title: values.title,
         format,
-        platform,
+        platforms,
         videoLength: values.videoLength,
         content: values.content,
         specialNotes: values.specialNotes,
-        customerId: isAdmin ? values.customerId : undefined,
+        customerId: isStaff ? values.customerId : undefined,
       });
       if (!created.ok) throw new Error(created.error);
       const { jobId } = created.data;
@@ -109,13 +111,13 @@ export function NewJobForm({ clients, isAdmin }: Props) {
       const title = values.title;
       setValues(EMPTY);
       setFormat(FORMATS[0].value);
-      setPlatform(PLATFORMS[0]);
+      setPlatforms([]);
       setFiles([]);
       setFileInputKey((k) => k + 1);
       setBusy(false);
       setStep(null);
       setSuccess(`„${title}“ wurde abgeschickt.`);
-      router.push(isAdmin ? `/board?job=${jobId}` : "/kunde");
+      router.push(isStaff ? `/board?job=${jobId}` : "/kunde");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Etwas ist schiefgelaufen.");
       setBusy(false);
@@ -125,9 +127,14 @@ export function NewJobForm({ clients, isAdmin }: Props) {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-5">
-      {isAdmin && (
+      {isStaff && (
         <Field label="Client" error={errors.customerId}>
-          <select className={fieldClass(errors.customerId)} value={values.customerId} onChange={(e) => set("customerId", e.target.value)} disabled={busy}>
+          <select
+            className={fieldClass(errors.customerId)}
+            value={values.customerId}
+            onChange={(e) => set("customerId", e.target.value)}
+            disabled={busy}
+          >
             <option value="">Client wählen …</option>
             {clients.map((c) => (
               <option key={c.id} value={c.id}>
@@ -139,7 +146,13 @@ export function NewJobForm({ clients, isAdmin }: Props) {
       )}
 
       <Field label="Titel" error={errors.title}>
-        <input className={fieldClass(errors.title)} placeholder="Titel deines Projekts" value={values.title} onChange={(e) => set("title", e.target.value)} disabled={busy} />
+        <input
+          className={fieldClass(errors.title)}
+          placeholder="Titel deines Projekts"
+          value={values.title}
+          onChange={(e) => set("title", e.target.value)}
+          disabled={busy}
+        />
       </Field>
 
       <div className="space-y-1.5">
@@ -161,27 +174,72 @@ export function NewJobForm({ clients, isAdmin }: Props) {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Plattform">
-          <select className={fieldClass()} value={platform} onChange={(e) => setPlatform(e.target.value)} disabled={busy}>
-            {PLATFORMS.map((p) => (
-              <option key={p} value={p}>
+      <div className="space-y-1.5">
+        <span className={`text-sm ${errors.platforms ? "text-danger" : "text-muted"}`}>Plattformen (mehrere möglich)</span>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Plattformen">
+          {PLATFORMS.map((p) => {
+            const on = platforms.includes(p);
+            return (
+              <button
+                key={p}
+                type="button"
+                disabled={busy}
+                aria-pressed={on}
+                onClick={() => {
+                  setPlatforms((prev) => (on ? prev.filter((x) => x !== p) : [...prev, p]));
+                  setErrors((er) => ({ ...er, platforms: undefined }));
+                }}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                  on
+                    ? "border-accent bg-accent/10 text-text"
+                    : errors.platforms
+                      ? "border-danger text-muted"
+                      : "border-line text-muted hover:bg-surface"
+                }`}
+              >
+                <span aria-hidden className={`text-xs ${on ? "" : "opacity-0"}`}>
+                  ✓
+                </span>
                 {p}
-              </option>
-            ))}
-          </select>
-        </Field>
+              </button>
+            );
+          })}
+        </div>
+        {errors.platforms && <span className="block text-xs text-danger">{errors.platforms}</span>}
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Videolänge" error={errors.videoLength}>
-          <input className={fieldClass(errors.videoLength)} placeholder="z. B. 30–60 Sekunden" value={values.videoLength} onChange={(e) => set("videoLength", e.target.value)} disabled={busy} />
+          <input
+            className={fieldClass(errors.videoLength)}
+            placeholder="z. B. 30–60 Sekunden"
+            value={values.videoLength}
+            onChange={(e) => set("videoLength", e.target.value)}
+            disabled={busy}
+          />
         </Field>
       </div>
 
       <Field label="Inhalt" error={errors.content}>
-        <textarea className={fieldClass(errors.content)} rows={4} placeholder="Worum geht es im Video?" value={values.content} onChange={(e) => set("content", e.target.value)} disabled={busy} />
+        <textarea
+          className={fieldClass(errors.content)}
+          rows={4}
+          placeholder="Worum geht es im Video?"
+          value={values.content}
+          onChange={(e) => set("content", e.target.value)}
+          disabled={busy}
+        />
       </Field>
 
       <Field label="Besonderheiten" error={errors.specialNotes}>
-        <textarea className={fieldClass(errors.specialNotes)} rows={3} placeholder="Musik, Untertitel, Logo … sonst „keine“" value={values.specialNotes} onChange={(e) => set("specialNotes", e.target.value)} disabled={busy} />
+        <textarea
+          className={fieldClass(errors.specialNotes)}
+          rows={3}
+          placeholder="Musik, Untertitel, Logo … sonst „keine“"
+          value={values.specialNotes}
+          onChange={(e) => set("specialNotes", e.target.value)}
+          disabled={busy}
+        />
       </Field>
 
       <div className="space-y-1.5">
@@ -190,8 +248,13 @@ export function NewJobForm({ clients, isAdmin }: Props) {
             errors.files ? "border-danger bg-danger/5" : "border-line"
           }`}
         >
-          <span className="block text-sm">Videomaterial und Assets auswählen</span>
-          <span className="block text-xs text-muted">Mehrere Dateien möglich, auch große Videos</span>
+          <span className="block text-sm">
+            {files.length > 0 ? "Andere Dateien auswählen" : "Videomaterial und Assets auswählen"}
+          </span>
+          <span className="block text-xs text-muted">
+            Mehrere Dateien möglich, auch große Videos. Der Upload startet erst mit „Projekt absenden“.
+            {isStaff && " Für Admins und Cutter optional."}
+          </span>
           <input
             key={fileInputKey}
             type="file"
@@ -215,12 +278,15 @@ export function NewJobForm({ clients, isAdmin }: Props) {
               <div className="flex justify-between gap-3">
                 <span className="truncate">{f.file.name}</span>
                 <span className="shrink-0 text-muted">
-                  {(f.file.size / 1024 / 1024).toFixed(1)} MB · {f.progress} %
+                  {(f.file.size / 1024 / 1024).toFixed(1)} MB ·{" "}
+                  {!busy ? "bereit" : f.progress >= 100 ? "✓ hochgeladen" : f.progress > 0 ? `${f.progress} %` : "wartet …"}
                 </span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-raised">
-                <div className="h-full bg-accent transition-all" style={{ width: `${f.progress}%` }} />
-              </div>
+              {busy && (
+                <div className="h-1.5 overflow-hidden rounded-full bg-raised">
+                  <div className="h-full bg-accent transition-all" style={{ width: `${f.progress}%` }} />
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -228,16 +294,20 @@ export function NewJobForm({ clients, isAdmin }: Props) {
 
       {step && <p className="text-sm text-muted">{step}</p>}
       {error && <p className="rounded-md border border-danger bg-danger/5 px-3 py-2 text-sm text-danger">{error}</p>}
-      {Object.values(errors).some(Boolean) && (
-        <p className="text-sm text-danger">Bitte die rot markierten Felder ausfüllen.</p>
-      )}
+      {Object.values(errors).some(Boolean) && <p className="text-sm text-danger">Bitte die rot markierten Felder ausfüllen.</p>}
       {success && (
-        <p className="rounded-md px-3 py-2 text-sm" style={{ color: "var(--st-online)", background: "color-mix(in oklab, var(--st-online) 12%, transparent)" }}>
+        <p
+          className="rounded-md px-3 py-2 text-sm"
+          style={{ color: "var(--st-online)", background: "color-mix(in oklab, var(--st-online) 12%, transparent)" }}
+        >
           {success}
         </p>
       )}
 
-      <button disabled={busy} className="w-full rounded-md bg-accent py-2.5 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-40">
+      <button
+        disabled={busy}
+        className="w-full rounded-md bg-accent py-2.5 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-40"
+      >
         {busy ? "Wird hochgeladen – Fenster bitte offen lassen" : "Projekt absenden"}
       </button>
     </form>

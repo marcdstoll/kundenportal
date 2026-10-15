@@ -16,6 +16,7 @@ export type CalendarItem = {
   date: string; // "YYYY-MM-DD"
   href: string;
   canMove: boolean;
+  lockReason: string | null;
 };
 
 const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
@@ -121,13 +122,20 @@ export function CalendarGrid({ days, items, showClient }: { days: CalendarDay[];
                         setDraggingId(null);
                         setOverDay(null);
                       }}
-                      title={it.canMove ? "Ziehen, um das Datum zu ändern" : undefined}
-                      className={`block space-y-1 rounded-md border-l-2 p-1.5 text-xs transition-opacity ${
+                      title={it.canMove ? "Ziehen, um das Datum zu ändern" : (it.lockReason ?? undefined)}
+                      className={`group/item block space-y-1 rounded-md border-l-2 p-1.5 text-xs transition-opacity ${
                         it.canMove ? "cursor-grab active:cursor-grabbing" : ""
                       } ${draggingId === it.id ? "opacity-40" : ""}`}
                       style={{ background: `color-mix(in oklab, ${color} 12%, var(--raised))`, borderColor: color }}
                     >
-                      <p className="truncate font-medium">{it.title}</p>
+                      <div className="flex items-start gap-1">
+                        <p className="min-w-0 flex-1 truncate font-medium">{it.title}</p>
+                        {it.canMove && (
+                          <span aria-hidden className="text-muted/60 transition-colors group-hover/item:text-text">
+                            ⠿
+                          </span>
+                        )}
+                      </div>
                       {showClient && <p className="truncate text-muted">{it.customerName}</p>}
                       <div className="flex flex-wrap items-center gap-1.5">
                         <FormatTag format={it.format} />

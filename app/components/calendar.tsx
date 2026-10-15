@@ -23,8 +23,8 @@ type Props = {
   hrefFor: (jobId: string) => string;
   monthHref: (key: string) => string;
   showClient: boolean;
-  // Darf der aktuelle Nutzer diesen Termin per Drag & Drop verschieben?
-  canMove: (job: JobView) => boolean;
+  // null = Nutzer darf den Termin per Drag & Drop verschieben, sonst der Grund dagegen
+  lockReason: (job: JobView) => string | null;
   // z. B. der Kunden-Filter rechts neben der Monatsnavigation
   toolbar?: React.ReactNode;
 };
@@ -33,7 +33,7 @@ type Props = {
 // Läuft auf dem Server; das Raster mit Drag & Drop ist eine Client-Komponente (calendar-grid.tsx).
 // Funktionen wie hrefFor können nicht in den Browser geschickt werden – deshalb rechnen wir
 // hier alle Links und Rechte vorab aus und geben nur einfache Daten weiter.
-export function Calendar({ month, jobs, hrefFor, monthHref, showClient, canMove, toolbar }: Props) {
+export function Calendar({ month, jobs, hrefFor, monthHref, showClient, lockReason, toolbar }: Props) {
   const first = new Date(month.getFullYear(), month.getMonth(), 1);
   // Woche beginnt am Montag
   const start = new Date(first);
@@ -63,7 +63,8 @@ export function Calendar({ month, jobs, hrefFor, monthHref, showClient, canMove,
       status: j.status,
       date: j.publishDate!,
       href: hrefFor(j.id),
-      canMove: canMove(j),
+      lockReason: lockReason(j),
+      canMove: lockReason(j) === null,
     }));
 
   const prev = new Date(month.getFullYear(), month.getMonth() - 1, 1);
