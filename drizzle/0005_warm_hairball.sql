@@ -1,0 +1,1 @@
+ALTER TABLE "jobs" ADD COLUMN "billed_customer" boolean DEFAULT false NOT NULL;
