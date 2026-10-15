@@ -149,7 +149,7 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
           checked={sendEmail}
           onChange={(e) => setSendEmail(e.target.checked)}
         />
-        Einladung per E-Mail schicken (mit Onboarding-Video)
+        Einladung per E-Mail schicken
       </label>
       <ErrorText error={error} />
       <div className="flex justify-end gap-2">
@@ -298,7 +298,7 @@ export function ProfileForm({
         </>
       )}
       <label className="block space-y-1 text-sm">
-        <span className="text-muted">Persönliche Video-Begrüßung (optional, Link zu YouTube, Vimeo, Frame.io …)</span>
+        <span className="text-muted">Persönliche Video-Begrüßung (optional)</span>
         <input
           className={inputField}
           placeholder="https://…"
@@ -307,7 +307,6 @@ export function ProfileForm({
           disabled={busy}
         />
       </label>
-      <p className="-mt-2 text-xs text-muted">Wird beim ersten Öffnen des Einladungslinks vor dem Onboarding-Video gezeigt.</p>
       <ErrorText error={error} />
       <div className="flex items-center justify-end gap-3">
         {saved && <span className="text-sm text-[var(--st-online)]">Gespeichert ✓</span>}
