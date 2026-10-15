@@ -50,6 +50,13 @@
       "when": 1792079177545,
       "tag": "0006_complex_rhodey",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792080718285,
+      "tag": "0007_lovely_spot",
+      "breakpoints": true
     }
   ]
 }
