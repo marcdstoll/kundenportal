@@ -1,16 +1,16 @@
 import { redirect } from "next/navigation";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { jobs as jobsTable } from "@/db/schema";
 import { getCurrentUser, resolveCustomerView } from "@/lib/session";
-import { loadJobs } from "@/lib/queries";
+import { listUsers, loadJobs } from "@/lib/queries";
+import { CUSTOMER_VIDEO_STATUSES } from "@/lib/status";
+import { ClientFilter } from "@/app/components/client-filter";
 import { PageHeader, ViewAsBanner } from "@/app/components/shell";
 import { Calendar, monthKey, parseMonth } from "@/app/components/calendar";
 import { CustomerJobDrawer, JobDrawer } from "@/app/components/job-drawer";
 
 export default function KalenderPage({ searchParams }: PageProps<"/kalender">) {
-  return (
-    <Content searchParams={searchParams} />
-  );
+  return <Content searchParams={searchParams} />;
 }
 
 async function Content({ searchParams }: { searchParams: PageProps<"/kalender">["searchParams"] }) {
@@ -25,14 +25,25 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
   const customerView = me.role === "kunde" || (me.role === "admin" && asParam) ? await resolveCustomerView(me, asParam) : null;
   const customerId = customerView?.customer.id ?? null;
 
+  // Staff: optionaler Kunden-Filter (?k=id1,id2), Kunden sehen ohnehin nur sich selbst
+  const clients = customerId ? [] : await listUsers("kunde");
+  const pickedClients = typeof params.k === "string" ? params.k.split(",").filter((id) => clients.some((c) => c.id === id)) : [];
+
   const filter = customerId
     ? and(isNotNull(jobsTable.publishDate), eq(jobsTable.customerId, customerId))
-    : isNotNull(jobsTable.publishDate);
+    : pickedClients.length > 0
+      ? and(isNotNull(jobsTable.publishDate), inArray(jobsTable.customerId, pickedClients))
+      : isNotNull(jobsTable.publishDate);
   const jobs = await loadJobs(filter);
+
+  // Verschieben dürfen Admins und Kunden (eigene Projekte), sobald es ein Datum geben darf
+  const canMove = (job: { customerId: string; status: string }) =>
+    CUSTOMER_VIDEO_STATUSES.includes(job.status) && (me.role === "admin" || job.customerId === me.id);
 
   const query = (extra: Record<string, string>) => {
     const p = new URLSearchParams();
     if (customerView?.viewAs) p.set("as", customerView.viewAs.id);
+    if (pickedClients.length > 0) p.set("k", pickedClients.join(","));
     p.set("m", monthKey(month));
     for (const [k, v] of Object.entries(extra)) p.set(k, v);
     return `/kalender?${p}`;
@@ -47,11 +58,18 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
           month={month}
           jobs={jobs}
           showClient={!customerId}
+          canMove={canMove}
+          toolbar={
+            clients.length > 0 ? (
+              <ClientFilter clients={clients.map((c) => ({ id: c.id, name: c.name }))} selected={pickedClients} />
+            ) : null
+          }
           hrefFor={(id) => query({ job: id })}
           monthHref={(key) => query({ m: key })}
         />
         <p className="mt-3 text-xs text-muted">
           Zu sehen sind alle Projekte mit eingetragenem Veröffentlichungsdatum.
+          {me.role !== "cutter" && " Termine lassen sich per Drag & Drop auf einen anderen Tag ziehen."}
         </p>
       </div>
       {openJob &&

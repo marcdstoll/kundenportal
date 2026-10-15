@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { listUsers, loadJobsOfCutter } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
-import { JobTable, PersonTabs } from "@/app/components/job-table";
+import { JobTable, PersonTabs, parseSort } from "@/app/components/job-table";
 import { JobDrawer } from "@/app/components/job-drawer";
 
 export default function NachCutterPage({ searchParams }: PageProps<"/nach-cutter">) {
@@ -29,14 +29,22 @@ async function Content({ searchParams }: { searchParams: PageProps<"/nach-cutter
   const openJob = typeof params.job === "string" ? params.job : null;
 
   const jobs = activeId ? await loadJobsOfCutter(activeId) : [];
-  const base = activeId ? `/nach-cutter?c=${activeId}` : "/nach-cutter";
+  const sort = parseSort(params.s, params.d);
+  const sortQuery = sort ? `&s=${sort.key}&d=${sort.dir}` : "";
+  const base = activeId ? `/nach-cutter?c=${activeId}${sortQuery}` : "/nach-cutter";
 
   return (
     <>
       <PageHeader title="Projekte nach Cutter" />
       <div className="space-y-4 px-6 pb-10 md:px-10">
-        <PersonTabs people={cutters} activeId={activeId} hrefFor={(id) => `/nach-cutter?c=${id}`} />
-        <JobTable jobs={jobs} isAdmin={me.role === "admin"} hrefFor={(id) => `${base}&job=${id}`} />
+        <PersonTabs people={cutters} activeId={activeId} hrefFor={(id) => `/nach-cutter?c=${id}${sortQuery}`} />
+        <JobTable
+          jobs={jobs}
+          isAdmin={me.role === "admin"}
+          sort={sort}
+          sortHref={(key, dir) => `/nach-cutter?c=${activeId ?? ""}&s=${key}&d=${dir}`}
+          hrefFor={(id) => `${base}&job=${id}`}
+        />
       </div>
       {openJob && <JobDrawer jobId={openJob} closeHref={base} me={me} />}
     </>

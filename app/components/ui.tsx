@@ -16,7 +16,7 @@ export function StatusBadge({ status, label }: { status: string; label?: string 
   );
 }
 
-const FORMAT_COLORS: Record<string, string> = {
+export const FORMAT_COLORS: Record<string, string> = {
   shortform: "#4aa8ff",
   longform: "#ff8a4a",
   clipping: "#3dd6c6",

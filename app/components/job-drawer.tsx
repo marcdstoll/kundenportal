@@ -140,7 +140,10 @@ export async function JobDrawer({
           {job.publishDate ? formatDate(job.publishDate) : <span className="text-muted">Noch offen</span>}
         </Row>
         <Row label="Abgerechnet">
-          <span className={job.billed ? "text-[var(--st-online)]" : "text-muted"}>{job.billed ? "Ja" : "Nein"}</span>
+          <span className="flex flex-wrap gap-x-4">
+            <span className={job.billedCustomer ? "text-[var(--st-online)]" : "text-muted"}>Kunde: {job.billedCustomer ? "Ja" : "Nein"}</span>
+            <span className={job.billed ? "text-[var(--st-online)]" : "text-muted"}>Cutter: {job.billed ? "Ja" : "Nein"}</span>
+          </span>
         </Row>
       </section>
 
@@ -175,12 +178,13 @@ export async function JobDrawer({
       )}
 
       <JobControls
-        key={`${job.id}-${job.status}-${job.format}-${job.billed}-${job.cutters.length}`}
+        key={`${job.id}-${job.status}-${job.format}-${job.billed}-${job.billedCustomer}-${job.cutters.length}`}
         job={{
           id: job.id,
           status: job.status,
           format: job.format,
           billed: job.billed,
+          billedCustomer: job.billedCustomer,
           reviewUrl: job.reviewUrl,
           cutterIds: job.cutters.map((c) => c.id),
           hasVideo: versions > 0,

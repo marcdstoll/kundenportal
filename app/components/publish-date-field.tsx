@@ -40,7 +40,7 @@ export function PublishDateField({ jobId, value }: { jobId: string; value: strin
           {saved ? "Gespeichert" : "Speichern"}
         </button>
       </div>
-      {error && <p className="text-sm text-[var(--st-in_arbeit)]">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { jobs as jobsTable } from "@/db/schema";
 import { getCurrentUser } from "@/lib/session";
 import { listUsers, loadJobs } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
-import { JobTable, PersonTabs } from "@/app/components/job-table";
+import { JobTable, PersonTabs, parseSort } from "@/app/components/job-table";
 import { JobDrawer } from "@/app/components/job-drawer";
 
 export default function NachClientsPage({ searchParams }: PageProps<"/nach-clients">) {
@@ -25,14 +25,22 @@ async function Content({ searchParams }: { searchParams: PageProps<"/nach-client
   const openJob = typeof params.job === "string" ? params.job : null;
 
   const jobs = activeId ? await loadJobs(eq(jobsTable.customerId, activeId)) : [];
-  const base = activeId ? `/nach-clients?c=${activeId}` : "/nach-clients";
+  const sort = parseSort(params.s, params.d);
+  const sortQuery = sort ? `&s=${sort.key}&d=${sort.dir}` : "";
+  const base = activeId ? `/nach-clients?c=${activeId}${sortQuery}` : "/nach-clients";
 
   return (
     <>
       <PageHeader title="Projekte nach Clients" />
       <div className="space-y-4 px-6 pb-10 md:px-10">
-        <PersonTabs people={clients} activeId={activeId} hrefFor={(id) => `/nach-clients?c=${id}`} />
-        <JobTable jobs={jobs} isAdmin={me.role === "admin"} hrefFor={(id) => `${base}&job=${id}`} />
+        <PersonTabs people={clients} activeId={activeId} hrefFor={(id) => `/nach-clients?c=${id}${sortQuery}`} />
+        <JobTable
+          jobs={jobs}
+          isAdmin={me.role === "admin"}
+          sort={sort}
+          sortHref={(key, dir) => `/nach-clients?c=${activeId ?? ""}&s=${key}&d=${dir}`}
+          hrefFor={(id) => `${base}&job=${id}`}
+        />
       </div>
       {openJob && <JobDrawer jobId={openJob} closeHref={base} me={me} />}
     </>

@@ -210,12 +210,33 @@ export async function submitJob(jobId: string) {
 
 // ---------- Cutter ----------
 
-// To Dos → Wird jetzt gemacht: Projekt übernehmen
+// To Dos → Wird jetzt gemacht: Projekt übernehmen und sofort loslegen
 export async function claimJob(jobId: string) {
   return run(async () => {
     const me = await requireUser("cutter", "admin");
     await changeStatus(jobId, "todo", "in_arbeit");
     await addCutterRow(jobId, me.id);
+    refresh();
+    return null;
+  });
+}
+
+// To Dos → Warteschlange: Projekt für sich reservieren, später starten
+export async function reserveJob(jobId: string) {
+  return run(async () => {
+    const me = await requireUser("cutter", "admin");
+    await changeStatus(jobId, "todo", "warteschlange");
+    await addCutterRow(jobId, me.id);
+    refresh();
+    return null;
+  });
+}
+
+// Warteschlange → Wird jetzt gemacht (nur zugeordnete Cutter oder Admins)
+export async function startJob(jobId: string) {
+  return run(async () => {
+    await requireCutterOf(jobId);
+    await changeStatus(jobId, "warteschlange", "in_arbeit");
     refresh();
     return null;
   });
@@ -285,11 +306,11 @@ export async function updateReviewUrl(jobId: string, reviewUrl: string) {
 
 // ---------- Admin ----------
 
-// Wartet auf Feedback → zurück an den Cutter (Feedback steht als Kommentar in Frame.io)
+// Wartet auf Feedback → zurück in die Warteschlange des Cutters (Feedback steht als Kommentar in Frame.io)
 export async function sendBack(jobId: string) {
   return run(async () => {
     await requireUser("admin");
-    await changeStatus(jobId, "feedback", "in_arbeit");
+    await changeStatus(jobId, "feedback", "warteschlange");
     refresh();
     return null;
   });
@@ -337,10 +358,14 @@ export async function setFormat(jobId: string, format: string) {
 }
 
 // Abgerechnet (Cutter) an/aus
-export async function setBilled(jobId: string, billed: boolean) {
+// which: "cutter" = Leistung des Cutters abgerechnet, "kunde" = gegenüber dem Kunden abgerechnet
+export async function setBilled(jobId: string, value: boolean, which: "cutter" | "kunde" = "cutter") {
   return run(async () => {
     await requireUser("admin");
-    await db.update(jobs).set({ billed }).where(eq(jobs.id, jobId));
+    await db
+      .update(jobs)
+      .set(which === "kunde" ? { billedCustomer: value } : { billed: value })
+      .where(eq(jobs.id, jobId));
     refresh();
     return null;
   });

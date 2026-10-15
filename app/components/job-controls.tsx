@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import {
   addCutter,
   claimJob,
+  reserveJob,
+  startJob,
   markOnline,
   markReady,
   removeCutter,
@@ -23,6 +25,7 @@ type Props = {
     status: string;
     format: string;
     billed: boolean;
+    billedCustomer: boolean;
     reviewUrl: string | null;
     cutterIds: string[];
     hasVideo: boolean;
@@ -85,17 +88,42 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
     <div className="space-y-6 border-t border-line pt-5">
       {/* ---------- Nächster Schritt im Ablauf ---------- */}
       {job.status === "todo" && (
-        <button disabled={busy} onClick={() => run(() => claimJob(job.id))} className={`${buttonPrimary} w-full`}>
-          Übernehmen und loslegen
-        </button>
+        <Section title="Projekt übernehmen">
+          <div className="grid grid-cols-2 gap-2">
+            <button disabled={busy} onClick={() => run(() => reserveJob(job.id))} className={buttonSecondary} title="Kommt in deine Warteschlange, du startest später">
+              Reservieren
+            </button>
+            <button disabled={busy} onClick={() => run(() => claimJob(job.id))} className={buttonPrimary}>
+              Jetzt starten
+            </button>
+          </div>
+          <p className="text-xs text-muted">Reservieren legt es in deine Warteschlange – andere sehen, dass es vergeben ist.</p>
+        </Section>
+      )}
+
+      {job.status === "warteschlange" && canWork && (
+        <Section title={job.hasVideo ? "Änderungen umsetzen" : "Aus der Warteschlange starten"}>
+          {job.hasVideo && (
+            <p className="text-xs text-muted">
+              Das Projekt wurde zurückgeschickt. Feedback steht als Kommentar am Video in Frame.io.
+            </p>
+          )}
+          <button disabled={busy} onClick={() => run(() => startJob(job.id))} className={`${buttonPrimary} w-full`}>
+            Jetzt starten
+          </button>
+        </Section>
+      )}
+
+      {job.status === "warteschlange" && !canWork && (
+        <p className="rounded-lg border border-line p-3 text-sm text-muted">
+          Reserviert von {staff.filter((s) => job.cutterIds.includes(s.id)).map((s) => s.name).join(", ") || "einem Cutter"}.
+        </p>
       )}
 
       {job.status === "in_arbeit" && canWork && (
         <Section title={job.hasVideo ? "Neue Version hochladen" : "Video hochladen"}>
           {job.hasVideo && (
-            <p className="text-xs text-muted">
-              Das Projekt wurde zurückgeschickt. Feedback steht als Kommentar am Video in Frame.io.
-            </p>
+            <p className="text-xs text-muted">Lade die überarbeitete Version hoch – die alte bleibt in Frame.io erhalten.</p>
           )}
           <label className="block cursor-pointer space-y-1.5 rounded-lg border border-dashed border-line p-4 text-sm transition-colors hover:bg-raised/50">
             <span className="block font-medium">Fertiges Video auswählen</span>
@@ -139,7 +167,7 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
           <p className="text-xs text-muted">Kommentare direkt am Video in Frame.io hinterlassen, dann entscheiden:</p>
           <div className="grid grid-cols-2 gap-2">
             <button disabled={busy} onClick={() => run(() => sendBack(job.id))} className={buttonSecondary}>
-              Zurückschicken
+              Zurück in Warteschlange
             </button>
             <button disabled={busy} onClick={() => run(() => markReady(job.id))} className={buttonPrimary}>
               Ready to post
@@ -180,7 +208,7 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
       )}
 
       {/* ---------- Review-Link von Hand ändern ---------- */}
-      {canWork && !["todo", "in_arbeit"].includes(job.status) && (
+      {canWork && !["todo", "warteschlange", "in_arbeit"].includes(job.status) && (
         <Section title="Review-Link ändern">
           <div className="flex gap-2">
             <input className={inputField} value={editLink} onChange={(e) => setEditLink(e.target.value)} disabled={busy} />
@@ -193,11 +221,17 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
 
       {/* ---------- Nur Admins ---------- */}
       {isAdmin && (
-                <Section title="">
-          <label className="flex items-center gap-2 py-1 text-sm">
-            <BilledToggle jobId={job.id} billed={job.billed} editable />
-            Abgerechnet (Cutter)
-          </label>
+        <Section title="Abrechnung">
+          <div className="flex flex-wrap gap-x-6 gap-y-1">
+            <label className="flex items-center gap-2 py-1 text-sm">
+              <BilledToggle jobId={job.id} billed={job.billedCustomer} editable which="kunde" />
+              Kunde abgerechnet
+            </label>
+            <label className="flex items-center gap-2 py-1 text-sm">
+              <BilledToggle jobId={job.id} billed={job.billed} editable which="cutter" />
+              Cutter abgerechnet
+            </label>
+          </div>
           {job.cutterIds.length > 0 && (
             <div className="flex flex-wrap gap-2 pt-1">
               {staff
@@ -207,7 +241,7 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
                     key={s.id}
                     disabled={busy}
                     onClick={() => run(() => removeCutter(job.id, s.id))}
-                    className="rounded-md border border-line px-2 py-1 text-xs text-muted hover:text-[var(--st-in_arbeit)]"
+                    className="rounded-md border border-line px-2 py-1 text-xs text-muted hover:text-danger"
                     title="Cutter entfernen"
                   >
                     {s.name} entfernen
@@ -218,7 +252,7 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
         </Section>
       )}
 
-      {error && <p className="text-sm text-[var(--st-in_arbeit)]">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
     </div>
   );
 }

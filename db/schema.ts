@@ -29,7 +29,9 @@ export const jobs = pgTable("jobs", {
   status: text("status").notNull().default("entwurf"),
   feedbackNote: text("feedback_note"),
   reviewUrl: text("review_url"),
+  // Abrechnung: billed = Cutter abgerechnet, billedCustomer = Kunde abgerechnet
   billed: boolean("billed").notNull().default(false),
+  billedCustomer: boolean("billed_customer").notNull().default(false),
   frameioFolderId: text("frameio_folder_id"),
   frameioFolderUrl: text("frameio_folder_url"),
   // Unterordner in Frame.io: "Raw" (Kundendateien) und "ToBeReviewed" (Cutter-Videos)

@@ -44,7 +44,7 @@ export default function LoginPage() {
         )}
         <input type="email" className="w-full rounded-md border border-line bg-canvas px-3 py-2 text-sm placeholder:text-muted/70" placeholder="E-Mail" value={email} onChange={(e) => setEmail(e.target.value)} required />
         <input type="password" className="w-full rounded-md border border-line bg-canvas px-3 py-2 text-sm placeholder:text-muted/70" placeholder="Passwort (mind. 8 Zeichen)" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required />
-        {error && <p className="text-sm text-[var(--st-in_arbeit)]">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
         <button disabled={loading} className="w-full rounded-md bg-accent py-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-40">
           {loading ? "Bitte warten…" : mode === "login" ? "Anmelden" : "Konto erstellen"}
         </button>

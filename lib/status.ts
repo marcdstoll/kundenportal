@@ -1,6 +1,7 @@
 // Alle Status in Reihenfolge des Ablaufs
 export const STATUSES = [
   "todo",
+  "warteschlange",
   "in_arbeit",
   "feedback",
   "ready_to_post",
@@ -13,6 +14,7 @@ export type Status = (typeof STATUSES)[number] | "entwurf";
 export const STATUS_LABELS: Record<string, string> = {
   entwurf: "Wird hochgeladen",
   todo: "To Dos",
+  warteschlange: "Warteschlange",
   in_arbeit: "Wird jetzt gemacht",
   feedback: "Wartet auf Feedback",
   ready_to_post: "Ready to post",
@@ -22,7 +24,8 @@ export const STATUS_LABELS: Record<string, string> = {
 
 // Was die Status bedeuten (für Tooltips)
 export const STATUS_HINTS: Record<string, string> = {
-  todo: "Offen – kann von einem Cutter übernommen werden",
+  todo: "Offen – kann von einem Cutter reserviert oder gestartet werden",
+  warteschlange: "Von einem Cutter reserviert, wird als Nächstes bearbeitet",
   in_arbeit: "Wird gerade geschnitten",
   feedback: "Video ist hochgeladen, Admins geben in Frame.io Feedback",
   ready_to_post: "Freigegeben und bereit zur Veröffentlichung",
@@ -36,7 +39,7 @@ export function statusColor(status: string) {
 }
 
 // Spalten auf den Boards (Online und Storniert stehen in Kalender und Listen)
-export const BOARD_COLUMNS = ["todo", "in_arbeit", "feedback", "ready_to_post"] as const;
+export const BOARD_COLUMNS = ["todo", "warteschlange", "in_arbeit", "feedback", "ready_to_post"] as const;
 
 // Ab diesen Status sieht der Kunde das fertige Video
 export const CUSTOMER_VIDEO_STATUSES = ["ready_to_post", "online"];
@@ -54,8 +57,10 @@ export const FORMAT_LABELS: Record<string, string> = {
 };
 
 export const PLATFORMS = [
-  "Instagram",
+  "Instagram Reels",
   "TikTok",
   "YouTube",
-  "Sonstiges"
+  "YouTube Shorts",
+  "LinkedIn",
+  "Sonstiges",
 ];
