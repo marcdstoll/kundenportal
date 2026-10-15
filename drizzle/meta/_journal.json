@@ -57,6 +57,13 @@
       "when": 1792080718285,
       "tag": "0007_lovely_spot",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792082283020,
+      "tag": "0008_chunky_bromley",
+      "breakpoints": true
     }
   ]
 }

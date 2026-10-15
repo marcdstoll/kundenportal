@@ -102,3 +102,12 @@ summary {
     animation: none !important;
   }
 }
+
+/* Upload-Hinweis im Formular: kurz aufleuchten, damit er auffällt */
+@keyframes hint-pop {
+  0% { transform: scale(0.97); box-shadow: 0 0 0 0 color-mix(in oklab, var(--st-ready_to_post) 55%, transparent); }
+  60% { transform: scale(1); box-shadow: 0 0 0 10px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.upload-hint { animation: hint-pop 0.9s ease-out 2; }
+@media (prefers-reduced-motion: reduce) { .upload-hint { animation: none; } }

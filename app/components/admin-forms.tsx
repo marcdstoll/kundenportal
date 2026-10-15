@@ -12,7 +12,16 @@ function ErrorText({ error }: { error: string | null }) {
 }
 
 // Link anzeigen + kopieren (zum Weitergeben per WhatsApp, Mail …)
-export function InviteLinkBox({ link, name }: { link: string; name?: string }) {
+// mail: "sent" = per Mail verschickt, "off" = Versand nicht eingerichtet, "failed" = Versand fehlgeschlagen
+export function InviteLinkBox({
+  link,
+  name,
+  mail,
+}: {
+  link: string;
+  name?: string;
+  mail?: "sent" | "off" | "failed" | "skipped";
+}) {
   const [copied, setCopied] = useState(false);
   return (
     <div
@@ -20,6 +29,17 @@ export function InviteLinkBox({ link, name }: { link: string; name?: string }) {
       style={{ borderColor: "var(--st-online)", background: "color-mix(in oklab, var(--st-online) 8%, transparent)" }}
     >
       <p className="font-medium">Einladungslink{name ? ` für ${name}` : ""} – 7 Tage gültig</p>
+      {mail === "sent" && (
+        <p className="text-sm">✉️ Per E-Mail verschickt. Zur Sicherheit kannst du den Link auch selbst weitergeben.</p>
+      )}
+      {mail === "off" && (
+        <p className="text-sm">
+          E-Mail-Versand ist noch nicht eingerichtet – bitte den Link selbst weitergeben (z. B. WhatsApp).
+        </p>
+      )}
+      {mail === "failed" && (
+        <p className="text-sm text-danger">Die E-Mail konnte nicht verschickt werden – bitte den Link selbst weitergeben.</p>
+      )}
       <div className="flex gap-2">
         <input
           readOnly
@@ -55,7 +75,8 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ link: string; name: string } | null>(null);
+  const [sendEmail, setSendEmail] = useState(true);
+  const [result, setResult] = useState<{ link: string; name: string; mail: "sent" | "off" | "failed" | "skipped" } | null>(null);
   const label = role === "kunde" ? "Neuer Kunde" : "Neuer Cutter";
 
   if (!open && !result) {
@@ -69,7 +90,7 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
   if (result) {
     return (
       <div className="w-full max-w-xl space-y-2">
-        <InviteLinkBox link={result.link} name={result.name} />
+        <InviteLinkBox link={result.link} name={result.name} mail={result.mail} />
         <button
           type="button"
           className={buttonSecondary}
@@ -91,10 +112,11 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
         e.preventDefault();
         setBusy(true);
         setError(null);
-        const res = await createUserWithInvite({ name, email, phone, role });
+        const res = await createUserWithInvite({ name, email, phone, role, sendEmail });
         setBusy(false);
         if (!res.ok) return setError(res.error);
-        setResult({ link: res.data.link, name });
+        const d = res.data;
+        setResult({ link: d.link, name, mail: !sendEmail ? "skipped" : d.mailed ? "sent" : d.mailConfigured ? "failed" : "off" });
         setName("");
         setEmail("");
         setPhone("");
@@ -120,6 +142,15 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
           disabled={busy}
         />
       </div>
+      <label className="flex items-center gap-2 text-sm text-muted">
+        <input
+          type="checkbox"
+          className="size-4 accent-[var(--accent)]"
+          checked={sendEmail}
+          onChange={(e) => setSendEmail(e.target.checked)}
+        />
+        Einladung per E-Mail schicken (mit Onboarding-Video)
+      </label>
       <ErrorText error={error} />
       <div className="flex justify-end gap-2">
         <button type="button" className={buttonSecondary} onClick={() => setOpen(false)} disabled={busy}>
@@ -136,8 +167,9 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
 export function RegenerateInvite({ userId, invited }: { userId: string; invited: boolean }) {
   const [busy, setBusy] = useState(false);
   const [link, setLink] = useState<string | null>(null);
+  const [mail, setMail] = useState<"sent" | "off" | "failed">("off");
   const [error, setError] = useState<string | null>(null);
-  if (link) return <InviteLinkBox link={link} />;
+  if (link) return <InviteLinkBox link={link} mail={mail} />;
   return (
     <div className="space-y-2">
       <button
@@ -149,6 +181,7 @@ export function RegenerateInvite({ userId, invited }: { userId: string; invited:
           const res = await regenerateInvite(userId);
           setBusy(false);
           if (!res.ok) return setError(res.error);
+          setMail(res.data.mailed ? "sent" : res.data.mailConfigured ? "failed" : "off");
           setLink(res.data.link);
         }}
       >
@@ -178,7 +211,14 @@ export function ProfileForm({
   logoUrl,
   showNotes,
 }: {
-  person: { id: string; name: string; phone: string | null; links: string | null; notes: string | null };
+  person: {
+    id: string;
+    name: string;
+    phone: string | null;
+    links: string | null;
+    notes: string | null;
+    welcomeVideo: string | null;
+  };
   logoUrl: string | null;
   showNotes: boolean;
 }) {
@@ -186,6 +226,7 @@ export function ProfileForm({
   const [phone, setPhone] = useState(person.phone ?? "");
   const [links, setLinks] = useState(person.links ?? "");
   const [notes, setNotes] = useState(person.notes ?? "");
+  const [welcomeVideo, setWelcomeVideo] = useState(person.welcomeVideo ?? "");
   // undefined = Logo nicht geändert, null = entfernen, string = neues Logo
   const [logo, setLogo] = useState<string | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -200,7 +241,7 @@ export function ProfileForm({
         e.preventDefault();
         setBusy(true);
         setError(null);
-        const res = await updateProfile(person.id, { name, phone, links, notes, logo });
+        const res = await updateProfile(person.id, { name, phone, links, notes, welcomeVideo, logo });
         setBusy(false);
         if (!res.ok) return setError(res.error);
         setSaved(true);
@@ -256,6 +297,17 @@ export function ProfileForm({
           </label>
         </>
       )}
+      <label className="block space-y-1 text-sm">
+        <span className="text-muted">Persönliche Video-Begrüßung (optional, Link zu YouTube, Vimeo, Frame.io …)</span>
+        <input
+          className={inputField}
+          placeholder="https://…"
+          value={welcomeVideo}
+          onChange={(e) => setWelcomeVideo(e.target.value)}
+          disabled={busy}
+        />
+      </label>
+      <p className="-mt-2 text-xs text-muted">Wird beim ersten Öffnen des Einladungslinks vor dem Onboarding-Video gezeigt.</p>
       <ErrorText error={error} />
       <div className="flex items-center justify-end gap-3">
         {saved && <span className="text-sm text-[var(--st-online)]">Gespeichert ✓</span>}

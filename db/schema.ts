@@ -152,6 +152,8 @@ export const profiles = pgTable("profiles", {
   links: text("links"),
   // Infos für die betreuenden Cutter (Stil, Do's & Don'ts …)
   notes: text("notes"),
+  // Persönliche Video-Begrüßung (Link), wird vor dem Onboarding-Video gezeigt
+  welcomeVideo: text("welcome_video"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
@@ -165,4 +167,11 @@ export const invites = pgTable("invites", {
   expiresAt: timestamp("expires_at").notNull(),
   usedAt: timestamp("used_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Einstellungen als Schlüssel/Wert, z. B. Links zu den Onboarding-Videos
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

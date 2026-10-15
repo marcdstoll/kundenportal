@@ -161,6 +161,7 @@ export type PersonView = {
   phone: string | null;
   links: string | null;
   notes: string | null;
+  welcomeVideo: string | null;
   hasLogo: boolean;
   logoVersion: number;
   // eingeladen = Passwort noch nicht gesetzt
@@ -178,6 +179,7 @@ export async function loadPeople(...roles: ("kunde" | "cutter" | "admin")[]): Pr
       phone: profiles.phone,
       links: profiles.links,
       notes: profiles.notes,
+      welcomeVideo: profiles.welcomeVideo,
       hasLogo: sql<boolean>`${profiles.logo} is not null`,
       logoUpdated: profiles.updatedAt,
       accountId: account.id,

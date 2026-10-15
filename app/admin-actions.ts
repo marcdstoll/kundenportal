@@ -12,6 +12,8 @@ import { db } from "@/db";
 import { account, cutterClients, invites, profiles, user } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { requireUser } from "@/lib/session";
+import { inviteMail, mailConfigured, sendMail } from "@/lib/mail";
+import { SETTING_KEYS, onboardingVideoFor, setSetting } from "@/lib/settings";
 
 export type Result<T = null> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -46,9 +48,29 @@ async function issueInvite(userId: string, createdBy: string) {
   return `${baseUrl()}/einladung/${token}`;
 }
 
+// Einladung bzw. Passwort-Link per Mail verschicken (falls Mailversand eingerichtet ist)
+async function mailInvite(userId: string, link: string) {
+  const [u] = await db.select().from(user).where(eq(user.id, userId));
+  if (!u) return false;
+  const [acc] = await db
+    .select({ id: account.id })
+    .from(account)
+    .where(and(eq(account.userId, userId), eq(account.providerId, "credential")));
+  const [prof] = await db.select({ welcome: profiles.welcomeVideo }).from(profiles).where(eq(profiles.userId, userId));
+  const hasVideos = !!prof?.welcome || !!(await onboardingVideoFor(u.role ?? "kunde"));
+  const mail = inviteMail({ name: u.name, link, role: u.role ?? "kunde", reset: !!acc, hasVideos });
+  return sendMail(u.email, mail.subject, mail.html, mail.text);
+}
+
 // ---------- Anlegen ----------
 
-export async function createUserWithInvite(input: { name: string; email: string; role: "kunde" | "cutter"; phone?: string }) {
+export async function createUserWithInvite(input: {
+  name: string;
+  email: string;
+  role: "kunde" | "cutter";
+  phone?: string;
+  sendEmail?: boolean;
+}) {
   return run(async () => {
     const me = await requireUser("admin");
     const name = input.name.trim();
@@ -64,8 +86,9 @@ export async function createUserWithInvite(input: { name: string; email: string;
     await db.insert(user).values({ id, name, email, emailVerified: false, role: input.role, active: true });
     await db.insert(profiles).values({ userId: id, phone: input.phone?.trim() || null });
     const link = await issueInvite(id, me.id);
+    const mailed = input.sendEmail === false ? false : await mailInvite(id, link);
     refresh();
-    return { userId: id, link };
+    return { userId: id, link, mailed, mailConfigured: mailConfigured() };
   });
 }
 
@@ -76,8 +99,9 @@ export async function regenerateInvite(userId: string) {
     const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, userId));
     if (!u) throw new Error("Nutzer nicht gefunden.");
     const link = await issueInvite(userId, me.id);
+    const mailed = await mailInvite(userId, link);
     refresh();
-    return { link };
+    return { link, mailed, mailConfigured: mailConfigured() };
   });
 }
 
@@ -121,11 +145,19 @@ export async function acceptInvite(token: string, password: string) {
   });
 }
 
+// Link prüfen: leer erlaubt, sonst http(s)
+function checkUrl(value: string) {
+  const v = value.trim();
+  if (!v) return null;
+  if (!/^https?:\/\//i.test(v)) throw new Error("Video-Links müssen mit http:// oder https:// beginnen.");
+  return v;
+}
+
 // ---------- Profil & Freigaben ----------
 
 export async function updateProfile(
   userId: string,
-  input: { name: string; phone: string; links: string; notes: string; logo?: string | null },
+  input: { name: string; phone: string; links: string; notes: string; welcomeVideo?: string; logo?: string | null },
 ) {
   return run(async () => {
     await requireUser("admin");
@@ -140,6 +172,7 @@ export async function updateProfile(
       phone: input.phone.trim() || null,
       links: input.links.trim() || null,
       notes: input.notes.trim() || null,
+      ...(input.welcomeVideo !== undefined ? { welcomeVideo: checkUrl(input.welcomeVideo) } : {}),
       ...(input.logo !== undefined ? { logo: input.logo } : {}),
       updatedAt: new Date(),
     };
@@ -163,5 +196,32 @@ export async function setAssignment(cutterId: string, clientId: string, on: bool
     }
     refresh();
     return null;
+  });
+}
+
+// ---------- Einstellungen: Onboarding-Videos & Mail-Test ----------
+
+export async function saveOnboardingVideos(input: { kunde: string; cutter: string }) {
+  return run(async () => {
+    await requireUser("admin");
+    await setSetting(SETTING_KEYS.onboardingKunde, checkUrl(input.kunde));
+    await setSetting(SETTING_KEYS.onboardingCutter, checkUrl(input.cutter));
+    refresh();
+    return null;
+  });
+}
+
+export async function sendTestMail() {
+  return run(async () => {
+    const me = await requireUser("admin");
+    if (!mailConfigured()) throw new Error("Mailversand ist nicht eingerichtet (SMTP_HOST fehlt).");
+    const ok = await sendMail(
+      me.email,
+      "Testmail aus dem Contenthaus-Portal",
+      "<p>Wenn du das liest, funktioniert der Mailversand. 🎉</p>",
+      "Wenn du das liest, funktioniert der Mailversand.",
+    );
+    if (!ok) throw new Error("Versand fehlgeschlagen – Details stehen im Server-Log.");
+    return { to: me.email };
   });
 }

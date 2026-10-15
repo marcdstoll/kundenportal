@@ -77,10 +77,6 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
           hrefFor={(id) => query({ job: id })}
           monthHref={(key) => query({ m: key })}
         />
-        <p className="mt-3 text-xs text-muted">
-          Zu sehen sind alle Projekte mit eingetragenem Veröffentlichungsdatum.
-          {me.role !== "cutter" && " Termine lassen sich per Drag & Drop auf einen anderen Tag ziehen."}
-        </p>
       </div>
       {openJob &&
         (customerId ? (

@@ -43,6 +43,7 @@ function navFor(role: string, unread: number): NavItem[] {
     { href: "/cutter", label: "Cutter" },
     { href: "/clients", label: "Clients" },
     { href: "/neu", label: "Neues Projekt" },
+    { href: "/einstellungen", label: "Einstellungen" },
   ];
 }
 

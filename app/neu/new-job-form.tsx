@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createJob, submitJob } from "@/app/actions";
 import { uploadFile } from "@/lib/upload";
 import { FORMATS, PLATFORMS } from "@/lib/status";
+import { MultiSelect } from "@/app/components/multi-select";
 
 type FileState = { file: File; progress: number };
 
@@ -174,41 +175,23 @@ export function NewJobForm({ clients, isStaff }: Props) {
         </div>
       </div>
 
-      <div className="space-y-1.5">
-        <span className={`text-sm ${errors.platforms ? "text-danger" : "text-muted"}`}>Plattformen (mehrere möglich)</span>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Plattformen">
-          {PLATFORMS.map((p) => {
-            const on = platforms.includes(p);
-            return (
-              <button
-                key={p}
-                type="button"
-                disabled={busy}
-                aria-pressed={on}
-                onClick={() => {
-                  setPlatforms((prev) => (on ? prev.filter((x) => x !== p) : [...prev, p]));
-                  setErrors((er) => ({ ...er, platforms: undefined }));
-                }}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                  on
-                    ? "border-accent bg-accent/10 text-text"
-                    : errors.platforms
-                      ? "border-danger text-muted"
-                      : "border-line text-muted hover:bg-surface"
-                }`}
-              >
-                <span aria-hidden className={`text-xs ${on ? "" : "opacity-0"}`}>
-                  ✓
-                </span>
-                {p}
-              </button>
-            );
-          })}
-        </div>
-        {errors.platforms && <span className="block text-xs text-danger">{errors.platforms}</span>}
-      </div>
-
       <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <span className={`text-sm ${errors.platforms ? "text-danger" : "text-muted"}`}>Plattformen (mehrere möglich)</span>
+          <MultiSelect
+            label="Plattformen"
+            options={PLATFORMS}
+            value={platforms}
+            onChange={(next) => {
+              setPlatforms(next);
+              setErrors((er) => ({ ...er, platforms: undefined }));
+            }}
+            placeholder="Plattformen wählen …"
+            error={errors.platforms}
+            disabled={busy}
+          />
+          {errors.platforms && <span className="block text-xs text-danger">{errors.platforms}</span>}
+        </div>
         <Field label="Videolänge" error={errors.videoLength}>
           <input
             className={fieldClass(errors.videoLength)}
@@ -252,7 +235,7 @@ export function NewJobForm({ clients, isStaff }: Props) {
             {files.length > 0 ? "Andere Dateien auswählen" : "Videomaterial und Assets auswählen"}
           </span>
           <span className="block text-xs text-muted">
-            Mehrere Dateien möglich, auch große Videos. Der Upload startet erst mit „Projekt absenden“.
+            Mehrere Dateien möglich, auch große Videos.
             {isStaff && " Für Admins und Cutter optional."}
           </span>
           <input
@@ -279,7 +262,13 @@ export function NewJobForm({ clients, isStaff }: Props) {
                 <span className="truncate">{f.file.name}</span>
                 <span className="shrink-0 text-muted">
                   {(f.file.size / 1024 / 1024).toFixed(1)} MB ·{" "}
-                  {!busy ? "bereit" : f.progress >= 100 ? "✓ hochgeladen" : f.progress > 0 ? `${f.progress} %` : "wartet …"}
+                  {!busy
+                    ? "noch nicht hochgeladen"
+                    : f.progress >= 100
+                      ? "✓ hochgeladen"
+                      : f.progress > 0
+                        ? `${f.progress} %`
+                        : "wartet …"}
                 </span>
               </div>
               {busy && (
@@ -304,11 +293,38 @@ export function NewJobForm({ clients, isStaff }: Props) {
         </p>
       )}
 
+      {/* Unübersehbar: Dateien sind nur ausgewählt, hochgeladen wird erst beim Absenden */}
+      {files.length > 0 && !busy && (
+        <div
+          role="status"
+          className="upload-hint flex items-start gap-3 rounded-lg border-2 px-4 py-3 text-sm"
+          style={{
+            borderColor: "var(--st-ready_to_post)",
+            background: "color-mix(in oklab, var(--st-ready_to_post) 14%, transparent)",
+          }}
+        >
+          <span aria-hidden className="text-xl leading-none">
+            ⚠️
+          </span>
+          <span>
+            <b className="block">
+              {files.length === 1 ? "Deine Datei ist" : `Deine ${files.length} Dateien sind`} noch nicht hochgeladen.
+            </b>
+            Der Upload startet erst, wenn du unten auf <b>„Absenden & hochladen“</b> klickst. Lass das Fenster dann offen, bis
+            alles fertig ist.
+          </span>
+        </div>
+      )}
+
       <button
         disabled={busy}
         className="w-full rounded-md bg-accent py-2.5 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-40"
       >
-        {busy ? "Wird hochgeladen – Fenster bitte offen lassen" : "Projekt absenden"}
+        {busy
+          ? "Wird hochgeladen – Fenster bitte offen lassen"
+          : files.length > 0
+            ? `Absenden & ${files.length === 1 ? "Datei" : `${files.length} Dateien`} hochladen`
+            : "Projekt absenden"}
       </button>
     </form>
   );
