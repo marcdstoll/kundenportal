@@ -125,7 +125,7 @@ export function DeleteFileButton({ fileId, name }: { fileId: string; name: strin
         title="Datei löschen?"
         message={
           <>
-            „<b className="text-text">{name}</b>“ wird endgültig gelöscht, auch in Frame.io.
+            „<b className="text-text">{name}</b>“ wird endgültig gelöscht.
           </>
         }
         confirmLabel="Löschen"

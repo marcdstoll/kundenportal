@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/session";
 import { loadAssignments, loadPeople, loadPerson, logoUrl } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
 import { buttonSecondary } from "@/app/components/ui";
-import { AssignmentToggle, ProfileForm, RegenerateInvite } from "@/app/components/admin-forms";
+import { AssignmentSelect, ProfileForm, RegenerateInvite } from "@/app/components/admin-forms";
 
 // Kundenprofil bearbeiten (nur Admins)
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -38,12 +38,18 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         <aside className="space-y-8">
           <section className="space-y-2">
             <h2 className="text-sm font-medium">Betreuende Cutter</h2>
-            <div className="space-y-1.5">
-              {cutters.map((c) => (
-                <AssignmentToggle key={c.id} cutterId={c.id} clientId={id} on={assigned.has(c.id)} label={c.name} />
-              ))}
-              {cutters.length === 0 && <p className="text-sm text-muted">Noch keine Cutter angelegt.</p>}
-            </div>
+            {cutters.length > 0 ? (
+              <AssignmentSelect
+                side="client"
+                ownerId={id}
+                options={cutters.map((c) => ({ value: c.id, label: c.name }))}
+                initial={[...assigned]}
+                label="Betreuende Cutter"
+                placeholder="Cutter auswählen …"
+              />
+            ) : (
+              <p className="text-sm text-muted">Noch keine Cutter angelegt.</p>
+            )}
           </section>
           <section className="space-y-2">
             <h2 className="text-sm font-medium">Zugang</h2>

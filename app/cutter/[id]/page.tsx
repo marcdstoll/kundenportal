@@ -2,8 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { loadAssignments, loadPeople, loadPerson, logoUrl } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
-import { Avatar } from "@/app/components/ui";
-import { AssignmentToggle, ProfileForm, RegenerateInvite } from "@/app/components/admin-forms";
+import { AssignmentSelect, ProfileForm, RegenerateInvite } from "@/app/components/admin-forms";
 
 // Cutter bearbeiten (nur Admins): Kontakt, freigegebene Kunden, Zugang
 export default async function CutterDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -31,22 +30,14 @@ export default async function CutterDetailPage({ params }: { params: Promise<{ i
           {cutter.role === "cutter" && (
             <section className="space-y-2">
               <h2 className="text-sm font-medium">Freigegebene Kunden</h2>
-              <div className="space-y-1.5">
-                {clients.map((c) => (
-                  <AssignmentToggle
-                    key={c.id}
-                    cutterId={id}
-                    clientId={c.id}
-                    on={assigned.has(c.id)}
-                    label={
-                      <span className="inline-flex items-center gap-2">
-                        <Avatar name={c.name} logoUrl={logoUrl(c)} />
-                        {c.name}
-                      </span>
-                    }
-                  />
-                ))}
-              </div>
+              <AssignmentSelect
+                side="cutter"
+                ownerId={id}
+                options={clients.map((c) => ({ value: c.id, label: c.name }))}
+                initial={[...assigned]}
+                label="Freigegebene Kunden"
+                placeholder="Kunden auswählen …"
+              />
             </section>
           )}
           <section className="space-y-2">

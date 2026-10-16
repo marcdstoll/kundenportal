@@ -160,7 +160,7 @@ async function nameReviewFolder(jobId: string, online: boolean) {
 function deleteError(e: unknown): never {
   console.error("Löschen in Frame.io fehlgeschlagen:", e);
   const code = e instanceof FrameioError ? ` (Fehler ${e.status})` : "";
-  throw new Error(`Frame.io hat das Löschen abgelehnt${code}. Es wurde nichts gelöscht – bitte später nochmal versuchen.`);
+  throw new Error(`Das Löschen hat nicht geklappt${code}. Es wurde nichts gelöscht – bitte später nochmal versuchen.`);
 }
 
 // ---------- Client: Projekt anlegen und hochladen ----------

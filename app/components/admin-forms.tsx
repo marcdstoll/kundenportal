@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createUserWithInvite, regenerateInvite, setAssignment, updateProfile } from "@/app/admin-actions";
 import { Avatar, buttonPrimary, buttonSecondary, inputField } from "./ui";
+import { MultiSelect } from "./multi-select";
 
 function ErrorText({ error }: { error: string | null }) {
   return error ? <p className="text-sm text-danger">{error}</p> : null;
@@ -38,7 +39,9 @@ export function InviteLinkBox({
         </p>
       )}
       {mail === "failed" && (
-        <p className="text-sm text-danger">Die E-Mail konnte nicht verschickt werden – bitte den Link selbst weitergeben.</p>
+        <p className="text-sm text-danger">
+          Die E-Mail konnte nicht verschickt werden – bitte den Link selbst weitergeben.
+        </p>
       )}
       <div className="flex gap-2">
         <input
@@ -75,7 +78,11 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sendEmail, setSendEmail] = useState(true);
-  const [result, setResult] = useState<{ link: string; name: string; mail: "sent" | "off" | "failed" | "skipped" } | null>(null);
+  const [result, setResult] = useState<{
+    link: string;
+    name: string;
+    mail: "sent" | "off" | "failed" | "skipped";
+  } | null>(null);
   const label = role === "kunde" ? "Neuer Kunde" : "Neuer Cutter";
 
   if (!open && !result) {
@@ -115,7 +122,11 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
         setBusy(false);
         if (!res.ok) return setError(res.error);
         const d = res.data;
-        setResult({ link: d.link, name, mail: !sendEmail ? "skipped" : d.mailed ? "sent" : d.mailConfigured ? "failed" : "off" });
+        setResult({
+          link: d.link,
+          name,
+          mail: !sendEmail ? "skipped" : d.mailed ? "sent" : d.mailConfigured ? "failed" : "off",
+        });
         setName("");
         setEmail("");
         setPhone("");
@@ -124,7 +135,13 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
     >
       <p className="font-medium">{label}</p>
       <div className="grid gap-2 sm:grid-cols-2">
-        <input className={inputField} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} disabled={busy} />
+        <input
+          className={inputField}
+          placeholder="Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          disabled={busy}
+        />
         <input
           className={inputField}
           type="email"
@@ -286,11 +303,23 @@ export function ProfileForm({
         <>
           <label className="block space-y-1 text-sm">
             <span className="text-muted">Links (einer pro Zeile – z. B. Instagram, TikTok, Drive)</span>
-            <textarea rows={3} className={inputField} value={links} onChange={(e) => setLinks(e.target.value)} disabled={busy} />
+            <textarea
+              rows={3}
+              className={inputField}
+              value={links}
+              onChange={(e) => setLinks(e.target.value)}
+              disabled={busy}
+            />
           </label>
           <label className="block space-y-1 text-sm">
             <span className="text-muted">Infos für die Cutter (Stil, Do&apos;s & Don&apos;ts, Ansprechpartner …)</span>
-            <textarea rows={4} className={inputField} value={notes} onChange={(e) => setNotes(e.target.value)} disabled={busy} />
+            <textarea
+              rows={4}
+              className={inputField}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              disabled={busy}
+            />
           </label>
         </>
       )}
@@ -307,39 +336,46 @@ export function ProfileForm({
 
 // ---------- Freigaben ----------
 
-// Checkbox "Cutter X betreut Kunde Y"
-export function AssignmentToggle({
-  cutterId,
-  clientId,
-  on,
+// Dropdown mit Mehrfachauswahl: welche Cutter einen Kunden betreuen (bzw. welche Kunden ein Cutter betreut).
+// side="client": wir sind auf der Kundenseite, die Auswahl sind Cutter – und umgekehrt.
+export function AssignmentSelect({
+  side,
+  ownerId,
+  options,
+  initial,
   label,
+  placeholder,
 }: {
-  cutterId: string;
-  clientId: string;
-  on: boolean;
-  label: React.ReactNode;
+  side: "client" | "cutter";
+  ownerId: string;
+  options: { value: string; label: string }[];
+  initial: string[];
+  label: string;
+  placeholder: string;
 }) {
-  const [value, setValue] = useState(on);
-  const [busy, setBusy] = useState(false);
+  const [value, setValue] = useState(initial);
+  const [error, setError] = useState<string | null>(null);
+
+  async function change(next: string[]) {
+    const before = value;
+    setValue(next);
+    setError(null);
+    const added = next.filter((v) => !before.includes(v));
+    const removed = before.filter((v) => !next.includes(v));
+    for (const [id, on] of [...added.map((v) => [v, true] as const), ...removed.map((v) => [v, false] as const)]) {
+      const res = side === "client" ? await setAssignment(id, ownerId, on) : await setAssignment(ownerId, id, on);
+      if (!res.ok) {
+        setValue(before);
+        setError(res.error);
+        return;
+      }
+    }
+  }
+
   return (
-    <label
-      className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors ${value ? "border-accent bg-accent/10" : "border-line hover:bg-raised/50"}`}
-    >
-      <input
-        type="checkbox"
-        className="size-4 accent-[var(--accent)]"
-        checked={value}
-        disabled={busy}
-        onChange={async (e) => {
-          const next = e.target.checked;
-          setValue(next);
-          setBusy(true);
-          const res = await setAssignment(cutterId, clientId, next);
-          setBusy(false);
-          if (!res.ok) setValue(!next);
-        }}
-      />
-      {label}
-    </label>
+    <div className="space-y-1.5">
+      <MultiSelect options={options} value={value} onChange={change} label={label} placeholder={placeholder} />
+      <ErrorText error={error} />
+    </div>
   );
 }

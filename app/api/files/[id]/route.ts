@@ -38,7 +38,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/files/[id]">
     const links = await getFileLinks(row.file.frameioFileId);
     const target = req.nextUrl.searchParams.get("mode") === "play" ? links.inlineUrl : links.downloadUrl;
     if (!target) {
-      return new Response("Frame.io verarbeitet die Datei noch. Bitte gleich nochmal versuchen.", { status: 409 });
+      return new Response("Die Datei wird noch verarbeitet. Bitte gleich nochmal versuchen.", { status: 409 });
     }
     return NextResponse.redirect(target);
   } catch (e) {
