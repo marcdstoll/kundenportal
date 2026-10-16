@@ -22,6 +22,13 @@ export async function loadJobs(filter?: SQL): Promise<JobView[]> {
   const ids = rows.map((r) => r.job.id);
   if (ids.length === 0) return [];
 
+  // Original und Duplikate teilen sich den Raw-Ordner – ihr Rohmaterial wird bei allen Teilen angezeigt
+  const rawFolders = [...new Set(rows.map((r) => r.job.rawFolderId).filter((id): id is string => !!id))];
+  const familyRows = rawFolders.length
+    ? await db.select({ id: jobs.id, rawFolderId: jobs.rawFolderId }).from(jobs).where(inArray(jobs.rawFolderId, rawFolders))
+    : [];
+  const familyIds = [...new Set([...ids, ...familyRows.map((f) => f.id)])];
+
   const [cutterRows, fileRows] = await Promise.all([
     db
       .select({ jobId: jobCutters.jobId, id: user.id, name: user.name })
@@ -32,9 +39,24 @@ export async function loadJobs(filter?: SQL): Promise<JobView[]> {
     db
       .select()
       .from(jobFiles)
-      .where(and(inArray(jobFiles.jobId, ids), eq(jobFiles.uploaded, true)))
+      .where(and(inArray(jobFiles.jobId, familyIds), eq(jobFiles.uploaded, true)))
       .orderBy(asc(jobFiles.createdAt)),
   ]);
+  const folderOf = new Map(familyRows.map((f) => [f.id, f.rawFolderId]));
+
+  // Dateien eines Projekts: eigene fertige Videos + Rohmaterial der ganzen Familie (jede Datei nur einmal)
+  function filesFor(job: typeof jobs.$inferSelect) {
+    const own = fileRows.filter((f) => f.jobId === job.id && f.kind !== "roh");
+    const seen = new Set<string>();
+    const raw = fileRows.filter((f) => {
+      if (f.kind !== "roh") return false;
+      const sameFamily = f.jobId === job.id || (!!job.rawFolderId && folderOf.get(f.jobId) === job.rawFolderId);
+      if (!sameFamily || seen.has(f.frameioFileId)) return false;
+      seen.add(f.frameioFileId);
+      return true;
+    });
+    return [...raw, ...own].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
 
   // Namen derer, die Dateien hochgeladen haben
   const uploaderIds = [...new Set(fileRows.map((f) => f.uploadedBy).filter((id): id is string => !!id))];
@@ -46,12 +68,8 @@ export async function loadJobs(filter?: SQL): Promise<JobView[]> {
   return rows.map(({ job, customerName }) => ({
     ...job,
     customerName,
-    cutters: cutterRows
-      .filter((c) => c.jobId === job.id)
-      .map((c) => ({ id: c.id, name: c.name })),
-    files: fileRows
-      .filter((f) => f.jobId === job.id)
-      .map((f) => ({ ...f, uploaderName: f.uploadedBy ? (nameOf.get(f.uploadedBy) ?? null) : null })),
+    cutters: cutterRows.filter((c) => c.jobId === job.id).map((c) => ({ id: c.id, name: c.name })),
+    files: filesFor(job).map((f) => ({ ...f, uploaderName: f.uploadedBy ? (nameOf.get(f.uploadedBy) ?? null) : null })),
   }));
 }
 
@@ -62,12 +80,14 @@ export async function loadJob(id: string) {
 
 // Projekte, an denen ein bestimmter Cutter beteiligt ist
 export async function loadJobsOfCutter(cutterId: string) {
-  const links = await db
-    .select({ jobId: jobCutters.jobId })
-    .from(jobCutters)
-    .where(eq(jobCutters.userId, cutterId));
+  const links = await db.select({ jobId: jobCutters.jobId }).from(jobCutters).where(eq(jobCutters.userId, cutterId));
   if (links.length === 0) return [];
-  return loadJobs(inArray(jobs.id, links.map((l) => l.jobId)));
+  return loadJobs(
+    inArray(
+      jobs.id,
+      links.map((l) => l.jobId),
+    ),
+  );
 }
 
 export async function listUsers(...roles: ("kunde" | "cutter" | "admin")[]) {
@@ -143,7 +163,14 @@ export async function loadInbox(userId: string, limit = 200) {
 // Kommentare eines Projekts mit Namen und Rolle der Verfasser
 export async function loadComments(jobId: string) {
   return db
-    .select({ id: jobComments.id, body: jobComments.body, createdAt: jobComments.createdAt, authorId: user.id, authorName: user.name, authorRole: user.role })
+    .select({
+      id: jobComments.id,
+      body: jobComments.body,
+      createdAt: jobComments.createdAt,
+      authorId: user.id,
+      authorName: user.name,
+      authorRole: user.role,
+    })
     .from(jobComments)
     .innerJoin(user, eq(jobComments.authorId, user.id))
     .where(eq(jobComments.jobId, jobId))

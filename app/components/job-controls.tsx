@@ -17,6 +17,7 @@ import {
 } from "@/app/actions";
 import { uploadFile } from "@/lib/upload";
 import { BilledToggle } from "./billed-toggle";
+import { MultiSelect } from "./multi-select";
 import { buttonPrimary, buttonSecondary, inputField } from "./ui";
 
 type Props = {
@@ -35,6 +36,8 @@ type Props = {
   isAdmin: boolean;
   isAssigned: boolean;
   staff: { id: string; name: string }[];
+  // Wird direkt über der Abrechnung angezeigt (z. B. "Projekt löschen")
+  beforeBilling?: React.ReactNode;
 };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -47,14 +50,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 // Alle Aktionen im Projekt-Panel, abhängig von Status und Rolle
-export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
+export function JobControls({ job, isAdmin, isAssigned, staff, beforeBilling }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [link, setLink] = useState("");
   const [editLink, setEditLink] = useState(job.reviewUrl ?? "");
-  const [newCutter, setNewCutter] = useState("");
 
   const canWork = isAssigned || isAdmin;
 
@@ -83,8 +85,6 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
     setProgress(null);
     router.refresh();
   }
-
-  const otherStaff = staff.filter((s) => !job.cutterIds.includes(s.id));
 
   return (
     <div className="space-y-6 border-t border-line pt-5">
@@ -190,28 +190,24 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
         </button>
       )}
 
-      {/* ---------- Cutter verwalten ---------- */}
-      {canWork && otherStaff.length > 0 && job.status !== "todo" && (
-        <Section title="Cutter hinzufügen">
-          <div className="flex gap-2">
-            <select className={inputField} value={newCutter} onChange={(e) => setNewCutter(e.target.value)} disabled={busy}>
-              <option value="">Cutter wählen …</option>
-              {otherStaff.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <button
-              disabled={busy || !newCutter}
-              onClick={async () => {
-                if (await run(() => addCutter(job.id, newCutter))) setNewCutter("");
-              }}
-              className={buttonSecondary}
-            >
-              Hinzufügen
-            </button>
-          </div>
+      {/* ---------- Cutter verwalten (Mehrfachauswahl) ---------- */}
+      {canWork && job.status !== "todo" && (
+        <Section title="Cutter">
+          <MultiSelect
+            label="Cutter"
+            options={staff.map((s) => ({ value: s.id, label: s.name }))}
+            value={job.cutterIds}
+            // Entfernen dürfen nur Admins
+            locked={isAdmin ? [] : job.cutterIds}
+            placeholder="Cutter wählen …"
+            disabled={busy}
+            onChange={(next) => {
+              const added = next.find((id) => !job.cutterIds.includes(id));
+              const removed = job.cutterIds.find((id) => !next.includes(id));
+              if (added) run(() => addCutter(job.id, added));
+              else if (removed) run(() => removeCutter(job.id, removed));
+            }}
+          />
         </Section>
       )}
 
@@ -227,7 +223,9 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
         </Section>
       )}
 
-      {/* ---------- Nur Admins ---------- */}
+      {beforeBilling}
+
+      {/* ---------- Abrechnung (nur Admins, ganz unten) ---------- */}
       {isAdmin && (
         <Section title="Abrechnung">
           <div className="flex flex-wrap gap-x-6 gap-y-1">
@@ -240,23 +238,6 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
               Cutter abgerechnet
             </label>
           </div>
-          {job.cutterIds.length > 0 && (
-            <div className="flex flex-wrap gap-2 pt-1">
-              {staff
-                .filter((s) => job.cutterIds.includes(s.id))
-                .map((s) => (
-                  <button
-                    key={s.id}
-                    disabled={busy}
-                    onClick={() => run(() => removeCutter(job.id, s.id))}
-                    className="rounded-md border border-line px-2 py-1 text-xs text-muted hover:text-danger"
-                    title="Cutter entfernen"
-                  >
-                    {s.name} entfernen
-                  </button>
-                ))}
-            </div>
-          )}
         </Section>
       )}
 

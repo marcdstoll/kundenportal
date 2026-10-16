@@ -173,13 +173,10 @@ export function CommentForm({ jobId }: { jobId: string }) {
         ref={ref}
         rows={2}
         className={inputField}
-        placeholder="Kommentar schreiben … (Strg+Enter zum Senden)"
+        placeholder="Kommentar schreiben …"
         value={text}
         disabled={busy}
         onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send();
-        }}
       />
       <div className="flex items-center justify-between gap-3">
         <ErrorText error={error} />

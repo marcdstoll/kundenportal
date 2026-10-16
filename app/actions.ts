@@ -1,11 +1,11 @@
 "use server";
 
 import { randomUUID } from "crypto";
-import { and, desc, eq, isNull, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { db } from "@/db";
 import { jobComments, jobCutters, jobFiles, jobs, notifications, user } from "@/db/schema";
-import { createFolder, createJobFolder, createUpload, deleteFile, deleteFolder, moveFile } from "@/lib/frameio";
+import { FrameioError, createFolder, createJobFolder, createUpload, deleteFile, deleteFolder, renameFolder } from "@/lib/frameio";
 import { requireUser } from "@/lib/session";
 import { nextPartTitle } from "@/lib/queries";
 import { canSeeJob, clientIdsOfCutter } from "@/lib/access";
@@ -49,12 +49,7 @@ async function requireCutterOf(jobId: string) {
 }
 
 // Status nur ändern, wenn das Projekt noch im erwarteten Status ist
-async function changeStatus(
-  jobId: string,
-  from: string,
-  to: string,
-  extra: Partial<typeof jobs.$inferInsert> = {}
-) {
+async function changeStatus(jobId: string, from: string, to: string, extra: Partial<typeof jobs.$inferInsert> = {}) {
   const updated = await db
     .update(jobs)
     .set({ status: to, updatedAt: new Date(), ...extra })
@@ -104,7 +99,8 @@ async function notify(
   actor: { id: string },
   type: "file" | "comment" | "storno_request" | "storno_decision",
   text: string,
-  fileId?: string
+  fileId?: string,
+  skip: Set<string> = new Set(),
 ) {
   const cutters = await cutterIdsOf(job.id);
   let recipients: string[];
@@ -112,11 +108,22 @@ async function notify(
   else if (type === "storno_decision") recipients = [job.customerId, ...cutters];
   else recipients = [job.customerId, ...(cutters.length > 0 ? cutters : await adminIds())];
 
-  const unique = [...new Set(recipients)].filter((id) => id !== actor.id);
+  const unique = [...new Set(recipients)].filter((id) => id !== actor.id && !skip.has(id));
+  unique.forEach((id) => skip.add(id));
   if (unique.length === 0) return;
-  await db.insert(notifications).values(
-    unique.map((userId) => ({ id: randomUUID(), userId, jobId: job.id, type, text, actorId: actor.id, fileId: fileId ?? null }))
-  );
+  await db
+    .insert(notifications)
+    .values(
+      unique.map((userId) => ({
+        id: randomUUID(),
+        userId,
+        jobId: job.id,
+        type,
+        text,
+        actorId: actor.id,
+        fileId: fileId ?? null,
+      })),
+    );
 }
 
 // Teilen sich mehrere Projekte (Duplikate) denselben Frame.io-Ordner?
@@ -129,32 +136,31 @@ async function folderShared(job: Job) {
   return others.length > 0;
 }
 
-// Finales Video beim Status "Online" aus "ToBeReviewed" in den Ordner "Online" verschieben.
+// Original + Duplikate ("Teil 2" …) teilen sich den Raw-Ordner und damit das Rohmaterial
+async function familyOf(job: Job): Promise<Job[]> {
+  if (!job.rawFolderId) return [job];
+  return db.select().from(jobs).where(eq(jobs.rawFolderId, job.rawFolderId));
+}
+
+// Beim Status "Online" heißt der Review-Ordner "Online" (bei Duplikaten mit Titel), sonst wieder "ToBeReviewed".
 // Schlägt das fehl (z. B. Frame.io kurz nicht erreichbar), bleibt der Status trotzdem gesetzt.
-async function moveFinalToOnline(jobId: string) {
+async function nameReviewFolder(jobId: string, online: boolean) {
   try {
     const job = await getJob(jobId);
-    const [latest] = await db
-      .select()
-      .from(jobFiles)
-      .where(and(eq(jobFiles.jobId, jobId), eq(jobFiles.kind, "fertig"), eq(jobFiles.uploaded, true)))
-      .orderBy(desc(jobFiles.createdAt))
-      .limit(1);
-    if (!latest || !job.frameioFolderId) return;
-    let folderId = job.onlineFolderId;
-    if (!folderId) {
-      // Duplikate teilen sich den Projektordner – und damit auch den Online-Ordner
-      const [sibling] = await db
-        .select({ id: jobs.onlineFolderId })
-        .from(jobs)
-        .where(and(eq(jobs.frameioFolderId, job.frameioFolderId), ne(jobs.id, job.id)));
-      folderId = sibling?.id ?? (await createFolder(job.frameioFolderId, "Online")).id;
-      await db.update(jobs).set({ onlineFolderId: folderId }).where(eq(jobs.frameioFolderId, job.frameioFolderId));
-    }
-    await moveFile(latest.frameioFileId, folderId);
+    if (!job.reviewFolderId) return;
+    const base = online ? "Online" : "ToBeReviewed";
+    const shared = !!job.parentJobId || (await folderShared(job));
+    await renameFolder(job.reviewFolderId, shared ? `${base} – ${job.title}` : base);
   } catch (e) {
-    console.error("Verschieben nach Online fehlgeschlagen:", e);
+    console.error("Review-Ordner konnte nicht umbenannt werden:", e);
   }
+}
+
+// Frame.io-Fehler beim Löschen verständlich an die Oberfläche geben
+function deleteError(e: unknown): never {
+  console.error("Löschen in Frame.io fehlgeschlagen:", e);
+  const code = e instanceof FrameioError ? ` (Fehler ${e.status})` : "";
+  throw new Error(`Frame.io hat das Löschen abgelehnt${code}. Es wurde nichts gelöscht – bitte später nochmal versuchen.`);
 }
 
 // ---------- Client: Projekt anlegen und hochladen ----------
@@ -176,12 +182,7 @@ export async function createJob(input: NewJobInput) {
     const platforms = [...new Set(input.platforms.map((p) => p.trim()).filter(Boolean))];
     if (platforms.length === 0) throw new Error("Bitte mindestens eine Plattform auswählen.");
 
-    const required = [
-      input.title,
-      input.videoLength,
-      input.content,
-      input.specialNotes,
-    ].map((v) => v.trim());
+    const required = [input.title, input.videoLength, input.content, input.specialNotes].map((v) => v.trim());
     if (required.some((v) => v.length === 0)) {
       throw new Error("Bitte alle Pflichtfelder ausfüllen.");
     }
@@ -227,11 +228,7 @@ export async function createJob(input: NewJobInput) {
 // Upload-Links für eine Datei holen
 // "roh": Rohmaterial – vom Kunden oder Staff, in jedem Status (danach gilt es als "nachgereicht")
 // "fertig": fertiges Video (vom zugeordneten Cutter, während "Wird jetzt gemacht")
-export async function requestUpload(
-  jobId: string,
-  kind: "roh" | "fertig",
-  file: { name: string; size: number }
-) {
+export async function requestUpload(jobId: string, kind: "roh" | "fertig", file: { name: string; size: number }) {
   return run(async () => {
     const me = await requireUser();
     const job = await getJob(jobId);
@@ -286,7 +283,14 @@ export async function confirmUpload(fileRowId: string) {
     await assertCanSee(me, job);
     if (file.uploadedBy && file.uploadedBy !== me.id && me.role !== "admin") throw new Error("Keine Berechtigung.");
     await db.update(jobFiles).set({ uploaded: true }).where(eq(jobFiles.id, fileRowId));
-    if (file.late) {
+    if (file.late && file.kind === "roh") {
+      // Rohmaterial gilt für alle Teile (Duplikate) – Beteiligte aller Teile informieren, jede Person nur einmal
+      const notified = new Set<string>();
+      for (const part of await familyOf(job)) {
+        await notify(part, me, "file", `${me.name} hat „${file.name}“ nachgereicht`, file.id, notified);
+      }
+      refresh();
+    } else if (file.late) {
       await notify(job, me, "file", `${me.name} hat „${file.name}“ nachgereicht`, file.id);
       refresh();
     }
@@ -409,7 +413,10 @@ export async function updateReviewUrl(jobId: string, reviewUrl: string) {
     await requireCutterOf(jobId);
     const url = reviewUrl.trim();
     if (url && !/^https?:\/\//.test(url)) throw new Error("Bitte einen gültigen Link einfügen.");
-    await db.update(jobs).set({ reviewUrl: url || null }).where(eq(jobs.id, jobId));
+    await db
+      .update(jobs)
+      .set({ reviewUrl: url || null })
+      .where(eq(jobs.id, jobId));
     refresh();
     return null;
   });
@@ -442,7 +449,7 @@ export async function markOnline(jobId: string) {
   return run(async () => {
     await requireUser("admin");
     await changeStatus(jobId, "ready_to_post", "online");
-    await moveFinalToOnline(jobId);
+    await nameReviewFolder(jobId, true);
     refresh();
     return null;
   });
@@ -455,7 +462,8 @@ export async function setStatus(jobId: string, status: string) {
     if (!(STATUSES as readonly string[]).includes(status)) throw new Error("Unbekannter Status.");
     const before = await getJob(jobId);
     await db.update(jobs).set({ status, updatedAt: new Date() }).where(eq(jobs.id, jobId));
-    if (status === "online" && before.status !== "online") await moveFinalToOnline(jobId);
+    if (status === "online" && before.status !== "online") await nameReviewFolder(jobId, true);
+    if (status !== "online" && before.status === "online") await nameReviewFolder(jobId, false);
     refresh();
     return null;
   });
@@ -488,9 +496,7 @@ export async function setBilled(jobId: string, value: boolean, which: "cutter" |
 export async function removeCutter(jobId: string, cutterId: string) {
   return run(async () => {
     await requireUser("admin");
-    await db
-      .delete(jobCutters)
-      .where(and(eq(jobCutters.jobId, jobId), eq(jobCutters.userId, cutterId)));
+    await db.delete(jobCutters).where(and(eq(jobCutters.jobId, jobId), eq(jobCutters.userId, cutterId)));
     refresh();
     return null;
   });
@@ -509,7 +515,10 @@ export async function setPublishDate(jobId: string, date: string) {
       throw new Error("Ein Datum kann erst ab „Ready to post“ eingetragen werden.");
     }
     if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Ungültiges Datum.");
-    await db.update(jobs).set({ publishDate: date || null }).where(eq(jobs.id, jobId));
+    await db
+      .update(jobs)
+      .set({ publishDate: date || null })
+      .where(eq(jobs.id, jobId));
     refresh();
     return null;
   });
@@ -589,15 +598,7 @@ export async function duplicateJob(jobId: string, title?: string) {
       parentJobId: job.parentJobId ?? job.id,
       submittedAt: new Date(),
     });
-    const raw = await db
-      .select()
-      .from(jobFiles)
-      .where(and(eq(jobFiles.jobId, jobId), eq(jobFiles.kind, "roh"), eq(jobFiles.uploaded, true)));
-    if (raw.length > 0) {
-      await db.insert(jobFiles).values(
-        raw.map((f) => ({ ...f, id: randomUUID(), jobId: id, late: false, createdAt: f.createdAt }))
-      );
-    }
+    // Rohmaterial wird nicht kopiert: alle Teile zeigen die Dateien aus dem gemeinsamen Raw-Ordner (lib/queries.ts)
     refresh();
     return { jobId: id, title: newTitle };
   });
@@ -618,7 +619,16 @@ export async function deleteJob(jobId: string) {
       throw new Error("Löschen geht nur in „To Dos“. Danach kannst du eine Stornierung anfragen.");
     }
     if (job.frameioFolderId && !(await folderShared(job))) {
-      await deleteFolder(job.frameioFolderId).catch((e) => console.error("Frame.io-Ordner nicht gelöscht:", e));
+      await deleteFolder(job.frameioFolderId).catch(deleteError);
+    } else {
+      // Ordner wird von anderen Teilen weiter genutzt: dort nachgereichtes Rohmaterial einem anderen Teil zuordnen
+      const sibling = (await familyOf(job)).find((j) => j.id !== job.id);
+      if (sibling) {
+        await db
+          .update(jobFiles)
+          .set({ jobId: sibling.id })
+          .where(and(eq(jobFiles.jobId, jobId), eq(jobFiles.kind, "roh")));
+      }
     }
     await db.delete(jobs).where(eq(jobs.id, jobId));
     refresh();
@@ -626,7 +636,7 @@ export async function deleteJob(jobId: string) {
   });
 }
 
-// Einzelne Datei löschen (nur in To-do) – in Frame.io nur, wenn kein Duplikat sie noch nutzt
+// Einzelne Rohdatei löschen (nur solange kein Teil in Bearbeitung ist) – verschwindet bei Original und Duplikaten
 export async function deleteJobFile(fileRowId: string) {
   return run(async () => {
     const me = await requireUser("kunde", "admin");
@@ -634,16 +644,27 @@ export async function deleteJobFile(fileRowId: string) {
     if (!file) throw new Error("Datei nicht gefunden.");
     const job = await getJob(file.jobId);
     await assertCanSee(me, job);
-    if (!DELETABLE.includes(job.status)) throw new Error("Dateien lassen sich nur in „To Dos“ löschen.");
     if (file.kind !== "roh") throw new Error("Nur Rohmaterial kann gelöscht werden.");
-    const sameFile = await db
-      .select({ id: jobFiles.id })
-      .from(jobFiles)
-      .where(and(eq(jobFiles.frameioFileId, file.frameioFileId), ne(jobFiles.id, file.id)));
-    if (sameFile.length === 0) {
-      await deleteFile(file.frameioFileId).catch((e) => console.error("Frame.io-Datei nicht gelöscht:", e));
+    const family = await familyOf(job);
+    const busy = family.find((j) => !DELETABLE.includes(j.status));
+    if (busy) {
+      throw new Error(
+        family.length === 1
+          ? "Dateien lassen sich nur in „To Dos“ löschen."
+          : `„${busy.title}“ nutzt dieses Material schon – löschen geht nicht mehr.`,
+      );
     }
-    await db.delete(jobFiles).where(eq(jobFiles.id, fileRowId));
+    await deleteFile(file.frameioFileId).catch(deleteError);
+    // Alle Einträge dieser Datei entfernen (auch ältere Kopien bei Duplikaten)
+    await db.delete(jobFiles).where(
+      and(
+        eq(jobFiles.frameioFileId, file.frameioFileId),
+        inArray(
+          jobFiles.jobId,
+          family.map((j) => j.id),
+        ),
+      ),
+    );
     refresh();
     return null;
   });
@@ -666,7 +687,7 @@ export async function requestCancel(jobId: string, reason: string) {
       job,
       me,
       "storno_request",
-      `${me.name} möchte „${job.title}“ stornieren – Arbeit bitte pausieren${why ? `. Grund: ${why}` : ""}`
+      `${me.name} möchte „${job.title}“ stornieren – Arbeit bitte pausieren${why ? `. Grund: ${why}` : ""}`,
     );
     refresh();
     return null;
@@ -692,7 +713,7 @@ export async function decideCancel(jobId: string, approve: boolean) {
       job,
       me,
       "storno_decision",
-      approve ? `„${job.title}“ wurde storniert.` : `Stornierung von „${job.title}“ abgelehnt – die Arbeit geht weiter.`
+      approve ? `„${job.title}“ wurde storniert.` : `Stornierung von „${job.title}“ abgelehnt – die Arbeit geht weiter.`,
     );
     refresh();
     return null;

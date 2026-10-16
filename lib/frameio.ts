@@ -53,10 +53,7 @@ async function saveTokens(t: TokenResponse, oldRefreshToken?: string) {
     expiresAt: new Date(Date.now() + (seconds - 60) * 1000),
     updatedAt: new Date(),
   };
-  await db
-    .insert(frameioConnection)
-    .values(values)
-    .onConflictDoUpdate({ target: frameioConnection.id, set: values });
+  await db.insert(frameioConnection).values(values).onConflictDoUpdate({ target: frameioConnection.id, set: values });
 }
 
 // Einmal-Code von Adobe gegen Zugangsschlüssel tauschen
@@ -66,19 +63,13 @@ export async function connectWithCode(code: string) {
 
 // Wurde Frame.io schon einmal verbunden?
 export async function isConnected() {
-  const [conn] = await db
-    .select({ id: frameioConnection.id })
-    .from(frameioConnection)
-    .where(eq(frameioConnection.id, "default"));
+  const [conn] = await db.select({ id: frameioConnection.id }).from(frameioConnection).where(eq(frameioConnection.id, "default"));
   return !!conn;
 }
 
 // Gültigen Zugangsschlüssel holen, bei Bedarf automatisch erneuern
 async function getAccessToken() {
-  const [conn] = await db
-    .select()
-    .from(frameioConnection)
-    .where(eq(frameioConnection.id, "default"));
+  const [conn] = await db.select().from(frameioConnection).where(eq(frameioConnection.id, "default"));
   if (!conn) throw new Error("Frame.io ist noch nicht verbunden.");
   if (conn.expiresAt > new Date()) return conn.accessToken;
 
@@ -98,13 +89,24 @@ export async function frameio(path: string, init: RequestInit = {}) {
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
+      // Content-Type nur, wenn wirklich etwas mitgeschickt wird (z. B. nicht beim Löschen)
+      ...(init.body ? { "Content-Type": "application/json" } : {}),
       ...(init.headers as Record<string, string>),
     },
   });
-  if (!res.ok) throw new Error(`Frame.io-Fehler ${res.status} bei ${path}: ${await res.text()}`);
-  if (res.status === 204) return null; // z. B. nach dem Löschen: keine Antwort
-  return res.json();
+  if (!res.ok) throw new FrameioError(res.status, `Frame.io-Fehler ${res.status} bei ${path}: ${await res.text()}`);
+  // Manche Antworten (z. B. nach dem Löschen) haben keinen Inhalt
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+export class FrameioError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+  }
 }
 
 // ---------- Projekt, Ordner, Uploads ----------
@@ -120,12 +122,8 @@ async function getTarget(): Promise<Target> {
   for (const account of accounts.data) {
     const workspaces = await frameio(`/accounts/${account.id}/workspaces`);
     for (const workspace of workspaces.data) {
-      const projects = await frameio(
-        `/accounts/${account.id}/workspaces/${workspace.id}/projects?page_size=100`
-      );
-      const project = projects.data.find(
-        (p: { name: string }) => p.name === PROJECT_NAME
-      );
+      const projects = await frameio(`/accounts/${account.id}/workspaces/${workspace.id}/projects?page_size=100`);
+      const project = projects.data.find((p: { name: string }) => p.name === PROJECT_NAME);
       if (project) {
         cachedTarget = { accountId: account.id, rootFolderId: project.root_folder_id };
         return cachedTarget;
@@ -190,13 +188,35 @@ export async function moveFile(fileId: string, folderId: string) {
   });
 }
 
-// Datei bzw. Ordner (samt Inhalt) in Frame.io löschen
+// Datei bzw. Ordner (samt Inhalt) in Frame.io löschen.
+// Schon weg (404) gilt als erledigt; andere Fehler werden weitergereicht, damit das Portal sie anzeigt.
 export async function deleteFile(fileId: string) {
   const { accountId } = await getTarget();
-  await frameio(`/accounts/${accountId}/files/${fileId}`, { method: "DELETE" });
+  try {
+    await frameio(`/accounts/${accountId}/files/${fileId}`, { method: "DELETE" });
+    console.log(`[Frame.io] Datei gelöscht: ${fileId}`);
+  } catch (e) {
+    if (e instanceof FrameioError && e.status === 404) return;
+    throw e;
+  }
 }
 
 export async function deleteFolder(folderId: string) {
   const { accountId } = await getTarget();
-  await frameio(`/accounts/${accountId}/folders/${folderId}`, { method: "DELETE" });
+  try {
+    await frameio(`/accounts/${accountId}/folders/${folderId}`, { method: "DELETE" });
+    console.log(`[Frame.io] Ordner gelöscht: ${folderId}`);
+  } catch (e) {
+    if (e instanceof FrameioError && e.status === 404) return;
+    throw e;
+  }
+}
+
+// Ordner umbenennen (z. B. "ToBeReviewed" → "Online", sobald das Video veröffentlicht ist)
+export async function renameFolder(folderId: string, name: string) {
+  const { accountId } = await getTarget();
+  await frameio(`/accounts/${accountId}/folders/${folderId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ data: { name } }),
+  });
 }

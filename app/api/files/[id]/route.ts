@@ -26,7 +26,12 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/files/[id]">
   // Kunden: eigene Rohdateien immer, das fertige Video erst ab "Ready to post".
   // Cutter: nur Projekte freigegebener Kunden. Admins: alles.
   const customerMayView = row.file.kind === "roh" || CUSTOMER_VIDEO_STATUSES.includes(row.job.status);
-  const allowed = (await canSeeJob(me, row.job)) && (role !== "kunde" || customerMayView);
+  let allowed = (await canSeeJob(me, row.job)) && (role !== "kunde" || customerMayView);
+  // Rohmaterial gehört allen Teilen (Duplikaten) mit demselben Raw-Ordner
+  if (!allowed && row.file.kind === "roh" && row.job.rawFolderId) {
+    const family = await db.select().from(jobs).where(eq(jobs.rawFolderId, row.job.rawFolderId));
+    for (const part of family) if (await canSeeJob(me, part)) allowed = true;
+  }
   if (!allowed) return new Response("Keine Berechtigung", { status: 403 });
 
   try {
