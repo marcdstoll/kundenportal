@@ -157,7 +157,15 @@ function checkUrl(value: string) {
 
 export async function updateProfile(
   userId: string,
-  input: { name: string; phone: string; links: string; notes: string; welcomeVideo?: string; logo?: string | null },
+  input: {
+    name: string;
+    phone: string;
+    links: string;
+    notes: string;
+    birthday?: string;
+    welcomeVideo?: string;
+    logo?: string | null;
+  },
 ) {
   return run(async () => {
     await requireUser("admin");
@@ -167,11 +175,20 @@ export async function updateProfile(
     if (input.logo && (!input.logo.startsWith("data:image/") || input.logo.length > 200_000)) {
       throw new Error("Das Logo ist zu groß oder kein Bild.");
     }
+    // Geburtstag: leer = entfernen, sonst echtes Datum in der Vergangenheit
+    const birthday = input.birthday?.trim() || null;
+    if (birthday) {
+      const d = new Date(`${birthday}T12:00:00`);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(birthday) || isNaN(d.getTime()) || d > new Date() || d.getFullYear() < 1900) {
+        throw new Error("Bitte ein gültiges Geburtsdatum eingeben.");
+      }
+    }
     await db.update(user).set({ name, updatedAt: new Date() }).where(eq(user.id, userId));
     const values = {
       phone: input.phone.trim() || null,
       links: input.links.trim() || null,
       notes: input.notes.trim() || null,
+      ...(input.birthday !== undefined ? { birthday } : {}),
       ...(input.welcomeVideo !== undefined ? { welcomeVideo: checkUrl(input.welcomeVideo) } : {}),
       ...(input.logo !== undefined ? { logo: input.logo } : {}),
       updatedAt: new Date(),

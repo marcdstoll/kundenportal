@@ -154,6 +154,8 @@ export const profiles = pgTable("profiles", {
   notes: text("notes"),
   // Persönliche Video-Begrüßung (Link), wird vor dem Onboarding-Video gezeigt
   welcomeVideo: text("welcome_video"),
+  // Geburtsdatum ("YYYY-MM-DD"), optional
+  birthday: date("birthday"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

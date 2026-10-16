@@ -233,6 +233,7 @@ export function ProfileForm({
     phone: string | null;
     links: string | null;
     notes: string | null;
+    birthday: string | null;
   };
   logoUrl: string | null;
   showNotes: boolean;
@@ -241,6 +242,7 @@ export function ProfileForm({
   const [phone, setPhone] = useState(person.phone ?? "");
   const [links, setLinks] = useState(person.links ?? "");
   const [notes, setNotes] = useState(person.notes ?? "");
+  const [birthday, setBirthday] = useState(person.birthday ?? "");
   // undefined = Logo nicht geändert, null = entfernen, string = neues Logo
   const [logo, setLogo] = useState<string | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -255,7 +257,7 @@ export function ProfileForm({
         e.preventDefault();
         setBusy(true);
         setError(null);
-        const res = await updateProfile(person.id, { name, phone, links, notes, logo });
+        const res = await updateProfile(person.id, { name, phone, links, notes, birthday, logo });
         setBusy(false);
         if (!res.ok) return setError(res.error);
         setSaved(true);
@@ -297,6 +299,17 @@ export function ProfileForm({
         <label className="space-y-1 text-sm">
           <span className="text-muted">Telefon</span>
           <input className={inputField} value={phone} onChange={(e) => setPhone(e.target.value)} disabled={busy} />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="text-muted">Geburtstag</span>
+          <input
+            type="date"
+            className={inputField}
+            value={birthday}
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => setBirthday(e.target.value)}
+            disabled={busy}
+          />
         </label>
       </div>
       {showNotes && (

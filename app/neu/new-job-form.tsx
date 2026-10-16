@@ -309,7 +309,7 @@ export function NewJobForm({ clients, isStaff }: Props) {
             <b className="block">
               {files.length === 1 ? "Deine Datei ist" : `Deine ${files.length} Dateien sind`} noch nicht hochgeladen.
             </b>
-            Der Upload startet erst, wenn du unten auf <b>„Absenden & hochladen“</b> klickst. Lass das Fenster dann offen, bis
+            Der Upload startet erst, wenn du unten auf <b>„Projekt absenden“</b> klickst. Lass das Fenster dann offen, bis
             alles fertig ist.
           </span>
         </div>
@@ -319,11 +319,7 @@ export function NewJobForm({ clients, isStaff }: Props) {
         disabled={busy}
         className="w-full rounded-md bg-accent py-2.5 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-40"
       >
-        {busy
-          ? "Wird hochgeladen – Fenster bitte offen lassen"
-          : files.length > 0
-            ? `Absenden & ${files.length === 1 ? "Datei" : `${files.length} Dateien`} hochladen`
-            : "Projekt absenden"}
+        {busy ? "Wird hochgeladen – Fenster bitte offen lassen" : "Projekt absenden"}
       </button>
     </form>
   );

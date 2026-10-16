@@ -54,7 +54,8 @@ export function Calendar({ month, jobs, hrefFor, monthHref, showClient, lockReas
     isToday: iso(d) === today,
   }));
   const items: CalendarItem[] = jobs
-    .filter((j) => j.publishDate)
+    // Stornierte Projekte erscheinen nicht im Kalender
+    .filter((j) => j.publishDate && j.status !== "storniert")
     .map((j) => ({
       id: j.id,
       title: j.title,

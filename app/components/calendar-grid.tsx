@@ -1,6 +1,6 @@
 "use client";
 
-import { useOptimistic, useState, useTransition } from "react";
+import { useEffect, useOptimistic, useState, useTransition } from "react";
 import Link from "next/link";
 import { setPublishDate } from "@/app/actions";
 import { statusColor } from "@/lib/status";
@@ -33,6 +33,22 @@ export function CalendarGrid({ days, items, showClient }: { days: CalendarDay[];
   const [overDay, setOverDay] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Ziehen sauber beenden: Die gezogene Karte wird beim Ablegen in einen anderen Tag neu aufgebaut,
+  // deshalb erreicht ihr eigenes "dragend" React nicht mehr – sie bliebe sonst ausgegraut.
+  // Darum hören wir zusätzlich am ganzen Fenster auf das Ende des Ziehens.
+  useEffect(() => {
+    const reset = () => {
+      setDraggingId(null);
+      setOverDay(null);
+    };
+    window.addEventListener("dragend", reset);
+    window.addEventListener("drop", reset);
+    return () => {
+      window.removeEventListener("dragend", reset);
+      window.removeEventListener("drop", reset);
+    };
+  }, []);
 
   function drop(id: string, date: string) {
     const item = optimisticItems.find((it) => it.id === id);
@@ -83,6 +99,7 @@ export function CalendarGrid({ days, items, showClient }: { days: CalendarDay[];
                 onDrop={(e) => {
                   const id = e.dataTransfer.getData(DRAG_TYPE);
                   setOverDay(null);
+                  setDraggingId(null);
                   if (!id) return;
                   e.preventDefault();
                   drop(id, d.key);
