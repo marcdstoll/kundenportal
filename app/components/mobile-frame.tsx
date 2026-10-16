@@ -6,11 +6,11 @@ import Link from "next/link";
 // Seitenleiste auf dem Desktop, Kopfzeile + Aufklappmenü auf dem Handy.
 // Klick auf einen Link im Menü schließt es wieder.
 export function MobileFrame({
-  unread,
+  inbox,
   sidebar,
   children,
 }: {
-  unread: number;
+  inbox: React.ReactNode;
   sidebar: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -25,17 +25,7 @@ export function MobileFrame({
           Contenthaus
         </Link>
         <div className="flex items-center gap-1">
-          <Link href="/inbox" className="relative rounded-md px-2.5 py-1.5 text-sm text-muted hover:bg-raised" aria-label="Inbox">
-            Inbox
-            {unread > 0 && (
-              <span
-                className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full px-1 text-center text-[10px] font-semibold leading-4 text-white"
-                style={{ background: "var(--rec)" }}
-              >
-                {unread > 99 ? "99+" : unread}
-              </span>
-            )}
-          </Link>
+          {inbox}
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}

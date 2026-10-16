@@ -38,7 +38,6 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         <aside className="space-y-8">
           <section className="space-y-2">
             <h2 className="text-sm font-medium">Betreuende Cutter</h2>
-            <p className="text-xs text-muted">Nur freigegebene Cutter sehen die Projekte dieses Kunden.</p>
             <div className="space-y-1.5">
               {cutters.map((c) => (
                 <AssignmentToggle key={c.id} cutterId={c.id} clientId={id} on={assigned.has(c.id)} label={c.name} />

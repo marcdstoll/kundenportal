@@ -92,24 +92,24 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
       {job.status === "todo" && !job.paused && (
         <Section title="Projekt übernehmen">
           <div className="grid grid-cols-2 gap-2">
-            <button disabled={busy} onClick={() => run(() => reserveJob(job.id))} className={buttonSecondary} title="Kommt in deine Warteschlange, du startest später">
+            <button
+              disabled={busy}
+              onClick={() => run(() => reserveJob(job.id))}
+              className={buttonSecondary}
+              title="Kommt in deine Warteschlange, du startest später"
+            >
               Reservieren
             </button>
             <button disabled={busy} onClick={() => run(() => claimJob(job.id))} className={buttonPrimary}>
               Jetzt starten
             </button>
           </div>
-          <p className="text-xs text-muted">Reservieren legt es in deine Warteschlange – andere sehen, dass es vergeben ist.</p>
         </Section>
       )}
 
       {job.status === "warteschlange" && canWork && !job.paused && (
         <Section title={job.hasVideo ? "Änderungen umsetzen" : "Aus der Warteschlange starten"}>
-          {job.hasVideo && (
-            <p className="text-xs text-muted">
-              Das Projekt wurde zurückgeschickt. Feedback steht als Kommentar am Video in Frame.io.
-            </p>
-          )}
+          {job.hasVideo && <p className="text-xs text-muted">Zurückgeschickt – Feedback steht in Frame.io.</p>}
           <button disabled={busy} onClick={() => run(() => startJob(job.id))} className={`${buttonPrimary} w-full`}>
             Jetzt starten
           </button>
@@ -118,20 +118,19 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
 
       {job.status === "warteschlange" && !canWork && (
         <p className="rounded-lg border border-line p-3 text-sm text-muted">
-          Reserviert von {staff.filter((s) => job.cutterIds.includes(s.id)).map((s) => s.name).join(", ") || "einem Cutter"}.
+          Reserviert von{" "}
+          {staff
+            .filter((s) => job.cutterIds.includes(s.id))
+            .map((s) => s.name)
+            .join(", ") || "einem Cutter"}
+          .
         </p>
       )}
 
       {job.status === "in_arbeit" && canWork && !job.paused && (
         <Section title={job.hasVideo ? "Neue Version hochladen" : "Video hochladen"}>
-          {job.hasVideo && (
-            <p className="text-xs text-muted">Lade die überarbeitete Version hoch – die alte bleibt in Frame.io erhalten.</p>
-          )}
           <label className="block cursor-pointer space-y-1.5 rounded-lg border border-dashed border-line p-4 text-sm transition-colors hover:bg-raised/50">
             <span className="block font-medium">Fertiges Video auswählen</span>
-            <span className="block text-xs text-muted">
-              Landet in Frame.io im Ordner „ToBeReviewed“. Der Review-Link wird automatisch gesetzt.
-            </span>
             <input
               type="file"
               accept="video/*"
@@ -150,8 +149,18 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
           </label>
           <p className="text-center text-xs text-muted">oder vorhandenen Review-Link einfügen</p>
           <div className="flex gap-2">
-            <input className={inputField} placeholder="https://f.io/…" value={link} onChange={(e) => setLink(e.target.value)} disabled={busy} />
-            <button disabled={busy || link.trim() === ""} onClick={() => run(() => submitForReview(job.id, link))} className={buttonSecondary}>
+            <input
+              className={inputField}
+              placeholder="https://f.io/…"
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+              disabled={busy}
+            />
+            <button
+              disabled={busy || link.trim() === ""}
+              onClick={() => run(() => submitForReview(job.id, link))}
+              className={buttonSecondary}
+            >
               Senden
             </button>
           </div>
@@ -159,14 +168,11 @@ export function JobControls({ job, isAdmin, isAssigned, staff }: Props) {
       )}
 
       {job.status === "feedback" && !isAdmin && (
-        <p className="rounded-lg border border-line p-3 text-sm text-muted">
-          Die Admins schauen sich das Video an. Feedback kommt als Kommentar in Frame.io.
-        </p>
+        <p className="rounded-lg border border-line p-3 text-sm text-muted">Wartet auf Feedback.</p>
       )}
 
       {job.status === "feedback" && isAdmin && (
         <Section title="Feedback">
-          <p className="text-xs text-muted">Kommentare direkt am Video in Frame.io hinterlassen, dann entscheiden:</p>
           <div className="grid grid-cols-2 gap-2">
             <button disabled={busy} onClick={() => run(() => sendBack(job.id))} className={buttonSecondary}>
               Zurück in Warteschlange

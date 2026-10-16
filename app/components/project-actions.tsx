@@ -223,7 +223,6 @@ export function DuplicateForm({ jobId, suggestion, hrefFor }: { jobId: string; s
           Duplizieren
         </button>
       </div>
-      <p className="text-xs text-muted">Übernimmt Briefing und Rohmaterial. Jeder Teil ist einzeln abrechenbar.</p>
       <ErrorText error={error} />
     </div>
   );

@@ -31,9 +31,6 @@ export default async function CutterDetailPage({ params }: { params: Promise<{ i
           {cutter.role === "cutter" && (
             <section className="space-y-2">
               <h2 className="text-sm font-medium">Freigegebene Kunden</h2>
-              <p className="text-xs text-muted">
-                Der Cutter sieht nur Projekte dieser Kunden (und Projekte, denen er direkt zugeordnet ist).
-              </p>
               <div className="space-y-1.5">
                 {clients.map((c) => (
                   <AssignmentToggle

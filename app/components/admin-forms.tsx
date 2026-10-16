@@ -60,7 +60,6 @@ export function InviteLinkBox({
           {copied ? "Kopiert ✓" : "Kopieren"}
         </button>
       </div>
-      <p className="text-xs text-muted">Über den Link setzt die Person ihr Passwort und ist sofort angemeldet.</p>
     </div>
   );
 }
@@ -217,7 +216,6 @@ export function ProfileForm({
     phone: string | null;
     links: string | null;
     notes: string | null;
-    welcomeVideo: string | null;
   };
   logoUrl: string | null;
   showNotes: boolean;
@@ -226,7 +224,6 @@ export function ProfileForm({
   const [phone, setPhone] = useState(person.phone ?? "");
   const [links, setLinks] = useState(person.links ?? "");
   const [notes, setNotes] = useState(person.notes ?? "");
-  const [welcomeVideo, setWelcomeVideo] = useState(person.welcomeVideo ?? "");
   // undefined = Logo nicht geändert, null = entfernen, string = neues Logo
   const [logo, setLogo] = useState<string | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -241,7 +238,7 @@ export function ProfileForm({
         e.preventDefault();
         setBusy(true);
         setError(null);
-        const res = await updateProfile(person.id, { name, phone, links, notes, welcomeVideo, logo });
+        const res = await updateProfile(person.id, { name, phone, links, notes, logo });
         setBusy(false);
         if (!res.ok) return setError(res.error);
         setSaved(true);
@@ -297,16 +294,6 @@ export function ProfileForm({
           </label>
         </>
       )}
-      <label className="block space-y-1 text-sm">
-        <span className="text-muted">Persönliche Video-Begrüßung (optional)</span>
-        <input
-          className={inputField}
-          placeholder="https://…"
-          value={welcomeVideo}
-          onChange={(e) => setWelcomeVideo(e.target.value)}
-          disabled={busy}
-        />
-      </label>
       <ErrorText error={error} />
       <div className="flex items-center justify-end gap-3">
         {saved && <span className="text-sm text-[var(--st-online)]">Gespeichert ✓</span>}

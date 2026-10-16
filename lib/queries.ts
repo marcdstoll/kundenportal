@@ -121,7 +121,7 @@ export async function unreadByJob(userId: string) {
   return { jobs: jobsMap, files, total: rows.length };
 }
 
-export async function loadInbox(userId: string) {
+export async function loadInbox(userId: string, limit = 200) {
   return db
     .select({
       id: notifications.id,
@@ -137,7 +137,7 @@ export async function loadInbox(userId: string) {
     .innerJoin(jobs, eq(notifications.jobId, jobs.id))
     .where(eq(notifications.userId, userId))
     .orderBy(desc(notifications.createdAt))
-    .limit(200);
+    .limit(limit);
 }
 
 // Kommentare eines Projekts mit Namen und Rolle der Verfasser

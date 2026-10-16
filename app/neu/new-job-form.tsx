@@ -236,7 +236,6 @@ export function NewJobForm({ clients, isStaff }: Props) {
           </span>
           <span className="block text-xs text-muted">
             Mehrere Dateien möglich, auch große Videos.
-            {isStaff && " Für Admins und Cutter optional."}
           </span>
           <input
             key={fileInputKey}

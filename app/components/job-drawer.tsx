@@ -1,5 +1,14 @@
 import Link from "next/link";
-import { clientLogos, loadComments, loadJob, listUsers, nextPartTitle, unreadByJob, type JobFileView, type JobView } from "@/lib/queries";
+import {
+  clientLogos,
+  loadComments,
+  loadJob,
+  listUsers,
+  nextPartTitle,
+  unreadByJob,
+  type JobFileView,
+  type JobView,
+} from "@/lib/queries";
 import { CUSTOMER_VIDEO_STATUSES, statusColor } from "@/lib/status";
 import { canSeeJob } from "@/lib/access";
 import { Avatar, ExternalLink, FormatTag, Person, StatusBadge, formatDate, formatDateTime, formatSize, shortLink } from "./ui";
@@ -175,7 +184,7 @@ async function Comments({ jobId, meId, canWrite }: { jobId: string; meId: string
   const comments = await loadComments(jobId);
   return (
     <Section title={`Kommentare${comments.length ? ` (${comments.length})` : ""}`}>
-      {comments.length === 0 && <p className="text-sm text-muted">Noch keine Kommentare. Änderungswünsche gerne hier hinein.</p>}
+      {comments.length === 0 && <p className="text-sm text-muted">Noch keine Kommentare.</p>}
       <ul className="space-y-3">
         {comments.map((c) => (
           <li key={c.id} className="flex gap-2.5">
@@ -215,7 +224,12 @@ export async function JobDrawer({
   closeHref: string;
   me: { id: string; role: string };
 }) {
-  const [job, staff, unread, logos] = await Promise.all([loadJob(jobId), listUsers("cutter", "admin"), unreadByJob(me.id), clientLogos()]);
+  const [job, staff, unread, logos] = await Promise.all([
+    loadJob(jobId),
+    listUsers("cutter", "admin"),
+    unreadByJob(me.id),
+    clientLogos(),
+  ]);
   if (!job || !(await canSeeJob(me, job))) return null;
 
   const isAdmin = me.role === "admin";
@@ -374,7 +388,6 @@ export async function CustomerJobDrawer({
       {CUSTOMER_VIDEO_STATUSES.includes(job.status) && (
         <Section title="Wann wird es veröffentlicht?">
           <PublishDateField jobId={job.id} value={job.publishDate} />
-          <p className="text-xs text-muted">Das Datum erscheint im Kalender, damit das Team Bescheid weiß.</p>
         </Section>
       )}
 
@@ -383,14 +396,12 @@ export async function CustomerJobDrawer({
       <Section title="Deine Dateien">
         <FileList files={rawFiles} unread={unread.files} canDownload canDelete={canDelete} />
         {job.status !== "storniert" && <AddFiles jobId={job.id} label="Weiteres Material hochladen" />}
-        <p className="text-xs text-muted">Alles landet im selben Projektordner – du kannst jederzeit etwas nachreichen.</p>
       </Section>
 
       <Comments jobId={job.id} meId={viewerId} canWrite={job.status !== "storniert"} />
 
       {canDelete && (
         <Section title="Projekt löschen">
-          <p className="text-xs text-muted">Solange noch niemand angefangen hat, kannst du das Projekt komplett löschen.</p>
           <DeleteJobButton jobId={job.id} title={job.title} afterHref={closeHref} />
         </Section>
       )}

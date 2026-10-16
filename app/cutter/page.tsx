@@ -81,9 +81,6 @@ export default async function CutterPage() {
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-xs text-muted">
-          Aktiv heißt: gerade verfügbar für neue Projekte. Jeder Cutter kann das unter „Meine Projekte“ selbst umschalten.
-        </p>
       </div>
     </>
   );

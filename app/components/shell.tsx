@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { SignOutButton } from "@/app/dashboard/sign-out-button";
-import { clientLogos, listUsers, unreadByJob } from "@/lib/queries";
+import { clientLogos, listUsers, loadInbox, unreadByJob } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/session";
 import { Avatar, personHue } from "./ui";
 import { NavLinks, type NavItem } from "./nav-links";
 import { ThemeToggle } from "./theme-toggle";
 import { MobileFrame } from "./mobile-frame";
+import { InboxButton, type InboxItem } from "./inbox-button";
 
 const ROLE_LABELS: Record<string, string> = {
   kunde: "Client",
@@ -13,11 +14,9 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
 };
 
-function navFor(role: string, unread: number): NavItem[] {
-  const inbox: NavItem = { href: "/inbox", label: "Inbox", badge: unread };
+function navFor(role: string): NavItem[] {
   if (role === "kunde") {
     return [
-      inbox,
       { href: "/kunde", label: "Projekte" },
       { href: "/kalender", label: "Kalender" },
       { href: "/neu", label: "Neues Projekt" },
@@ -26,7 +25,6 @@ function navFor(role: string, unread: number): NavItem[] {
   if (role === "cutter") {
     // Cutter: keine Verwaltung, nur die eigene Arbeit und die betreuten Kunden
     return [
-      inbox,
       { href: "/board", label: "Board" },
       { href: "/kalender", label: "Kalender" },
       { href: "/nach-cutter", label: "Meine Projekte" },
@@ -35,7 +33,6 @@ function navFor(role: string, unread: number): NavItem[] {
     ];
   }
   return [
-    inbox,
     { href: "/board", label: "Board" },
     { href: "/kalender", label: "Kalender" },
     { href: "/nach-cutter", label: "Nach Cutter" },
@@ -43,7 +40,6 @@ function navFor(role: string, unread: number): NavItem[] {
     { href: "/cutter", label: "Cutter" },
     { href: "/clients", label: "Clients" },
     { href: "/neu", label: "Neues Projekt" },
-    { href: "/einstellungen", label: "Einstellungen" },
   ];
 }
 
@@ -54,6 +50,26 @@ async function safeUnread(userId: string) {
   } catch (e) {
     console.error("Inbox-Zähler nicht verfügbar:", e);
     return 0;
+  }
+}
+
+// Letzte Meldungen für das Inbox-Fenster (ebenfalls ausfallsicher)
+async function safeInbox(userId: string): Promise<InboxItem[]> {
+  try {
+    const rows = await loadInbox(userId, 30);
+    return rows.map((r) => ({
+      id: r.id,
+      jobId: r.jobId,
+      type: r.type,
+      text: r.text,
+      createdAt: r.createdAt,
+      read: !!r.readAt,
+      jobTitle: r.jobTitle,
+      jobStatus: r.jobStatus,
+    }));
+  } catch (e) {
+    console.error("Inbox nicht verfügbar:", e);
+    return [];
   }
 }
 
@@ -75,20 +91,27 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
   if (!user) return <>{children}</>;
 
   // Admins sehen links alle Kunden und können deren Ansicht öffnen
-  const [clients, unread, logos] = await Promise.all([
+  const [clients, unread, logos, inboxItems] = await Promise.all([
     user.role === "admin" ? listUsers("kunde") : Promise.resolve([]),
     safeUnread(user.id),
     safeLogos(),
+    safeInbox(user.id),
   ]);
+  const inbox = (
+    <InboxButton items={inboxItems} unread={unread} jobHref={user.role === "kunde" ? "/kunde?job=JOBID" : "/board?job=JOBID"} />
+  );
 
   const sidebar = (
     <>
-      <Link href="/dashboard" className="hidden items-center gap-2 px-2.5 pt-1.5 text-[15px] font-semibold tracking-tight md:flex">
-        <span className="rec-dot size-2.5 rounded-full bg-rec" aria-hidden />
-        Contenthaus
-      </Link>
+      <div className="hidden items-center justify-between gap-2 pl-2.5 pt-1 md:flex">
+        <Link href="/dashboard" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
+          <span className="rec-dot size-2.5 rounded-full bg-rec" aria-hidden />
+          Contenthaus
+        </Link>
+        {inbox}
+      </div>
 
-      <NavLinks items={navFor(user.role, unread)} />
+      <NavLinks items={navFor(user.role)} />
 
       {clients.length > 0 && (
         <div className="space-y-1">
@@ -113,13 +136,14 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <ThemeToggle />
+        {user.role === "admin" && <NavLinks items={[{ href: "/einstellungen", label: "Einstellungen" }]} />}
         <SignOutButton />
       </div>
     </>
   );
 
   return (
-    <MobileFrame unread={unread} sidebar={sidebar}>
+    <MobileFrame inbox={inbox} sidebar={sidebar}>
       {children}
     </MobileFrame>
   );
