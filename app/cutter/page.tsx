@@ -10,7 +10,7 @@ import { Avatar } from "@/app/components/ui";
 import { ActiveToggle } from "@/app/components/active-toggle";
 import { NewUserForm } from "@/app/components/admin-forms";
 
-const OPEN = ["warteschlange", "in_arbeit", "feedback"];
+const OPEN = ["warteschlange", "in_arbeit", "feedback","feedback_client"];
 
 // Cutter-Verwaltung (nur Admins): Verfügbarkeit, Kontakt, freigegebene Kunden, offene Projekte
 export default async function CutterPage() {

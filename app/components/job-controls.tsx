@@ -170,7 +170,9 @@ export function JobControls({ job, isAdmin, isAssigned, staff, beforeBilling }: 
       {job.status === "feedback" && !isAdmin && (
         <p className="rounded-lg border border-line p-3 text-sm text-muted">Wartet auf Feedback.</p>
       )}
-
+      {job.status === "feedback_client" && (
+        <p className="rounded-lg border border-line p-3 text-sm text-muted">Wartet auf Kunden-Feedback.</p>
+      )}
       {job.status === "feedback" && isAdmin && (
         <Section title="Feedback">
           <div className="grid grid-cols-2 gap-2">

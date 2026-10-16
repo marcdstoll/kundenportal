@@ -444,6 +444,40 @@ export async function markReady(jobId: string) {
   });
 }
 
+// Wartet auf Feedback → an den Kunden zur Abnahme
+export async function sendToClient(jobId: string) {
+  return run(async () => {
+    await requireUser("admin");
+    await changeStatus(jobId, "feedback", "feedback_client");
+    refresh();
+    return null;
+  });
+}
+
+// Kunde gibt frei → Ready to post
+export async function clientApprove(jobId: string) {
+  return run(async () => {
+    const me = await requireUser();
+    const job = await getJob(jobId);
+    if (me.role === "kunde" && job.customerId !== me.id) throw new Error("Keine Berechtigung.");
+    await changeStatus(jobId, "feedback_client", "ready_to_post");
+    refresh();
+    return null;
+  });
+}
+
+// Kunde möchte Änderungen → zurück zum Cutter
+export async function clientRequestChanges(jobId: string) {
+  return run(async () => {
+    const me = await requireUser();
+    const job = await getJob(jobId);
+    if (me.role === "kunde" && job.customerId !== me.id) throw new Error("Keine Berechtigung.");
+    await changeStatus(jobId, "feedback_client", "warteschlange");
+    refresh();
+    return null;
+  });
+}
+
 // Ready to post → Online
 export async function markOnline(jobId: string) {
   return run(async () => {
@@ -607,7 +641,7 @@ export async function duplicateJob(jobId: string, title?: string) {
 // ---------- Löschen (nur in To-do) & Stornierung ----------
 
 const DELETABLE = ["entwurf", "todo"];
-const CANCELLABLE = ["warteschlange", "in_arbeit", "feedback"];
+const CANCELLABLE = ["warteschlange", "in_arbeit", "feedback","feedback_client"];
 
 // Ganzes Projekt löschen – inkl. Ordner in Frame.io (außer ein Duplikat nutzt ihn noch)
 export async function deleteJob(jobId: string) {
