@@ -106,7 +106,8 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
       <div className="hidden items-center justify-between gap-2 pl-2.5 pt-1 md:flex">
         <Link href="/dashboard" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
           <span className="rec-dot size-2.5 rounded-full bg-rec" aria-hidden />
-          Contenthaus
+          <img src="lightLogo.png" className="logo-on-light h-8 w-auto"/>
+          <img src="darkLogo.png" className="logo-on-dark h-8 w-auto"/>
         </Link>
         {inbox}
       </div>
