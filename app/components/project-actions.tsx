@@ -13,6 +13,8 @@ import {
   duplicateJob,
   markJobRead,
   requestCancel,
+  clientApprove,
+  clientRequestChanges,
   type Result,
 } from "@/app/actions";
 import { uploadFile } from "@/lib/upload";
@@ -375,5 +377,70 @@ export function NewMarker({ show }: { show: boolean }) {
     >
       Neu
     </span>
+  );
+}
+
+// Kunde entscheidet: freigeben oder Änderungen wünschen
+export function ClientDecision({ jobId }: { jobId: string }) {
+  const [mode, setMode] = useState<"idle" | "changes">("idle");
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function approve() {
+    setBusy(true);
+    setError(null);
+    const res = await clientApprove(jobId);
+    setBusy(false);
+    if (!res.ok) setError(res.error);
+  }
+
+  async function requestChanges() {
+    if (!text.trim()) return setError("Bitte beschreib kurz, was geändert werden soll.");
+    setBusy(true);
+    setError(null);
+    // Wunsch als Kommentar speichern, damit der Cutter ihn sieht
+    const c = await addComment(jobId, text);
+    const res = c.ok ? await clientRequestChanges(jobId) : c;
+    setBusy(false);
+    if (!res.ok) setError(res.error);
+  }
+
+  if (mode === "changes") {
+    return (
+      <div className="space-y-2">
+        <textarea
+          rows={3}
+          className={inputField}
+          placeholder="Was soll geändert werden?"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          disabled={busy}
+        />
+        <div className="flex justify-end gap-2">
+          <button type="button" className={buttonSecondary} onClick={() => setMode("idle")} disabled={busy}>
+            Abbrechen
+          </button>
+          <button type="button" className={buttonPrimary} onClick={requestChanges} disabled={busy}>
+            Änderungen senden
+          </button>
+        </div>
+        <ErrorText error={error} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" className={buttonSecondary} onClick={() => setMode("changes")} disabled={busy}>
+          Änderungen gewünscht
+        </button>
+        <button type="button" className={buttonPrimary} onClick={approve} disabled={busy}>
+          Video freigeben
+        </button>
+      </div>
+      <ErrorText error={error} />
+    </div>
   );
 }

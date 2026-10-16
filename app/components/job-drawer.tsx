@@ -27,6 +27,8 @@ import {
   DuplicateForm,
   MarkRead,
   NewMarker,
+  ClientDecision
+  
 } from "./project-actions";
 
 // Status, in denen Kunden noch löschen dürfen bzw. eine Stornierung anfragen können
@@ -388,6 +390,19 @@ export async function CustomerJobDrawer({
         </p>
       )}
 
+      {job.status === "feedback_client" && (
+        <Section title="Deine Abnahme">
+          <p className="text-sm text-muted">
+            Schau dir das Video an und entscheide: freigeben oder Änderungen wünschen.
+          </p>
+          {job.reviewUrl && (
+            <a href={job.reviewUrl} target="_blank" rel="noreferrer" className="text-sm text-accent hover:underline">
+              Video in Frame.io ansehen und kommentieren ↗
+            </a>
+          )}
+          <ClientDecision jobId={job.id} />
+        </Section>
+      )}
       {CUSTOMER_VIDEO_STATUSES.includes(job.status) && (
         <Section title="Wann wird es veröffentlicht?">
           <PublishDateField jobId={job.id} value={job.publishDate} />
@@ -412,3 +427,4 @@ export async function CustomerJobDrawer({
     </DrawerFrame>
   );
 }
+
