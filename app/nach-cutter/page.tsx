@@ -1,15 +1,13 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
-import { listUsers, loadJobsOfCutter } from "@/lib/queries";
+import { listUsers, loadJobsOfCutter, clientLogos } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
 import { JobTable, PersonTabs, parseSort } from "@/app/components/job-table";
 import { JobDrawer } from "@/app/components/job-drawer";
 import { ActiveToggle } from "@/app/components/active-toggle";
 
 export default function NachCutterPage({ searchParams }: PageProps<"/nach-cutter">) {
-  return (
-    <Content searchParams={searchParams} />
-  );
+  return <Content searchParams={searchParams} />;
 }
 
 async function Content({ searchParams }: { searchParams: PageProps<"/nach-cutter">["searchParams"] }) {
@@ -18,9 +16,20 @@ async function Content({ searchParams }: { searchParams: PageProps<"/nach-cutter
   if (me.role === "kunde") redirect("/kunde");
 
   const params = await searchParams;
+  const logos = await clientLogos();
   // Cutter sehen nur sich selbst ("Meine Projekte"), Admins alle
   const isCutter = me.role === "cutter";
-  const cutters = isCutter ? [{ id: me.id, name: me.name, role: me.role, email: me.email, active: me.active }] : await listUsers("cutter", "admin");
+  const cutters = isCutter
+    ? [
+        {
+          id: me.id,
+          name: me.name,
+          role: me.role,
+          email: me.email,
+          active: me.active,
+        },
+      ]
+    : await listUsers("cutter", "admin");
   // Standard: man selbst (falls Cutter), sonst der erste Cutter
   const requested = typeof params.c === "string" ? params.c : null;
   const activeId =
@@ -47,8 +56,16 @@ async function Content({ searchParams }: { searchParams: PageProps<"/nach-cutter
         )}
       </PageHeader>
       <div className="space-y-4 px-4 pb-10 sm:px-6 md:px-10">
-        {!isCutter && <PersonTabs people={cutters} activeId={activeId} hrefFor={(id) => `/nach-cutter?c=${id}${sortQuery}`} />}
+        {!isCutter && (
+          <PersonTabs
+            logos={logos}
+            people={cutters}
+            activeId={activeId}
+            hrefFor={(id) => `/nach-cutter?c=${id}${sortQuery}`}
+          />
+        )}
         <JobTable
+          logos={logos}
           jobs={jobs}
           isAdmin={me.role === "admin"}
           sort={sort}

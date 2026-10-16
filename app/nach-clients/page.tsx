@@ -2,15 +2,13 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { jobs as jobsTable } from "@/db/schema";
 import { getCurrentUser } from "@/lib/session";
-import { listUsers, loadJobs } from "@/lib/queries";
+import { listUsers, loadJobs, clientLogos } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
 import { JobTable, PersonTabs, parseSort } from "@/app/components/job-table";
 import { JobDrawer } from "@/app/components/job-drawer";
 
 export default function NachClientsPage({ searchParams }: PageProps<"/nach-clients">) {
-  return (
-    <Content searchParams={searchParams} />
-  );
+  return <Content searchParams={searchParams} />;
 }
 
 async function Content({ searchParams }: { searchParams: PageProps<"/nach-clients">["searchParams"] }) {
@@ -20,6 +18,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/nach-client
   if (me.role !== "admin") redirect("/meine-clients"); // Verwaltung nur für Admins
 
   const params = await searchParams;
+  const logos = await clientLogos();
   const clients = await listUsers("kunde");
   const requested = typeof params.c === "string" ? params.c : null;
   const activeId = clients.find((c) => c.id === requested)?.id ?? clients[0]?.id ?? null;
@@ -34,8 +33,14 @@ async function Content({ searchParams }: { searchParams: PageProps<"/nach-client
     <>
       <PageHeader title="Projekte nach Clients" />
       <div className="space-y-4 px-4 pb-10 sm:px-6 md:px-10">
-        <PersonTabs people={clients} activeId={activeId} hrefFor={(id) => `/nach-clients?c=${id}${sortQuery}`} />
+        <PersonTabs
+          logos={logos}
+          people={clients}
+          activeId={activeId}
+          hrefFor={(id) => `/nach-clients?c=${id}${sortQuery}`}
+        />
         <JobTable
+          logos={logos}
           jobs={jobs}
           isAdmin={me.role === "admin"}
           sort={sort}

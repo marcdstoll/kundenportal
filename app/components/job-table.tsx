@@ -1,12 +1,21 @@
 import Link from "next/link";
 import type { JobView } from "@/lib/queries";
 import { BilledToggle } from "./billed-toggle";
-import { ExternalLink, FormatTag, Person, StatusBadge, formatDate, shortLink } from "./ui";
+import { Avatar, ExternalLink, FormatTag, Person, StatusBadge, formatDate, shortLink } from "./ui";
 
 import { STATUSES } from "@/lib/status";
 
 // Sortierbare Spalten: Schlüssel in der URL (?s=title&d=asc)
-export const SORT_KEYS = ["title", "status", "format", "client", "cutter", "publish", "billedCustomer", "billed"] as const;
+export const SORT_KEYS = [
+  "title",
+  "status",
+  "format",
+  "client",
+  "cutter",
+  "publish",
+  "billedCustomer",
+  "billed",
+] as const;
 export type SortKey = (typeof SORT_KEYS)[number];
 export type Sort = { key: SortKey; dir: "asc" | "desc" } | null;
 
@@ -55,6 +64,8 @@ type Props = {
   sort: Sort;
   // Link für Klick auf eine Spaltenüberschrift
   sortHref: (key: SortKey, dir: "asc" | "desc") => string;
+  // Logo-URLs (Nutzer-ID → URL), damit statt Initialen das aktuelle Logo erscheint
+  logos?: Map<string, string>;
 };
 
 const COLUMNS: { key: SortKey; label: string }[] = [
@@ -69,7 +80,7 @@ const COLUMNS: { key: SortKey; label: string }[] = [
 ];
 
 // Tabelle wie "Projekte nach Cutter/Clients sortiert" in Notion – Klick auf Überschrift sortiert
-export function JobTable({ jobs, hrefFor, isAdmin, sort, sortHref }: Props) {
+export function JobTable({ jobs, hrefFor, isAdmin, sort, sortHref, logos }: Props) {
   if (jobs.length === 0) {
     return <p className="px-1 py-6 text-sm text-muted">Hier gibt es noch keine Projekte.</p>;
   }
@@ -119,12 +130,12 @@ export function JobTable({ jobs, hrefFor, isAdmin, sort, sortHref }: Props) {
                 <FormatTag format={job.format} />
               </td>
               <td className="px-4 py-2.5">
-                <Person name={job.customerName} />
+                <Person name={job.customerName} logoUrl={logos?.get(job.customerId)} />
               </td>
               <td className="px-4 py-2.5">
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
                   {job.cutters.map((c) => (
-                    <Person key={c.id} name={c.name} />
+                    <Person key={c.id} name={c.name} logoUrl={logos?.get(c.id)} />
                   ))}
                 </div>
               </td>
@@ -139,7 +150,13 @@ export function JobTable({ jobs, hrefFor, isAdmin, sort, sortHref }: Props) {
                 />
               </td>
               <td className="px-4 py-2.5">
-                <BilledToggle key={`c-${job.billed}`} jobId={job.id} billed={job.billed} editable={isAdmin} which="cutter" />
+                <BilledToggle
+                  key={`c-${job.billed}`}
+                  jobId={job.id}
+                  billed={job.billed}
+                  editable={isAdmin}
+                  which="cutter"
+                />
               </td>
               <td className="max-w-40 px-4 py-2.5">
                 {job.reviewUrl && <ExternalLink href={job.reviewUrl}>{shortLink(job.reviewUrl)}</ExternalLink>}
@@ -157,10 +174,12 @@ export function PersonTabs({
   people,
   activeId,
   hrefFor,
+  logos,
 }: {
   people: { id: string; name: string }[];
   activeId: string | null;
   hrefFor: (id: string) => string;
+  logos?: Map<string, string>;
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -169,10 +188,11 @@ export function PersonTabs({
           key={p.id}
           href={hrefFor(p.id)}
           scroll={false}
-          className={`rounded-full px-3 py-1 text-sm transition-colors ${
+          className={`inline-flex items-center gap-2 rounded-full py-1 pl-1.5 pr-3 text-sm transition-colors ${
             p.id === activeId ? "bg-raised text-text" : "text-muted hover:bg-surface hover:text-text"
           }`}
         >
+          <Avatar name={p.name} logoUrl={logos?.get(p.id)} />
           {p.name}
         </Link>
       ))}

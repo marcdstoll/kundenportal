@@ -1,16 +1,16 @@
 {
-  "name": "kundenportal",
+  "name": "kp",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "node scripts/migrate.mjs && next start",
+    "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
     "better-auth": "^1.7.7",
-    "drizzle-orm": "^0.45.3",
+    "drizzle-orm": "^0.45.4",
     "next": "16.4.0",
     "nodemailer": "^10.1.1",
     "postgres": "^3.4.9",

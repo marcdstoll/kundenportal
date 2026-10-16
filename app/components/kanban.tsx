@@ -32,7 +32,10 @@ export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread
         <h3 className="flex items-center gap-2 px-1 py-1 text-sm" title={STATUS_HINTS[status]}>
           <span
             className="whitespace-nowrap rounded-md px-2 py-0.5 font-medium"
-            style={{ background: `color-mix(in oklab, ${color} 22%, transparent)`, color }}
+            style={{
+              background: `color-mix(in oklab, ${color} 22%, transparent)`,
+              color,
+            }}
           >
             {STATUS_LABELS[status]}
           </span>
@@ -71,14 +74,16 @@ export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread
                   </span>
                 </div>
                 {job.cancelRequestedAt && (
-                  <p className="rounded bg-danger/10 px-1.5 py-0.5 text-xs font-medium text-danger">⏸ Storno angefragt – pausiert</p>
+                  <p className="rounded bg-danger/10 px-1.5 py-0.5 text-xs font-medium text-danger">
+                    ⏸ Storno angefragt – pausiert
+                  </p>
                 )}
                 <div className="space-y-1.5 text-xs text-muted">
                   {!customerView && <Person name={job.customerName} logoUrl={logos?.get(job.customerId)} />}
                   {!customerView && job.cutters.length > 0 && (
                     <div className="flex flex-wrap gap-x-3 gap-y-1">
                       {job.cutters.map((c) => (
-                        <Person key={c.id} name={c.name} />
+                        <Person key={c.id} name={c.name} logoUrl={logos?.get(c.id)} />
                       ))}
                     </div>
                   )}

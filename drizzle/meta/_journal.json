@@ -5,64 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1791390432918,
-      "tag": "0000_worried_lorna_dane",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1791461002341,
-      "tag": "0001_fancy_the_stranger",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1791463553382,
-      "tag": "0002_crazy_polaris",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1791469679010,
-      "tag": "0003_special_eternity",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1791480110726,
-      "tag": "0004_fantastic_thunderbird",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1792075969026,
-      "tag": "0005_warm_hairball",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1792079177545,
-      "tag": "0006_complex_rhodey",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1792080718285,
-      "tag": "0007_lovely_spot",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1792082283020,
-      "tag": "0008_chunky_bromley",
+      "when": 1791479619409,
+      "tag": "0000_nosy_lake",
       "breakpoints": true
     }
   ]

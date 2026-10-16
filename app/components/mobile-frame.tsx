@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 // Seitenleiste auf dem Desktop, Kopfzeile + Aufklappmenü auf dem Handy.
 // Klick auf einen Link im Menü schließt es wieder.
@@ -15,6 +16,10 @@ export function MobileFrame({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+
+  // Einladung und Login sehen immer aus wie ausgeloggt – auch wenn gerade jemand angemeldet ist
+  if (pathname.startsWith("/einladung") || pathname === "/login") return <>{children}</>;
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">

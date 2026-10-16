@@ -17,6 +17,7 @@ import {
 } from "@/app/actions";
 import { uploadFile } from "@/lib/upload";
 import { buttonPrimary, buttonSecondary, inputField } from "./ui";
+import { ConfirmDialog } from "./confirm-dialog";
 
 function ErrorText({ error }: { error: string | null }) {
   return error ? <p className="text-sm text-danger">{error}</p> : null;
@@ -84,7 +85,9 @@ export function AddFiles({ jobId, label = "Material nachreichen" }: { jobId: str
         <div key={q.name} className="space-y-1 text-xs">
           <div className="flex justify-between gap-3">
             <span className="truncate">{q.name}</span>
-            <span className="text-muted">{q.progress >= 100 ? "✓" : q.progress > 0 ? `${q.progress} %` : "wartet …"}</span>
+            <span className="text-muted">
+              {q.progress >= 100 ? "✓" : q.progress > 0 ? `${q.progress} %` : "wartet …"}
+            </span>
           </div>
           <div className="h-1 overflow-hidden rounded-full bg-raised">
             <div className="h-full bg-accent transition-all" style={{ width: `${q.progress}%` }} />
@@ -100,51 +103,87 @@ export function AddFiles({ jobId, label = "Material nachreichen" }: { jobId: str
 
 export function DeleteFileButton({ fileId, name }: { fileId: string; name: string }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   return (
-    <button
-      type="button"
-      disabled={busy}
-      title={`„${name}“ löschen`}
-      aria-label={`„${name}“ löschen`}
-      onClick={async () => {
-        if (!confirm(`„${name}“ wirklich löschen? Die Datei wird auch in Frame.io entfernt.`)) return;
-        setBusy(true);
-        const res = await deleteJobFile(fileId);
-        setBusy(false);
-        if (!res.ok) alert(res.error);
-        router.refresh();
-      }}
-      className="shrink-0 rounded px-1.5 text-muted hover:bg-danger/10 hover:text-danger disabled:opacity-40"
-    >
-      ✕
-    </button>
+    <>
+      <button
+        type="button"
+        title={`„${name}“ löschen`}
+        aria-label={`„${name}“ löschen`}
+        onClick={() => {
+          setError(null);
+          setOpen(true);
+        }}
+        className="shrink-0 rounded px-1.5 text-muted hover:bg-danger/10 hover:text-danger"
+      >
+        ✕
+      </button>
+      <ConfirmDialog
+        open={open}
+        title="Datei löschen?"
+        message={
+          <>
+            „<b className="text-text">{name}</b>“ wird endgültig gelöscht, auch in Frame.io.
+          </>
+        }
+        confirmLabel="Löschen"
+        busy={busy}
+        error={error}
+        onCancel={() => setOpen(false)}
+        onConfirm={async () => {
+          setBusy(true);
+          const res = await deleteJobFile(fileId);
+          setBusy(false);
+          if (!res.ok) return setError(res.error);
+          setOpen(false);
+          router.refresh();
+        }}
+      />
+    </>
   );
 }
 
 export function DeleteJobButton({ jobId, title, afterHref }: { jobId: string; title: string; afterHref: string }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
-    <div className="space-y-2">
+    <>
       <button
         type="button"
-        disabled={busy}
-        onClick={async () => {
-          if (!confirm(`Projekt „${title}“ mit allen Dateien endgültig löschen?`)) return;
+        onClick={() => {
+          setError(null);
+          setOpen(true);
+        }}
+        className="w-full rounded-md border border-danger/40 px-3 py-2 text-sm text-danger transition-colors hover:bg-danger/10"
+      >
+        Projekt löschen
+      </button>
+      <ConfirmDialog
+        open={open}
+        title="Projekt löschen?"
+        message={
+          <>
+            „<b className="text-text">{title}</b>“ wird mit allen Dateien endgültig gelöscht.
+          </>
+        }
+        confirmLabel="Endgültig löschen"
+        busy={busy}
+        error={error}
+        onCancel={() => setOpen(false)}
+        onConfirm={async () => {
           setBusy(true);
           const res = await deleteJob(jobId);
           setBusy(false);
           if (!res.ok) return setError(res.error);
+          setOpen(false);
           router.push(afterHref);
         }}
-        className="w-full rounded-md border border-danger/40 px-3 py-2 text-sm text-danger transition-colors hover:bg-danger/10 disabled:opacity-40"
-      >
-        Projekt löschen
-      </button>
-      <ErrorText error={error} />
-    </div>
+      />
+    </>
   );
 }
 
@@ -247,8 +286,8 @@ export function CancelRequestForm({ jobId }: { jobId: string }) {
   return (
     <div className="space-y-2 rounded-lg border border-danger/30 p-3">
       <p className="text-sm">
-        Das Projekt ist schon in Arbeit und kann nicht mehr gelöscht werden. Du kannst eine Stornierung anfragen – der Cutter
-        pausiert sofort, und unser Team meldet sich mit einer Entscheidung.
+        Das Projekt ist schon in Arbeit und kann nicht mehr gelöscht werden. Du kannst eine Stornierung anfragen – der
+        Cutter pausiert sofort, und unser Team meldet sich mit einer Entscheidung.
       </p>
       <textarea
         rows={2}
@@ -284,12 +323,14 @@ export function CancelRequestForm({ jobId }: { jobId: string }) {
 export function CancelDecision({ jobId }: { jobId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
   async function decide(approve: boolean) {
-    if (approve && !confirm("Projekt wirklich stornieren?")) return;
     setBusy(true);
+    setError(null);
     const res = await decideCancel(jobId, approve);
     setBusy(false);
     if (!res.ok) setError(res.error);
+    else setConfirming(false);
   }
   return (
     <div className="space-y-2">
@@ -300,13 +341,23 @@ export function CancelDecision({ jobId }: { jobId: string }) {
         <button
           type="button"
           disabled={busy}
-          onClick={() => decide(true)}
+          onClick={() => setConfirming(true)}
           className="rounded-md bg-danger px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
         >
           Stornieren
         </button>
       </div>
-      <ErrorText error={error} />
+      {!confirming && <ErrorText error={error} />}
+      <ConfirmDialog
+        open={confirming}
+        title="Projekt stornieren?"
+        message="Das Projekt wird storniert. Kunde und Cutter werden informiert."
+        confirmLabel="Stornieren"
+        busy={busy}
+        error={error}
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => decide(true)}
+      />
     </div>
   );
 }
