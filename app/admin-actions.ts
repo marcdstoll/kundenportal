@@ -12,7 +12,7 @@ import { db } from "@/db";
 import { account, cutterClients, invites, profiles, user } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { requireUser } from "@/lib/session";
-import { inviteMail, mailConfigured, sendMail } from "@/lib/mail";
+import { inviteMail, mailConfigured, sendMail, trySendMail } from "@/lib/mail";
 import { SETTING_KEYS, onboardingVideoFor, setSetting } from "@/lib/settings";
 
 export type Result<T = null> = { ok: true; data: T } | { ok: false; error: string };
@@ -228,17 +228,18 @@ export async function saveOnboardingVideos(input: { kunde: string; cutter: strin
   });
 }
 
-export async function sendTestMail() {
+export async function sendTestMail(toInput?: string) {
   return run(async () => {
     const me = await requireUser("admin");
-    if (!mailConfigured()) throw new Error("Mailversand ist nicht eingerichtet (SMTP_HOST fehlt).");
-    const ok = await sendMail(
-      me.email,
+    const to = toInput?.trim() || me.email;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) throw new Error("Bitte eine gültige E-Mail-Adresse eingeben.");
+    const res = await trySendMail(
+      to,
       "Testmail aus dem Contenthaus-Portal",
       "<p>Wenn du das liest, funktioniert der Mailversand. 🎉</p>",
       "Wenn du das liest, funktioniert der Mailversand.",
     );
-    if (!ok) throw new Error("Versand fehlgeschlagen – Details stehen im Server-Log.");
-    return { to: me.email };
+    if (!res.ok) throw new Error(res.error);
+    return { to };
   });
 }

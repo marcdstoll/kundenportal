@@ -30,7 +30,7 @@ export default async function SettingsPage() {
         <section className="space-y-3">
           <h2 className="font-medium">E-Mail-Versand</h2>
           <p className="text-sm">{smtp ? "✓ Aktiv" : <span className="text-muted">Nicht eingerichtet</span>}</p>
-          {smtp && <TestMailButton />}
+          {smtp && <TestMailButton defaultTo={me.email} />}
         </section>
       </div>
     </>

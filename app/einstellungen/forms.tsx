@@ -50,25 +50,37 @@ export function OnboardingForm({ kunde, cutter }: { kunde: string; cutter: strin
   );
 }
 
-export function TestMailButton() {
+export function TestMailButton({ defaultTo }: { defaultTo: string }) {
+  const [to, setTo] = useState(defaultTo);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <button
-        type="button"
-        className={buttonSecondary}
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          const res = await sendTestMail();
-          setBusy(false);
-          setMsg(res.ok ? { ok: true, text: `Testmail an ${res.data.to} verschickt ✓` } : { ok: false, text: res.error });
-        }}
-      >
-        Testmail an mich schicken
-      </button>
-      {msg && <span className={`text-sm ${msg.ok ? "text-[var(--st-online)]" : "text-danger"}`}>{msg.text}</span>}
-    </div>
+    <form
+      className="space-y-2"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setMsg(null);
+        const res = await sendTestMail(to);
+        setBusy(false);
+        setMsg(res.ok ? { ok: true, text: `Testmail an ${res.data.to} verschickt ✓` } : { ok: false, text: res.error });
+      }}
+    >
+      <div className="flex flex-wrap gap-2">
+        <input
+          type="email"
+          className={`${inputField} min-w-0 flex-1`}
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          disabled={busy}
+          aria-label="Testmail an"
+          placeholder="E-Mail-Adresse"
+        />
+        <button className={`${buttonSecondary} shrink-0`} disabled={busy || !to.trim()}>
+          {busy ? "Wird gesendet …" : "Testmail senden"}
+        </button>
+      </div>
+      {msg && <p className={`text-sm ${msg.ok ? "text-[var(--st-online)]" : "text-danger"}`}>{msg.text}</p>}
+    </form>
   );
 }

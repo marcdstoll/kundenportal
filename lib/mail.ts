@@ -29,9 +29,19 @@ function getTransporter() {
 
 // Gibt zurück, ob verschickt wurde; Fehler werden geloggt, aber nicht weitergeworfen
 export async function sendMail(to: string, subject: string, html: string, text: string) {
+  return (await trySendMail(to, subject, html, text)).ok;
+}
+
+// Wie sendMail, liefert bei Fehlern aber eine verständliche Begründung (für die Testmail in den Einstellungen)
+export async function trySendMail(
+  to: string,
+  subject: string,
+  html: string,
+  text: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!mailConfigured()) {
     console.log(`[Mail] nicht verschickt (SMTP nicht eingerichtet): "${subject}" an ${to}`);
-    return false;
+    return { ok: false, error: "Mailversand ist nicht eingerichtet (SMTP_HOST fehlt)." };
   }
   try {
     await getTransporter().sendMail({
@@ -42,11 +52,23 @@ export async function sendMail(to: string, subject: string, html: string, text: 
       text,
     });
     console.log(`[Mail] verschickt: "${subject}" an ${to}`);
-    return true;
+    return { ok: true };
   } catch (e) {
     console.error(`[Mail] Fehler beim Versand an ${to}:`, e);
-    return false;
+    return { ok: false, error: explainMailError(e) };
   }
+}
+
+function explainMailError(e: unknown) {
+  const err = e as { code?: string; responseCode?: number; response?: string; message?: string };
+  const detail = err.response ?? err.message ?? "unbekannter Fehler";
+  if (err.code === "EAUTH")
+    return `Anmeldung beim Mailserver fehlgeschlagen – SMTP_USER/SMTP_PASS prüfen (bei GMX/web.de muss „POP3 und IMAP Zugriff erlauben“ aktiv sein). Antwort: ${detail}`;
+  if (err.code === "ETIMEDOUT" || err.code === "ECONNECTION" || err.code === "ESOCKET" || err.code === "EDNS")
+    return `Mailserver nicht erreichbar – SMTP_HOST und SMTP_PORT prüfen. (${detail})`;
+  if (err.responseCode && err.responseCode >= 500)
+    return `Der Mailserver hat die Mail abgelehnt – stimmt MAIL_FROM mit SMTP_USER überein? Antwort: ${detail}`;
+  return `Versand fehlgeschlagen: ${detail}`;
 }
 
 // ---------- Vorlagen ----------
