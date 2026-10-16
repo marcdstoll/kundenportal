@@ -37,8 +37,8 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center p-4">
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 rounded-xl border border-line bg-surface p-6">
-                <img src="lightLogo.png" className="logo-on-light h-8 w-auto"/>
-          <img src="darkLogo.png" className="logo-on-dark h-8 w-auto"/>
+        <img src="/lightLogo.png" className="logo-on-light h-8 w-auto"/>
+        <img src="/darkLogo.png" className="logo-on-dark h-8 w-auto"/>
 
         <h1 className="text-xl font-semibold tracking-tight">Anmelden</h1>
         <input
