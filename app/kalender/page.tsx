@@ -3,7 +3,7 @@ import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { jobs as jobsTable } from "@/db/schema";
 import { getCurrentUser, resolveCustomerView } from "@/lib/session";
 import { listUsers, loadJobs } from "@/lib/queries";
-import { CUSTOMER_VIDEO_STATUSES } from "@/lib/status";
+import { CUSTOMER_DATE_STATUSES } from "@/lib/status";
 import { ClientFilter } from "@/app/components/client-filter";
 import { both, clientIdsOfCutter, jobScope } from "@/lib/access";
 import { PageHeader, ViewAsBanner } from "@/app/components/shell";
@@ -46,7 +46,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
     if (me.role === "admin") return null;
     if (me.role === "cutter") return "Termine verschieben nur Admins und Kunden.";
     if (job.customerId !== me.id) return "Nur eigene Projekte lassen sich verschieben.";
-    if (!CUSTOMER_VIDEO_STATUSES.includes(job.status)) return "Das Datum lässt sich ab „Ready to post“ ändern.";
+    if (!CUSTOMER_DATE_STATUSES.includes(job.status)) return "Das Datum lässt sich ab „Ready to post“ ändern.";
     return null;
   };
 

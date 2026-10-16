@@ -21,7 +21,7 @@ export const STATUS_LABELS: Record<string, string> = {
   ready_to_post: "Ready to post",
   online: "Online",
   storniert: "Storniert",
-  feedback_client: "Wartet auf Kunden-Feedback"
+  feedback_client: "Wartet auf Kunden-Feedback",
 };
 
 // Was die Status bedeuten (für Tooltips)
@@ -33,7 +33,7 @@ export const STATUS_HINTS: Record<string, string> = {
   ready_to_post: "Freigegeben und bereit zur Veröffentlichung",
   online: "Wurde veröffentlicht",
   storniert: "Wird nicht umgesetzt",
-  feedback_client: "Video ist hochgeladen, Kunden geben Feedback"
+  feedback_client: "Video ist hochgeladen, Kunden geben Feedback",
 };
 
 // Farbe je Status als CSS-Variable (siehe globals.css, hell und dunkel)
@@ -42,10 +42,20 @@ export function statusColor(status: string) {
 }
 
 // Spalten auf den Boards (Online und Storniert stehen in Kalender und Listen)
-export const BOARD_COLUMNS = ["todo", "warteschlange", "in_arbeit", "feedback","feedback_client", "ready_to_post"] as const;
+export const BOARD_COLUMNS = [
+  "todo",
+  "warteschlange",
+  "in_arbeit",
+  "feedback",
+  "feedback_client",
+  "ready_to_post",
+] as const;
 
 // Ab diesen Status sieht der Kunde das fertige Video
-export const CUSTOMER_VIDEO_STATUSES = ["ready_to_post","feedback_client", "online"];
+export const CUSTOMER_VIDEO_STATUSES = ["feedback_client", "ready_to_post", "online"];
+
+// Ab diesen Status dürfen Kunden das Veröffentlichungsdatum eintragen (nach ihrer Freigabe)
+export const CUSTOMER_DATE_STATUSES = ["ready_to_post", "online"];
 
 export const FORMATS = [
   { value: "shortform", label: "Shortform" },

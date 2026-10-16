@@ -9,9 +9,19 @@ import {
   type JobFileView,
   type JobView,
 } from "@/lib/queries";
-import { CUSTOMER_VIDEO_STATUSES, statusColor } from "@/lib/status";
+import { CUSTOMER_DATE_STATUSES, CUSTOMER_VIDEO_STATUSES, statusColor } from "@/lib/status";
 import { canSeeJob } from "@/lib/access";
-import { Avatar, ExternalLink, FormatTag, Person, StatusBadge, formatDate, formatDateTime, formatSize, shortLink } from "./ui";
+import {
+  Avatar,
+  ExternalLink,
+  FormatTag,
+  Person,
+  StatusBadge,
+  formatDate,
+  formatDateTime,
+  formatSize,
+  shortLink,
+} from "./ui";
 import { JobControls } from "./job-controls";
 import { VideoBlock } from "./video-block";
 import { DownloadAll } from "./download-all";
@@ -27,13 +37,12 @@ import {
   DuplicateForm,
   MarkRead,
   NewMarker,
-  ClientDecision
-  
+  ClientDecision,
 } from "./project-actions";
 
 // Status, in denen Kunden noch löschen dürfen bzw. eine Stornierung anfragen können
 const DELETABLE = ["entwurf", "todo"];
-const CANCELLABLE = ["warteschlange", "in_arbeit", "feedback"];
+const CANCELLABLE = ["warteschlange", "in_arbeit", "feedback", "feedback_client"];
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -44,7 +53,15 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-function Section({ title, children, action }: { title: React.ReactNode; children: React.ReactNode; action?: React.ReactNode }) {
+function Section({
+  title,
+  children,
+  action,
+}: {
+  title: React.ReactNode;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}) {
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between gap-2">
@@ -283,7 +300,9 @@ export async function JobDrawer({
             <span className={job.billedCustomer ? "text-[var(--st-online)]" : "text-muted"}>
               Kunde: {job.billedCustomer ? "Ja" : "Nein"}
             </span>
-            <span className={job.billed ? "text-[var(--st-online)]" : "text-muted"}>Cutter: {job.billed ? "Ja" : "Nein"}</span>
+            <span className={job.billed ? "text-[var(--st-online)]" : "text-muted"}>
+              Cutter: {job.billed ? "Ja" : "Nein"}
+            </span>
           </span>
         </Row>
       </section>
@@ -304,7 +323,12 @@ export async function JobDrawer({
         }
         action={rawFiles.length > 1 ? <DownloadAll fileIds={rawFiles.map((f) => f.id)} /> : undefined}
       >
-        <FileList files={rawFiles} unread={unread.files} canDownload canDelete={isAdmin && DELETABLE.includes(job.status)} />
+        <FileList
+          files={rawFiles}
+          unread={unread.files}
+          canDownload
+          canDelete={isAdmin && DELETABLE.includes(job.status)}
+        />
         {job.status !== "storniert" && <AddFiles jobId={job.id} />}
       </Section>
 
@@ -390,20 +414,24 @@ export async function CustomerJobDrawer({
         </p>
       )}
 
+      {/* Kunden-Feedback: Review-Link + Entscheidung (danach wird der Link nicht mehr gezeigt) */}
       {job.status === "feedback_client" && (
         <Section title="Deine Abnahme">
-          <p className="text-sm text-muted">
-            Schau dir das Video an und entscheide: freigeben oder Änderungen wünschen.
-          </p>
+          <p className="text-sm text-muted">Schau dir das Video an und entscheide: freigeben oder zurückschicken.</p>
           {job.reviewUrl && (
-            <a href={job.reviewUrl} target="_blank" rel="noreferrer" className="text-sm text-accent hover:underline">
-              Video in Frame.io ansehen und kommentieren ↗
+            <a
+              href={job.reviewUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-block text-sm text-accent hover:underline"
+            >
+              Video im Review ansehen und kommentieren ↗
             </a>
           )}
           <ClientDecision jobId={job.id} />
         </Section>
       )}
-      {CUSTOMER_VIDEO_STATUSES.includes(job.status) && (
+      {CUSTOMER_DATE_STATUSES.includes(job.status) && (
         <Section title="Wann wird es veröffentlicht?">
           <PublishDateField jobId={job.id} value={job.publishDate} />
         </Section>
@@ -427,4 +455,3 @@ export async function CustomerJobDrawer({
     </DrawerFrame>
   );
 }
-

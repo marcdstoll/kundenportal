@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import {
   addCutter,
   claimJob,
+  clientApprove,
+  clientRequestChanges,
   reserveJob,
   startJob,
   markOnline,
-  markReady,
   removeCutter,
   sendBack,
+  sendToClient,
   submitForReview,
   updateReviewUrl,
   type Result,
@@ -170,16 +172,34 @@ export function JobControls({ job, isAdmin, isAssigned, staff, beforeBilling }: 
       {job.status === "feedback" && !isAdmin && (
         <p className="rounded-lg border border-line p-3 text-sm text-muted">Wartet auf Feedback.</p>
       )}
-      {job.status === "feedback_client" && (
-        <p className="rounded-lg border border-line p-3 text-sm text-muted">Wartet auf Kunden-Feedback.</p>
-      )}
       {job.status === "feedback" && isAdmin && (
         <Section title="Feedback">
           <div className="grid grid-cols-2 gap-2">
             <button disabled={busy} onClick={() => run(() => sendBack(job.id))} className={buttonSecondary}>
               Zurück in Warteschlange
             </button>
-            <button disabled={busy} onClick={() => run(() => markReady(job.id))} className={buttonPrimary}>
+            <button disabled={busy} onClick={() => run(() => sendToClient(job.id))} className={buttonPrimary}>
+              An Kunden schicken
+            </button>
+          </div>
+        </Section>
+      )}
+
+      {job.status === "feedback_client" && !isAdmin && (
+        <p className="rounded-lg border border-line p-3 text-sm text-muted">Wartet auf Kunden-Feedback.</p>
+      )}
+      {job.status === "feedback_client" && isAdmin && (
+        <Section title="Kunden-Feedback">
+          <p className="text-xs text-muted">Der Kunde entscheidet – oder du entscheidest für ihn.</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              disabled={busy}
+              onClick={() => run(() => clientRequestChanges(job.id, ""))}
+              className={buttonSecondary}
+            >
+              Zurück in Warteschlange
+            </button>
+            <button disabled={busy} onClick={() => run(() => clientApprove(job.id))} className={buttonPrimary}>
               Ready to post
             </button>
           </div>
@@ -217,8 +237,17 @@ export function JobControls({ job, isAdmin, isAssigned, staff, beforeBilling }: 
       {canWork && !["todo", "warteschlange", "in_arbeit"].includes(job.status) && (
         <Section title="Review-Link ändern">
           <div className="flex gap-2">
-            <input className={inputField} value={editLink} onChange={(e) => setEditLink(e.target.value)} disabled={busy} />
-            <button disabled={busy} onClick={() => run(() => updateReviewUrl(job.id, editLink))} className={buttonSecondary}>
+            <input
+              className={inputField}
+              value={editLink}
+              onChange={(e) => setEditLink(e.target.value)}
+              disabled={busy}
+            />
+            <button
+              disabled={busy}
+              onClick={() => run(() => updateReviewUrl(job.id, editLink))}
+              className={buttonSecondary}
+            >
               Speichern
             </button>
           </div>

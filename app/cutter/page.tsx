@@ -10,7 +10,7 @@ import { Avatar } from "@/app/components/ui";
 import { ActiveToggle } from "@/app/components/active-toggle";
 import { NewUserForm } from "@/app/components/admin-forms";
 
-const OPEN = ["warteschlange", "in_arbeit", "feedback","feedback_client"];
+const OPEN = ["warteschlange", "in_arbeit", "feedback", "feedback_client"];
 
 // Cutter-Verwaltung (nur Admins): Verfügbarkeit, Kontakt, freigegebene Kunden, offene Projekte
 export default async function CutterPage() {
@@ -59,7 +59,10 @@ export default async function CutterPage() {
                 return (
                   <tr key={p.id} className={p.active === false ? "text-muted" : ""}>
                     <td className="px-4 py-2.5">
-                      <Link href={`/cutter/${p.id}`} className="inline-flex items-center gap-2 font-medium hover:underline">
+                      <Link
+                        href={`/cutter/${p.id}`}
+                        className="inline-flex items-center gap-2 font-medium hover:underline"
+                      >
                         <Avatar name={p.name} logoUrl={logoUrl(p)} />
                         {p.name}
                       </Link>
@@ -70,7 +73,9 @@ export default async function CutterPage() {
                       <div>{p.email}</div>
                       {p.phone && <div className="text-xs">{p.phone}</div>}
                     </td>
-                    <td className="px-4 py-2.5 text-muted">{p.role === "admin" ? "alle (Admin)" : own.join(", ") || "–"}</td>
+                    <td className="px-4 py-2.5 text-muted">
+                      {p.role === "admin" ? "alle (Admin)" : own.join(", ") || "–"}
+                    </td>
                     <td className="px-4 py-2.5">{openCount(p.id)}</td>
                     <td className="px-4 py-2.5">
                       <ActiveToggle userId={p.id} active={p.active ?? true} editable />

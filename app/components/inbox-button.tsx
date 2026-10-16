@@ -16,7 +16,7 @@ export type InboxItem = {
   jobStatus: string;
 };
 
-const TYPE_ICON: Record<string, string> = { file: "📎", comment: "💬", storno_request: "⏸", storno_decision: "⚖️" };
+const TYPE_ICON: Record<string, string> = { file: "📎", comment: "💬", storno_request: "⏸", storno_decision: "⚖️", status: "🎬" };
 
 function Bell() {
   return (

@@ -9,7 +9,7 @@ import { FrameioError, createFolder, createJobFolder, createUpload, deleteFile, 
 import { requireUser } from "@/lib/session";
 import { nextPartTitle } from "@/lib/queries";
 import { canSeeJob, clientIdsOfCutter } from "@/lib/access";
-import { FORMATS, STATUSES } from "@/lib/status";
+import { CUSTOMER_DATE_STATUSES, FORMATS, STATUSES } from "@/lib/status";
 
 // ---------- Hilfsfunktionen ----------
 
@@ -97,14 +97,17 @@ async function adminIds() {
 async function notify(
   job: Job,
   actor: { id: string },
-  type: "file" | "comment" | "storno_request" | "storno_decision",
+  type: "file" | "comment" | "storno_request" | "storno_decision" | "status",
   text: string,
   fileId?: string,
   skip: Set<string> = new Set(),
+  // nur bei "status": wer genau benachrichtigt wird
+  to?: string[],
 ) {
   const cutters = await cutterIdsOf(job.id);
   let recipients: string[];
-  if (type === "storno_request") recipients = [...cutters, ...(await adminIds())];
+  if (to) recipients = to;
+  else if (type === "storno_request") recipients = [...cutters, ...(await adminIds())];
   else if (type === "storno_decision") recipients = [job.customerId, ...cutters];
   else recipients = [job.customerId, ...(cutters.length > 0 ? cutters : await adminIds())];
 
@@ -444,35 +447,59 @@ export async function markReady(jobId: string) {
   });
 }
 
-// Wartet auf Feedback → an den Kunden zur Abnahme
+// Wartet auf Feedback → an den Kunden zur Abnahme (Kunde sieht dann Video und Review-Link)
 export async function sendToClient(jobId: string) {
   return run(async () => {
-    await requireUser("admin");
+    const me = await requireUser("admin");
+    const job = await getJob(jobId);
     await changeStatus(jobId, "feedback", "feedback_client");
+    await notify(job, me, "status", `Dein Video „${job.title}“ ist fertig – bitte ansehen und freigeben`, undefined, new Set(), [
+      job.customerId,
+    ]);
     refresh();
     return null;
   });
 }
 
-// Kunde gibt frei → Ready to post
+// Kunden-Feedback: Kunde (oder Admin) gibt frei → Ready to post
 export async function clientApprove(jobId: string) {
   return run(async () => {
     const me = await requireUser();
     const job = await getJob(jobId);
+    if (me.role === "cutter") throw new Error("Keine Berechtigung.");
     if (me.role === "kunde" && job.customerId !== me.id) throw new Error("Keine Berechtigung.");
     await changeStatus(jobId, "feedback_client", "ready_to_post");
+    const to = [...(await cutterIdsOf(jobId)), ...(await adminIds()), job.customerId];
+    await notify(job, me, "status", `${me.name} hat „${job.title}“ freigegeben`, undefined, new Set(), to);
     refresh();
     return null;
   });
 }
 
-// Kunde möchte Änderungen → zurück zum Cutter
-export async function clientRequestChanges(jobId: string) {
+// Kunden-Feedback: Kunde (oder Admin) schickt zurück → Warteschlange des Cutters.
+// Der Änderungswunsch wird als Kommentar gespeichert.
+export async function clientRequestChanges(jobId: string, note: string) {
   return run(async () => {
     const me = await requireUser();
     const job = await getJob(jobId);
+    if (me.role === "cutter") throw new Error("Keine Berechtigung.");
     if (me.role === "kunde" && job.customerId !== me.id) throw new Error("Keine Berechtigung.");
+    const text = note.trim();
+    if (me.role === "kunde" && !text) throw new Error("Bitte beschreib kurz, was geändert werden soll.");
+    if (text.length > 5000) throw new Error("Der Text ist zu lang (max. 5000 Zeichen).");
     await changeStatus(jobId, "feedback_client", "warteschlange");
+    if (text) await db.insert(jobComments).values({ id: randomUUID(), jobId, authorId: me.id, body: text });
+    const preview = text.length > 80 ? `${text.slice(0, 80)} …` : text;
+    const to = [...(await cutterIdsOf(jobId)), ...(await adminIds()), job.customerId];
+    await notify(
+      job,
+      me,
+      "status",
+      `${me.name} möchte Änderungen an „${job.title}“${preview ? `: „${preview}“` : ""}`,
+      undefined,
+      new Set(),
+      to,
+    );
     refresh();
     return null;
   });
@@ -545,7 +572,7 @@ export async function setPublishDate(jobId: string, date: string) {
     const job = await getJob(jobId);
     if (me.role !== "admin" && job.customerId !== me.id) throw new Error("Keine Berechtigung.");
     // Admins planen frei; Kunden tragen ihr Datum ein, sobald das Video freigegeben ist
-    if (me.role !== "admin" && !["ready_to_post", "online"].includes(job.status)) {
+    if (me.role !== "admin" && !CUSTOMER_DATE_STATUSES.includes(job.status)) {
       throw new Error("Ein Datum kann erst ab „Ready to post“ eingetragen werden.");
     }
     if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Ungültiges Datum.");
@@ -641,7 +668,7 @@ export async function duplicateJob(jobId: string, title?: string) {
 // ---------- Löschen (nur in To-do) & Stornierung ----------
 
 const DELETABLE = ["entwurf", "todo"];
-const CANCELLABLE = ["warteschlange", "in_arbeit", "feedback","feedback_client"];
+const CANCELLABLE = ["warteschlange", "in_arbeit", "feedback", "feedback_client"];
 
 // Ganzes Projekt löschen – inkl. Ordner in Frame.io (außer ein Duplikat nutzt ihn noch)
 export async function deleteJob(jobId: string) {

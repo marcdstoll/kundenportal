@@ -399,9 +399,8 @@ export function ClientDecision({ jobId }: { jobId: string }) {
     if (!text.trim()) return setError("Bitte beschreib kurz, was geändert werden soll.");
     setBusy(true);
     setError(null);
-    // Wunsch als Kommentar speichern, damit der Cutter ihn sieht
-    const c = await addComment(jobId, text);
-    const res = c.ok ? await clientRequestChanges(jobId) : c;
+    // Wunsch wird als Kommentar gespeichert, damit der Cutter ihn sieht
+    const res = await clientRequestChanges(jobId, text);
     setBusy(false);
     if (!res.ok) setError(res.error);
   }
@@ -412,7 +411,7 @@ export function ClientDecision({ jobId }: { jobId: string }) {
         <textarea
           rows={3}
           className={inputField}
-          placeholder="Was soll geändert werden?"
+          placeholder="Was soll geändert werden? (wird als Kommentar gespeichert)"
           value={text}
           onChange={(e) => setText(e.target.value)}
           disabled={busy}
@@ -434,7 +433,7 @@ export function ClientDecision({ jobId }: { jobId: string }) {
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
         <button type="button" className={buttonSecondary} onClick={() => setMode("changes")} disabled={busy}>
-          Änderungen gewünscht
+          Zurückschicken
         </button>
         <button type="button" className={buttonPrimary} onClick={approve} disabled={busy}>
           Video freigeben
