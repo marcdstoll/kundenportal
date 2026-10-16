@@ -111,3 +111,7 @@ summary {
 }
 .upload-hint { animation: hint-pop 0.9s ease-out 2; }
 @media (prefers-reduced-motion: reduce) { .upload-hint { animation: none; } }
+
+.logo-on-light { display: none; }
+:root[data-theme="light"] .logo-on-dark {display : none;}
+:root[data-theme="light"] .logo-on-light {display : block;}
