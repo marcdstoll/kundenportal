@@ -107,7 +107,7 @@ export function inviteMail(opts: { name: string; link: string; role: string; res
   const intro =
     opts.role === "cutter"
       ? "willkommen im Team! Im Contenthaus-Portal findest du deine Projekte, das Rohmaterial und lädst deine fertigen Videos hoch."
-      : "willkommen bei Contenthaus! Im Portal lädst du dein Material hoch, verfolgst den Stand deiner Videos und lädst die fertigen Videos herunter.";
+      : "willkommen bei Contenthaus!";
   const videos = opts.hasVideos ? "<p>Nach dem Klick wartet ein kurzes Video auf dich, das dir alles Wichtige zeigt.</p>" : "";
   const subject = "Willkommen bei Contenthaus – dein Zugang";
   const html = layout(

@@ -12,62 +12,14 @@ function ErrorText({ error }: { error: string | null }) {
   return error ? <p className="text-sm text-danger">{error}</p> : null;
 }
 
-// Link anzeigen + kopieren (zum Weitergeben per WhatsApp, Mail …)
-// mail: "sent" = per Mail verschickt, "off" = Versand nicht eingerichtet, "failed" = Versand fehlgeschlagen
-export function InviteLinkBox({
-  link,
-  name,
-  mail,
-}: {
-  link: string;
-  name?: string;
-  mail?: "sent" | "off" | "failed" | "skipped";
-}) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div
-      className="space-y-2 rounded-lg border p-3 text-sm"
-      style={{ borderColor: "var(--st-online)", background: "color-mix(in oklab, var(--st-online) 8%, transparent)" }}
-    >
-      <p className="font-medium">Einladungslink{name ? ` für ${name}` : ""} – 7 Tage gültig</p>
-      {mail === "sent" && (
-        <p className="text-sm">✉️ Per E-Mail verschickt. Zur Sicherheit kannst du den Link auch selbst weitergeben.</p>
-      )}
-      {mail === "off" && (
-        <p className="text-sm">
-          E-Mail-Versand ist noch nicht eingerichtet – bitte den Link selbst weitergeben (z. B. WhatsApp).
-        </p>
-      )}
-      {mail === "failed" && (
-        <p className="text-sm text-danger">
-          Die E-Mail konnte nicht verschickt werden – bitte den Link selbst weitergeben.
-        </p>
-      )}
-      <div className="flex gap-2">
-        <input
-          readOnly
-          value={link}
-          className={`${inputField} font-mono text-xs`}
-          onFocus={(e) => e.currentTarget.select()}
-          aria-label="Einladungslink"
-        />
-        <button
-          type="button"
-          className={`${buttonPrimary} shrink-0`}
-          onClick={async () => {
-            await navigator.clipboard.writeText(link).catch(() => {});
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-          }}
-        >
-          {copied ? "Kopiert ✓" : "Kopieren"}
-        </button>
-      </div>
-    </div>
-  );
+function SuccessText({ text }: { text: string | null }) {
+  return text ? <p className="text-sm text-[var(--st-online)]">{text}</p> : null;
 }
 
+const timeNow = () => new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+
 // ---------- Neuer Kunde / neuer Cutter ----------
+// Die Einladung geht per E-Mail raus; der Link selbst wird nicht angezeigt.
 
 export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
   const router = useRouter();
@@ -77,36 +29,23 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sendEmail, setSendEmail] = useState(true);
-  const [result, setResult] = useState<{
-    link: string;
-    name: string;
-    mail: "sent" | "off" | "failed" | "skipped";
-  } | null>(null);
+  const [done, setDone] = useState<{ ok: boolean; text: string } | null>(null);
   const label = role === "kunde" ? "Neuer Kunde" : "Neuer Cutter";
 
-  if (!open && !result) {
+  if (!open) {
     return (
-      <button type="button" className={buttonPrimary} onClick={() => setOpen(true)}>
-        + {label}
-      </button>
-    );
-  }
-
-  if (result) {
-    return (
-      <div className="w-full max-w-xl space-y-2">
-        <InviteLinkBox link={result.link} name={result.name} mail={result.mail} />
+      <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
-          className={buttonSecondary}
+          className={buttonPrimary}
           onClick={() => {
-            setResult(null);
-            setOpen(false);
+            setDone(null);
+            setOpen(true);
           }}
         >
-          Fertig
+          + {label}
         </button>
+        {done && <p className={`text-sm ${done.ok ? "text-[var(--st-online)]" : "text-danger"}`}>{done.text}</p>}
       </div>
     );
   }
@@ -118,18 +57,21 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
         e.preventDefault();
         setBusy(true);
         setError(null);
-        const res = await createUserWithInvite({ name, email, phone, role, sendEmail });
+        const res = await createUserWithInvite({ name, email, phone, role });
         setBusy(false);
         if (!res.ok) return setError(res.error);
-        const d = res.data;
-        setResult({
-          link: d.link,
-          name,
-          mail: !sendEmail ? "skipped" : d.mailed ? "sent" : d.mailConfigured ? "failed" : "off",
-        });
+        setDone(
+          res.data.mailError
+            ? {
+                ok: false,
+                text: `${name} ist angelegt, aber die Einladung konnte nicht verschickt werden: ${res.data.mailError} In der Detailansicht kannst du sie erneut senden.`,
+              }
+            : { ok: true, text: `✓ Einladung an ${res.data.email} verschickt.` },
+        );
         setName("");
         setEmail("");
         setPhone("");
+        setOpen(false);
         router.refresh();
       }}
     >
@@ -158,34 +100,24 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
           disabled={busy}
         />
       </div>
-      <label className="flex items-center gap-2 text-sm text-muted">
-        <input
-          type="checkbox"
-          className="size-4 accent-[var(--accent)]"
-          checked={sendEmail}
-          onChange={(e) => setSendEmail(e.target.checked)}
-        />
-        Einladung per E-Mail schicken
-      </label>
       <ErrorText error={error} />
       <div className="flex justify-end gap-2">
         <button type="button" className={buttonSecondary} onClick={() => setOpen(false)} disabled={busy}>
           Abbrechen
         </button>
         <button className={buttonPrimary} disabled={busy}>
-          Anlegen & Link erzeugen
+          {busy ? "Wird angelegt …" : "Anlegen & Einladung senden"}
         </button>
       </div>
     </form>
   );
 }
 
+// Einladung bzw. Link zum Passwort-Zurücksetzen per E-Mail – beliebig oft
 export function RegenerateInvite({ userId, invited }: { userId: string; invited: boolean }) {
   const [busy, setBusy] = useState(false);
-  const [link, setLink] = useState<string | null>(null);
-  const [mail, setMail] = useState<"sent" | "off" | "failed">("off");
+  const [sent, setSent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  if (link) return <InviteLinkBox link={link} mail={mail} />;
   return (
     <div className="space-y-2">
       <button
@@ -194,15 +126,17 @@ export function RegenerateInvite({ userId, invited }: { userId: string; invited:
         disabled={busy}
         onClick={async () => {
           setBusy(true);
+          setError(null);
+          setSent(null);
           const res = await regenerateInvite(userId);
           setBusy(false);
           if (!res.ok) return setError(res.error);
-          setMail(res.data.mailed ? "sent" : res.data.mailConfigured ? "failed" : "off");
-          setLink(res.data.link);
+          setSent(`✓ E-Mail an ${res.data.to} verschickt (${timeNow()} Uhr).`);
         }}
       >
-        {invited ? "Neuen Einladungslink erzeugen" : "Link zum Passwort-Zurücksetzen erzeugen"}
+        {busy ? "Wird gesendet …" : invited ? "Einladung per E-Mail senden" : "Passwort-Link per E-Mail senden"}
       </button>
+      <SuccessText text={sent} />
       <ErrorText error={error} />
     </div>
   );

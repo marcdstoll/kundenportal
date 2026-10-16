@@ -68,7 +68,7 @@ export default function LoginPage() {
           {loading ? "Bitte warten…" : "Anmelden"}
         </button>
         <p className="text-center text-xs text-muted">
-          Noch kein Zugang oder Passwort vergessen? Melde dich bei uns – du bekommst einen Einladungslink.
+          Noch kein Zugang oder Passwort vergessen? Melde dich bei uns – du bekommst einen Link per E-Mail.
         </p>
       </form>
     </main>

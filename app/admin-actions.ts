@@ -4,7 +4,7 @@
 // Fast alles hier dürfen nur Admins – Ausnahme: acceptInvite (die eingeladene Person selbst).
 
 import { randomBytes, randomUUID } from "crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 import { headers } from "next/headers";
 import { refresh } from "next/cache";
 import { hashPassword } from "better-auth/crypto";
@@ -12,7 +12,7 @@ import { db } from "@/db";
 import { account, cutterClients, invites, profiles, user } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { requireUser } from "@/lib/session";
-import { inviteMail, mailConfigured, sendMail, trySendMail } from "@/lib/mail";
+import { inviteMail, mailConfigured, trySendMail } from "@/lib/mail";
 import { SETTING_KEYS, onboardingVideoFor, setSetting } from "@/lib/settings";
 
 export type Result<T = null> = { ok: true; data: T } | { ok: false; error: string };
@@ -32,26 +32,27 @@ function baseUrl() {
   return (process.env.BETTER_AUTH_URL ?? "").replace(/\/$/, "");
 }
 
-// Neuen Einladungslink erzeugen; ältere, noch offene Links derselben Person werden ungültig
+// Einladungslink holen: Ein noch offener, gültiger Link wird wiederverwendet (und verlängert),
+// damit auch ältere Mails weiter funktionieren, wenn man die Einladung mehrfach schickt.
 async function issueInvite(userId: string, createdBy: string) {
-  await db
-    .update(invites)
-    .set({ usedAt: new Date() })
-    .where(and(eq(invites.userId, userId), isNull(invites.usedAt)));
+  const expiresAt = new Date(Date.now() + INVITE_DAYS * 24 * 60 * 60 * 1000);
+  const [open] = await db
+    .select({ token: invites.token })
+    .from(invites)
+    .where(and(eq(invites.userId, userId), isNull(invites.usedAt), gt(invites.expiresAt, new Date())));
+  if (open) {
+    await db.update(invites).set({ expiresAt }).where(eq(invites.token, open.token));
+    return `${baseUrl()}/einladung/${open.token}`;
+  }
   const token = randomBytes(24).toString("base64url");
-  await db.insert(invites).values({
-    token,
-    userId,
-    createdBy,
-    expiresAt: new Date(Date.now() + INVITE_DAYS * 24 * 60 * 60 * 1000),
-  });
+  await db.insert(invites).values({ token, userId, createdBy, expiresAt });
   return `${baseUrl()}/einladung/${token}`;
 }
 
-// Einladung bzw. Passwort-Link per Mail verschicken (falls Mailversand eingerichtet ist)
+// Einladung bzw. Passwort-Link per Mail verschicken
 async function mailInvite(userId: string, link: string) {
   const [u] = await db.select().from(user).where(eq(user.id, userId));
-  if (!u) return false;
+  if (!u) return { ok: false as const, error: "Nutzer nicht gefunden." };
   const [acc] = await db
     .select({ id: account.id })
     .from(account)
@@ -59,7 +60,8 @@ async function mailInvite(userId: string, link: string) {
   const [prof] = await db.select({ welcome: profiles.welcomeVideo }).from(profiles).where(eq(profiles.userId, userId));
   const hasVideos = !!prof?.welcome || !!(await onboardingVideoFor(u.role ?? "kunde"));
   const mail = inviteMail({ name: u.name, link, role: u.role ?? "kunde", reset: !!acc, hasVideos });
-  return sendMail(u.email, mail.subject, mail.html, mail.text);
+  const res = await trySendMail(u.email, mail.subject, mail.html, mail.text);
+  return res.ok ? { ok: true as const, to: u.email } : { ok: false as const, error: res.error };
 }
 
 // ---------- Anlegen ----------
@@ -69,7 +71,6 @@ export async function createUserWithInvite(input: {
   email: string;
   role: "kunde" | "cutter";
   phone?: string;
-  sendEmail?: boolean;
 }) {
   return run(async () => {
     const me = await requireUser("admin");
@@ -86,22 +87,24 @@ export async function createUserWithInvite(input: {
     await db.insert(user).values({ id, name, email, emailVerified: false, role: input.role, active: true });
     await db.insert(profiles).values({ userId: id, phone: input.phone?.trim() || null });
     const link = await issueInvite(id, me.id);
-    const mailed = input.sendEmail === false ? false : await mailInvite(id, link);
+    const mail = await mailInvite(id, link);
     refresh();
-    return { userId: id, link, mailed, mailConfigured: mailConfigured() };
+    // Person ist angelegt; klappt die Mail nicht, kann sie in der Detailansicht erneut gesendet werden
+    return { userId: id, email, mailError: mail.ok ? null : mail.error };
   });
 }
 
-// Für vergessene Passwörter oder abgelaufene Einladungen: neuer Link
+// Einladung bzw. Link zum Passwort-Zurücksetzen per Mail (beliebig oft)
 export async function regenerateInvite(userId: string) {
   return run(async () => {
     const me = await requireUser("admin");
     const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, userId));
     if (!u) throw new Error("Nutzer nicht gefunden.");
+    if (!mailConfigured()) throw new Error("E-Mail-Versand ist nicht eingerichtet.");
     const link = await issueInvite(userId, me.id);
-    const mailed = await mailInvite(userId, link);
-    refresh();
-    return { link, mailed, mailConfigured: mailConfigured() };
+    const mail = await mailInvite(userId, link);
+    if (!mail.ok) throw new Error(mail.error);
+    return { to: mail.to };
   });
 }
 
@@ -136,7 +139,11 @@ export async function acceptInvite(token: string, password: string) {
         updatedAt: new Date(),
       });
     }
-    await db.update(invites).set({ usedAt: new Date() }).where(eq(invites.token, token));
+    // Dieser und alle anderen offenen Links der Person werden damit ungültig
+    await db
+      .update(invites)
+      .set({ usedAt: new Date() })
+      .where(and(eq(invites.userId, u.id), isNull(invites.usedAt)));
     await db.update(user).set({ emailVerified: true, updatedAt: new Date() }).where(eq(user.id, u.id));
 
     // Direkt anmelden (setzt das Sitzungs-Cookie)
