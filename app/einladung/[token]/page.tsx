@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { account, invites, profiles, user } from "@/db/schema";
 import { onboardingVideoFor } from "@/lib/settings";
 import { VideoEmbed } from "@/app/components/video-embed";
+import { WelcomePlayer } from "@/app/components/welcome-recorder";
 import { AcceptInviteForm } from "./accept-form";
 import { InviteSteps } from "./steps";
 
@@ -76,7 +77,17 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
 
   const steps = [
     ...(!isReset && row.welcome
-      ? [{ title: "Eine persönliche Begrüßung für dich", body: <VideoEmbed url={row.welcome} title="Begrüßung" /> }]
+      ? [
+          {
+            title: "Eine persönliche Begrüßung für dich",
+            // Webcam-Aufnahme aus dem Portal (liegt in Frame.io) oder ein hinterlegter Link
+            body: row.welcome.startsWith("frameio:") ? (
+              <WelcomePlayer src={`/api/welcome/${row.userId}?t=${encodeURIComponent(token)}`} />
+            ) : (
+              <VideoEmbed url={row.welcome} title="Begrüßung" />
+            ),
+          },
+        ]
       : []),
     ...(onboarding
       ? [{ title: "So funktioniert das Portal", body: <VideoEmbed url={onboarding} title="Onboarding-Video" /> }]
@@ -88,7 +99,9 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
     <main className="flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-xl space-y-4 rounded-xl border border-line bg-surface p-6">
         {header}
-        <h1 className="text-xl font-semibold tracking-tight">{isReset ? `Hallo ${first}!` : `Willkommen, ${first}!`}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">
+          {isReset ? `Hallo ${first}!` : `Willkommen, ${first}!`}
+        </h1>
         <InviteSteps steps={steps} />
       </div>
     </main>

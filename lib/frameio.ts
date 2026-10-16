@@ -143,6 +143,12 @@ export async function createFolder(parentId: string, name: string) {
   return { id: res.data.id as string, url: res.data.view_url as string };
 }
 
+// Ordner direkt im Hauptordner des Projekts anlegen (z. B. "Registrierung")
+export async function createRootFolder(name: string) {
+  const { rootFolderId } = await getTarget();
+  return createFolder(rootFolderId, name);
+}
+
 // Projektordner mit Unterordner "Raw" für die Dateien des Kunden anlegen
 export async function createJobFolder(name: string) {
   const { rootFolderId } = await getTarget();

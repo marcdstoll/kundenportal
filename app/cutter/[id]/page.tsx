@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { loadAssignments, loadPeople, loadPerson, logoUrl } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
-import { AssignmentSelect, ProfileForm, RegenerateInvite } from "@/app/components/admin-forms";
+import { AssignmentSelect, ProfileForm, RegenerateInvite, WelcomeVideoSection } from "@/app/components/admin-forms";
 
 // Cutter bearbeiten (nur Admins): Kontakt, freigegebene Kunden, Zugang
 export default async function CutterDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -37,6 +37,16 @@ export default async function CutterDetailPage({ params }: { params: Promise<{ i
                 initial={[...assigned]}
                 label="Freigegebene Kunden"
                 placeholder="Kunden auswählen …"
+              />
+            </section>
+          )}
+          {cutter.invited && (
+            <section className="space-y-2">
+              <h2 className="text-sm font-medium">Persönliches Begrüßungsvideo</h2>
+              <WelcomeVideoSection
+                userId={id}
+                hasVideo={!!cutter.welcomeVideo?.startsWith("frameio:")}
+                version={cutter.logoVersion}
               />
             </section>
           )}

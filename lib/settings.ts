@@ -6,6 +6,8 @@ import { settings } from "@/db/schema";
 export const SETTING_KEYS = {
   onboardingKunde: "onboarding_video_kunde",
   onboardingCutter: "onboarding_video_cutter",
+  // Frame.io-Ordner für persönliche Begrüßungsvideos (wird beim ersten Video angelegt)
+  welcomeFolder: "frameio_welcome_folder",
 } as const;
 
 export async function getSetting(key: string) {

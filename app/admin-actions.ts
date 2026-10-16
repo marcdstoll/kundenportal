@@ -13,7 +13,8 @@ import { account, cutterClients, invites, profiles, user } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { requireUser } from "@/lib/session";
 import { inviteMail, mailConfigured, trySendMail } from "@/lib/mail";
-import { SETTING_KEYS, onboardingVideoFor, setSetting } from "@/lib/settings";
+import { SETTING_KEYS, getSetting, onboardingVideoFor, setSetting } from "@/lib/settings";
+import { FrameioError, createRootFolder, createUpload, deleteFile } from "@/lib/frameio";
 
 export type Result<T = null> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -58,8 +59,9 @@ async function mailInvite(userId: string, link: string) {
     .from(account)
     .where(and(eq(account.userId, userId), eq(account.providerId, "credential")));
   const [prof] = await db.select({ welcome: profiles.welcomeVideo }).from(profiles).where(eq(profiles.userId, userId));
-  const hasVideos = !!prof?.welcome || !!(await onboardingVideoFor(u.role ?? "kunde"));
-  const mail = inviteMail({ name: u.name, link, role: u.role ?? "kunde", reset: !!acc, hasVideos });
+  const personal = !!prof?.welcome;
+  const hasVideos = personal || !!(await onboardingVideoFor(u.role ?? "kunde"));
+  const mail = inviteMail({ name: u.name, link, role: u.role ?? "kunde", reset: !!acc, hasVideos, personal });
   const res = await trySendMail(u.email, mail.subject, mail.html, mail.text);
   return res.ok ? { ok: true as const, to: u.email } : { ok: false as const, error: res.error };
 }
@@ -71,6 +73,8 @@ export async function createUserWithInvite(input: {
   email: string;
   role: "kunde" | "cutter";
   phone?: string;
+  // true: Einladung noch nicht senden (z. B. weil erst das Begrüßungsvideo hochgeladen wird)
+  deferMail?: boolean;
 }) {
   return run(async () => {
     const me = await requireUser("admin");
@@ -87,6 +91,10 @@ export async function createUserWithInvite(input: {
     await db.insert(user).values({ id, name, email, emailVerified: false, role: input.role, active: true });
     await db.insert(profiles).values({ userId: id, phone: input.phone?.trim() || null });
     const link = await issueInvite(id, me.id);
+    if (input.deferMail) {
+      refresh();
+      return { userId: id, email, mailError: null };
+    }
     const mail = await mailInvite(id, link);
     refresh();
     // Person ist angelegt; klappt die Mail nicht, kann sie in der Detailansicht erneut gesendet werden
@@ -248,5 +256,80 @@ export async function sendTestMail(toInput?: string) {
     );
     if (!res.ok) throw new Error(res.error);
     return { to };
+  });
+}
+
+// ---------- Persönliches Begrüßungsvideo (Webcam-Aufnahme, liegt in Frame.io unter "Registrierung") ----------
+// In profiles.welcomeVideo steht dann "frameio:<Datei-ID>" statt eines Links.
+
+const WELCOME_PREFIX = "frameio:";
+const WELCOME_TYPES: Record<string, string> = { "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov" };
+const WELCOME_MAX_BYTES = 300 * 1024 * 1024;
+
+async function welcomeFolderId(fresh = false) {
+  if (!fresh) {
+    const cached = await getSetting(SETTING_KEYS.welcomeFolder);
+    if (cached) return cached;
+  }
+  const folder = await createRootFolder("Registrierung");
+  await setSetting(SETTING_KEYS.welcomeFolder, folder.id);
+  return folder.id;
+}
+
+// Schritt 1: Upload-Links für die Aufnahme holen (der Browser lädt direkt zu Frame.io hoch)
+export async function startWelcomeUpload(userId: string, input: { size: number; type: string }) {
+  return run(async () => {
+    await requireUser("admin");
+    const [u] = await db.select({ name: user.name }).from(user).where(eq(user.id, userId));
+    if (!u) throw new Error("Nutzer nicht gefunden.");
+    const ext = WELCOME_TYPES[input.type.split(";")[0].trim()];
+    if (!ext) throw new Error("Dieses Videoformat wird nicht unterstützt.");
+    if (!input.size || input.size > WELCOME_MAX_BYTES) throw new Error("Das Video ist zu groß (max. 300 MB).");
+    const stamp = new Date().toISOString().slice(0, 16).replace("T", " ").replace(":", "-");
+    const name = `${u.name.replace(/[\\/:*?"<>|]/g, "")} – Begrüßung ${stamp}.${ext}`;
+    let upload;
+    try {
+      upload = await createUpload(await welcomeFolderId(), name, input.size);
+    } catch (e) {
+      // Ordner wurde in Frame.io gelöscht → neu anlegen und nochmal versuchen
+      if (!(e instanceof FrameioError) || e.status !== 404) throw e;
+      upload = await createUpload(await welcomeFolderId(true), name, input.size);
+    }
+    return { fileId: upload.fileId, mediaType: upload.mediaType, parts: upload.parts };
+  });
+}
+
+// Schritt 2: Upload fertig → Video der Person zuordnen (ein altes Video wird in Frame.io gelöscht)
+export async function finishWelcomeUpload(userId: string, fileId: string) {
+  return run(async () => {
+    await requireUser("admin");
+    const [prof] = await db.select({ welcome: profiles.welcomeVideo }).from(profiles).where(eq(profiles.userId, userId));
+    const value = `${WELCOME_PREFIX}${fileId}`;
+    await db
+      .insert(profiles)
+      .values({ userId, welcomeVideo: value })
+      .onConflictDoUpdate({ target: profiles.userId, set: { welcomeVideo: value, updatedAt: new Date() } });
+    if (prof?.welcome?.startsWith(WELCOME_PREFIX)) {
+      await deleteFile(prof.welcome.slice(WELCOME_PREFIX.length)).catch((e) =>
+        console.error("Altes Begrüßungsvideo konnte nicht gelöscht werden:", e),
+      );
+    }
+    refresh();
+    return null;
+  });
+}
+
+export async function removeWelcomeVideo(userId: string) {
+  return run(async () => {
+    await requireUser("admin");
+    const [prof] = await db.select({ welcome: profiles.welcomeVideo }).from(profiles).where(eq(profiles.userId, userId));
+    await db.update(profiles).set({ welcomeVideo: null, updatedAt: new Date() }).where(eq(profiles.userId, userId));
+    if (prof?.welcome?.startsWith(WELCOME_PREFIX)) {
+      await deleteFile(prof.welcome.slice(WELCOME_PREFIX.length)).catch((e) =>
+        console.error("Begrüßungsvideo konnte nicht gelöscht werden:", e),
+      );
+    }
+    refresh();
+    return null;
   });
 }

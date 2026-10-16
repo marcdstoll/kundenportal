@@ -4,9 +4,17 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createUserWithInvite, regenerateInvite, setAssignment, updateProfile } from "@/app/admin-actions";
+import {
+  createUserWithInvite,
+  regenerateInvite,
+  removeWelcomeVideo,
+  setAssignment,
+  updateProfile,
+} from "@/app/admin-actions";
+import { uploadWelcomeVideo } from "@/lib/upload";
 import { Avatar, buttonPrimary, buttonSecondary, inputField } from "./ui";
 import { MultiSelect } from "./multi-select";
+import { WelcomePlayer, WelcomeRecorder } from "./welcome-recorder";
 
 function ErrorText({ error }: { error: string | null }) {
   return error ? <p className="text-sm text-danger">{error}</p> : null;
@@ -30,7 +38,16 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ ok: boolean; text: string } | null>(null);
+  // Optionales persönliches Begrüßungsvideo (wird nach dem Anlegen hochgeladen, dann geht die Einladung raus)
+  const [video, setVideo] = useState<{ blob: Blob; url: string } | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
   const label = role === "kunde" ? "Neuer Kunde" : "Neuer Cutter";
+
+  function dropVideo() {
+    if (video) URL.revokeObjectURL(video.url);
+    setVideo(null);
+  }
 
   if (!open) {
     return (
@@ -57,17 +74,43 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
         e.preventDefault();
         setBusy(true);
         setError(null);
-        const res = await createUserWithInvite({ name, email, phone, role });
+        const res = await createUserWithInvite({ name, email, phone, role, deferMail: !!video });
+        if (!res.ok) {
+          setBusy(false);
+          return setError(res.error);
+        }
+        let mailError = res.data.mailError;
+        let videoError: string | null = null;
+        if (video) {
+          // Erst das Video hochladen, dann die Einladung schicken – so ist es beim Klick auf den Link schon da
+          setProgress(0);
+          try {
+            await uploadWelcomeVideo(res.data.userId, video.blob, setProgress);
+          } catch (err) {
+            videoError = err instanceof Error ? err.message : "Upload fehlgeschlagen.";
+          }
+          setProgress(null);
+          const sent = await regenerateInvite(res.data.userId);
+          mailError = sent.ok ? null : sent.error;
+        }
         setBusy(false);
-        if (!res.ok) return setError(res.error);
         setDone(
-          res.data.mailError
+          mailError
             ? {
                 ok: false,
-                text: `${name} ist angelegt, aber die Einladung konnte nicht verschickt werden: ${res.data.mailError} In der Detailansicht kannst du sie erneut senden.`,
+                text: `${name} ist angelegt, aber die Einladung konnte nicht verschickt werden: ${mailError} In der Detailansicht kannst du sie erneut senden.`,
               }
-            : { ok: true, text: `✓ Einladung an ${res.data.email} verschickt.` },
+            : videoError
+              ? {
+                  ok: false,
+                  text: `Einladung an ${res.data.email} verschickt – aber ohne Video (${videoError}). Du kannst es in der Detailansicht nachholen.`,
+                }
+              : {
+                  ok: true,
+                  text: `✓ Einladung an ${res.data.email} verschickt${video ? " – mit persönlichem Video" : ""}.`,
+                },
         );
+        dropVideo();
         setName("");
         setEmail("");
         setPhone("");
@@ -100,13 +143,70 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
           disabled={busy}
         />
       </div>
+
+      {/* Persönliches Begrüßungsvideo (optional) */}
+      {recording ? (
+        <WelcomeRecorder
+          onAccept={(blob) => {
+            dropVideo();
+            setVideo({ blob, url: URL.createObjectURL(blob) });
+            setRecording(false);
+          }}
+          onCancel={() => setRecording(false)}
+        />
+      ) : video ? (
+        <div className="space-y-2 rounded-lg border border-line p-3">
+          <p className="text-sm font-medium">Persönliches Begrüßungsvideo</p>
+          <video src={video.url} controls playsInline className="aspect-video w-full rounded-md bg-black" />
+          {!busy && (
+            <div className="flex gap-3 text-sm">
+              <button type="button" className="text-muted hover:text-text" onClick={() => setRecording(true)}>
+                Neu aufnehmen
+              </button>
+              <button type="button" className="text-muted hover:text-danger" onClick={dropVideo}>
+                Entfernen
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-line px-3 py-2.5 text-sm text-muted transition-colors hover:bg-raised/50 hover:text-text"
+          onClick={() => setRecording(true)}
+          disabled={busy}
+        >
+          <span aria-hidden>🎥</span> Persönliches Begrüßungsvideo aufnehmen (optional)
+        </button>
+      )}
+
+      {progress !== null && (
+        <div className="space-y-1 text-xs">
+          <div className="flex justify-between">
+            <span>Video wird hochgeladen – Fenster bitte offen lassen</span>
+            <span className="text-muted">{progress} %</span>
+          </div>
+          <div className="h-1 overflow-hidden rounded-full bg-raised">
+            <div className="h-full bg-accent transition-all" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+      )}
       <ErrorText error={error} />
       <div className="flex justify-end gap-2">
-        <button type="button" className={buttonSecondary} onClick={() => setOpen(false)} disabled={busy}>
+        <button
+          type="button"
+          className={buttonSecondary}
+          onClick={() => {
+            dropVideo();
+            setRecording(false);
+            setOpen(false);
+          }}
+          disabled={busy}
+        >
           Abbrechen
         </button>
-        <button className={buttonPrimary} disabled={busy}>
-          {busy ? "Wird angelegt …" : "Anlegen & Einladung senden"}
+        <button className={buttonPrimary} disabled={busy || recording}>
+          {busy ? (progress !== null ? "Video wird hochgeladen …" : "Wird angelegt …") : "Anlegen & Einladung senden"}
         </button>
       </div>
     </form>
@@ -138,6 +238,82 @@ export function RegenerateInvite({ userId, invited }: { userId: string; invited:
       </button>
       <SuccessText text={sent} />
       <ErrorText error={error} />
+    </div>
+  );
+}
+
+// ---------- Begrüßungsvideo in der Detailansicht ----------
+
+export function WelcomeVideoSection({
+  userId,
+  hasVideo,
+  version,
+}: {
+  userId: string;
+  hasVideo: boolean;
+  version: number;
+}) {
+  const router = useRouter();
+  const [recording, setRecording] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  if (recording) {
+    return (
+      <WelcomeRecorder
+        acceptLabel="Video speichern"
+        onCancel={() => setRecording(false)}
+        onAccept={async (blob) => {
+          setRecording(false);
+          setMsg(null);
+          setProgress(0);
+          try {
+            await uploadWelcomeVideo(userId, blob, setProgress);
+            setMsg({ ok: true, text: "✓ Gespeichert. Es wird beim Öffnen der Einladung gezeigt." });
+            router.refresh();
+          } catch (err) {
+            setMsg({ ok: false, text: err instanceof Error ? err.message : "Upload fehlgeschlagen." });
+          }
+          setProgress(null);
+        }}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {hasVideo && progress === null && <WelcomePlayer key={version} src={`/api/welcome/${userId}?v=${version}`} />}
+      {progress !== null ? (
+        <div className="space-y-1 text-xs">
+          <div className="flex justify-between">
+            <span>Wird hochgeladen – Fenster bitte offen lassen</span>
+            <span className="text-muted">{progress} %</span>
+          </div>
+          <div className="h-1 overflow-hidden rounded-full bg-raised">
+            <div className="h-full bg-accent transition-all" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={buttonSecondary} onClick={() => setRecording(true)}>
+            {hasVideo ? "Neu aufnehmen" : "🎥 Video aufnehmen"}
+          </button>
+          {hasVideo && (
+            <button
+              type="button"
+              className="px-2 text-sm text-muted hover:text-danger"
+              onClick={async () => {
+                const res = await removeWelcomeVideo(userId);
+                setMsg(res.ok ? null : { ok: false, text: res.error });
+                router.refresh();
+              }}
+            >
+              Entfernen
+            </button>
+          )}
+        </div>
+      )}
+      {msg && <p className={`text-sm ${msg.ok ? "text-[var(--st-online)]" : "text-danger"}`}>{msg.text}</p>}
     </div>
   );
 }

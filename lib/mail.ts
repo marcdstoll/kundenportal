@@ -94,7 +94,14 @@ function button(href: string, label: string) {
   return `<p style="margin:24px 0"><a href="${href}" style="display:inline-block;background:#3d5df5;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 22px;border-radius:8px">${escape(label)}</a></p>`;
 }
 
-export function inviteMail(opts: { name: string; link: string; role: string; reset: boolean; hasVideos: boolean }) {
+export function inviteMail(opts: {
+  name: string;
+  link: string;
+  role: string;
+  reset: boolean;
+  hasVideos: boolean;
+  personal?: boolean;
+}) {
   const first = opts.name.split(" ")[0];
   if (opts.reset) {
     const subject = "Dein Link zum Passwort-Zurücksetzen";
@@ -108,7 +115,11 @@ export function inviteMail(opts: { name: string; link: string; role: string; res
     opts.role === "cutter"
       ? "willkommen im Team! Im Contenthaus-Portal findest du deine Projekte, das Rohmaterial und lädst deine fertigen Videos hoch."
       : "willkommen bei Contenthaus!";
-  const videos = opts.hasVideos ? "<p>Nach dem Klick wartet ein kurzes Video auf dich, das dir alles Wichtige zeigt.</p>" : "";
+  const videos = opts.personal
+    ? "<p>Nach dem Klick wartet eine persönliche Videobotschaft von uns auf dich.</p>"
+    : opts.hasVideos
+      ? "<p>Nach dem Klick wartet ein kurzes Video auf dich, das dir alles Wichtige zeigt.</p>"
+      : "";
   const subject = "Willkommen bei Contenthaus – dein Zugang";
   const html = layout(
     `Hallo ${first},`,
