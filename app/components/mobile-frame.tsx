@@ -26,8 +26,8 @@ export function MobileFrame({
       {/* Kopfzeile nur auf schmalen Bildschirmen */}
       <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-line bg-surface/95 px-4 py-2.5 backdrop-blur md:hidden">
         <Link href="/dashboard" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
-          <span className="rec-dot size-2.5 rounded-full bg-rec" aria-hidden />
-          Contenthaus
+          <img src="/lightLogo.png" className="logo-on-light h-6 w-auto"/>
+          <img src="/darkLogo.png" className="logo-on-dark h-6 w-auto"/>
         </Link>
         <div className="flex items-center gap-1">
           {inbox}
