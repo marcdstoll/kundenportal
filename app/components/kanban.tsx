@@ -5,6 +5,7 @@ import { FormatTag, Person, formatDate } from "./ui";
 import { LinkPending } from "./nav-links";
 import { ColumnRow } from "./column-row";
 import { boardColumnOrder } from "@/lib/board-prefs";
+import {getCurrentUser} from "@/lib/session";
 
 type Props = {
   jobs: JobView[];
@@ -21,7 +22,9 @@ type Props = {
 // Kanban-Spalten wie in Notion, jede Spalte in ihrer Status-Farbe.
 // Die Reihenfolge der Spalten kann jeder Nutzer per Drag & Drop ändern.
 export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread, logos }: Props) {
-  const order = await boardColumnOrder();
+  const me = await getCurrentUser();
+  const canReorder = me?.role === "admin";
+  const order = canReorder ? await boardColumnOrder() : [...BOARD_COLUMNS];
   const columns = BOARD_COLUMNS.map((status) => {
     const items = jobs.filter((j) => j.status === status);
     const color = statusColor(status);
@@ -102,5 +105,5 @@ export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread
   });
 
   // key: nach dem Speichern liefert der Server die neue Reihenfolge → Reihe neu aufbauen
-  return <ColumnRow key={order.join()} order={order} columns={columns} />;
+  return <ColumnRow key={order.join()} order={order} columns={columns}  canReorder={canReorder}/>;
 }

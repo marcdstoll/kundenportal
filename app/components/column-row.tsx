@@ -15,7 +15,8 @@ function saveOrder(order: string[]) {
 
 // Reihe von Board-Spalten, die sich an der Überschrift per Drag & Drop umordnen lassen.
 // Die Reihenfolge landet in einem Cookie, damit der Server sie beim nächsten Laden schon kennt.
-export function ColumnRow({ order, columns }: { order: string[]; columns: Column[] }) {
+export function ColumnRow({ order, 
+  columns,canReorder = false}: { order: string[]; columns: Column[]; canReorder?: boolean; }) {
   const router = useRouter();
   const [current, setCurrent] = useState(order);
   const [dragging, setDragging] = useState<string | null>(null);
@@ -62,8 +63,9 @@ export function ColumnRow({ order, columns }: { order: string[]; columns: Column
             style={col.style}
           >
             <div
-              draggable
+              draggable={canReorder}
               onDragStart={(e) => {
+                if(!canReorder) return;
                 e.dataTransfer.setData(DRAG_TYPE, col.id);
                 e.dataTransfer.effectAllowed = "move";
                 setDragging(col.id);
@@ -76,12 +78,15 @@ export function ColumnRow({ order, columns }: { order: string[]; columns: Column
               title="Ziehen, um die Spalte zu verschieben"
             >
               {col.header}
+              {canReorder && (
               <span
                 aria-hidden
                 className="ml-auto px-1 text-muted/50 opacity-0 transition-opacity group-hover/handle:opacity-100"
               >
                 ⋮⋮
               </span>
+              )}
+
             </div>
             {col.body}
           </section>
