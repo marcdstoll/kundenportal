@@ -21,7 +21,7 @@ export const STATUS_LABELS: Record<string, string> = {
   ready_to_post: "Ready to post",
   online: "Online",
   storniert: "Storniert",
-  feedback_client: "Wartet auf Kunden-Feedback",
+  feedback_client: "Kundenabnahme",
 };
 
 // Was die Status bedeuten (für Tooltips)

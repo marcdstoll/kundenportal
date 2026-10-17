@@ -23,7 +23,7 @@
   --st-ready_to_post: #ffc14f;
   --st-online: #43dc9c;
   --st-storniert: #6f7686;
-  --st-feedback_client: #ff8fd1;
+  --st-feedback_client: #ff9a4d;
   color-scheme: dark;
 }
 
@@ -47,7 +47,7 @@
   --st-ready_to_post: #c48500;
   --st-online: #0f9f66;
   --st-storniert: #98a0ae;
-  --st-feedback_client: #c2367f;
+  --st-feedback_client: #d0640f;
 
   color-scheme: light;
 }
