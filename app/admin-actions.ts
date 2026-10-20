@@ -9,12 +9,13 @@ import { headers } from "next/headers";
 import { refresh } from "next/cache";
 import { hashPassword } from "better-auth/crypto";
 import { db } from "@/db";
-import { account, cutterClients, invites, profiles, user } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { requireUser } from "@/lib/session";
 import { inviteMail, mailConfigured, trySendMail } from "@/lib/mail";
 import { SETTING_KEYS, getSetting, onboardingVideoFor, setSetting } from "@/lib/settings";
-import { FrameioError, createRootFolder, createUpload, deleteFile } from "@/lib/frameio";
+
+import { account, cutterClients, invites, jobs, profiles, user } from "@/db/schema";
+import { FrameioError, createRootFolder, createUpload, deleteFile, deleteFolder } from "@/lib/frameio";
 
 export type Result<T = null> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -331,5 +332,45 @@ export async function removeWelcomeVideo(userId: string) {
     }
     refresh();
     return null;
+  });
+}
+
+// Kunden komplett löschen: Projektordner in Frame.io (inkl. Raw, Review, Online und aller Dateien),
+// Begrüßungsvideo, alle Projekte und den Zugang.
+export async function deleteCustomer(customerId: string) {
+  return run(async () => {
+    await requireUser("admin");
+    const [u] = await db.select().from(user).where(eq(user.id, customerId));
+    if (!u || u.role !== "kunde") throw new Error("Kunde nicht gefunden.");
+
+    const customerJobs = await db.select().from(jobs).where(eq(jobs.customerId, customerId));
+
+    // 1. Frame.io: jeden Projektordner einmal löschen (Duplikate teilen sich ihn).
+    //    Unterordner und Dateien verschwinden mit. Schlägt etwas fehl, wird abgebrochen –
+    //    ein zweiter Versuch macht einfach weiter (schon gelöschte Ordner gelten als erledigt).
+    const folderIds = new Set(customerJobs.map((j) => j.frameioFolderId).filter((id): id is string => !!id));
+    for (const folderId of folderIds) {
+      try {
+        await deleteFolder(folderId);
+      } catch (e) {
+        console.error("Frame.io-Ordner konnte nicht gelöscht werden:", e);
+        const code = e instanceof FrameioError ? ` (Fehler ${e.status})` : "";
+        throw new Error(`Die Dateien konnten nicht gelöscht werden${code}. Bitte nochmal versuchen.`);
+      }
+    }
+
+    // 2. Persönliches Begrüßungsvideo (falls vorhanden)
+    const [prof] = await db.select({ welcome: profiles.welcomeVideo }).from(profiles).where(eq(profiles.userId, customerId));
+    if (prof?.welcome?.startsWith("frameio:")) {
+      await deleteFile(prof.welcome.slice("frameio:".length)).catch((e) => console.error(e));
+    }
+
+    // 3. Datenbank: erst die Projekte (Dateien, Kommentare, Inbox, Cutter-Zuordnung gehen automatisch mit),
+    //    dann die Person (Profil, Logo, Login, Einladungen, Freigaben gehen automatisch mit)
+    await db.delete(jobs).where(eq(jobs.customerId, customerId));
+    await db.delete(user).where(eq(user.id, customerId));
+
+    refresh();
+    return { projects: customerJobs.length };
   });
 }

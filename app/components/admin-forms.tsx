@@ -10,11 +10,13 @@ import {
   removeWelcomeVideo,
   setAssignment,
   updateProfile,
+  deleteCustomer
 } from "@/app/admin-actions";
 import { uploadWelcomeVideo } from "@/lib/upload";
 import { Avatar, buttonPrimary, buttonSecondary, inputField } from "./ui";
 import { MultiSelect } from "./multi-select";
 import { WelcomePlayer, WelcomeRecorder } from "./welcome-recorder";
+import { ConfirmDialog } from "./confirm-dialog";
 
 function ErrorText({ error }: { error: string | null }) {
   return error ? <p className="text-sm text-danger">{error}</p> : null;
@@ -500,5 +502,48 @@ export function AssignmentSelect({
       <MultiSelect options={options} value={value} onChange={change} label={label} placeholder={placeholder} />
       <ErrorText error={error} />
     </div>
+  );
+}
+
+export function DeleteCustomerButton({ customerId, name }: { customerId: string; name: string }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setError(null);
+          setOpen(true);
+        }}
+        className="w-full rounded-md border border-danger/40 px-3 py-2 text-sm text-danger transition-colors hover:bg-danger/10"
+      >
+        Kunden löschen
+      </button>
+      <ConfirmDialog
+        open={open}
+        title="Kunden löschen?"
+        message={
+          <>
+            „<b className="text-text">{name}</b>“ wird mit <b className="text-text">allen Projekten und Dateien</b>{" "}
+            endgültig gelöscht – auch in Frame.io. Das lässt sich nicht rückgängig machen.
+          </>
+        }
+        confirmLabel="Endgültig löschen"
+        busy={busy}
+        error={error}
+        onCancel={() => setOpen(false)}
+        onConfirm={async () => {
+          setBusy(true);
+          const res = await deleteCustomer(customerId);
+          setBusy(false);
+          if (!res.ok) return setError(res.error);
+          setOpen(false);
+          router.push("/clients");
+        }}
+      />
+    </>
   );
 }

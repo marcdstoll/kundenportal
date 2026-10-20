@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/session";
 import { loadAssignments, loadPeople, loadPerson, logoUrl } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
 import { buttonSecondary } from "@/app/components/ui";
-import { AssignmentSelect, ProfileForm, RegenerateInvite, WelcomeVideoSection } from "@/app/components/admin-forms";
+import { AssignmentSelect, ProfileForm, RegenerateInvite, WelcomeVideoSection, DeleteCustomerButton } from "@/app/components/admin-forms";
 
 // Kundenprofil bearbeiten (nur Admins)
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -68,6 +68,10 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             </p>
             <RegenerateInvite userId={id} invited={client.invited} />
           </section>
+          <section className="space-y-2">
+          <h2 className="text-sm font-medium text-danger">Kunden löschen</h2>
+          <DeleteCustomerButton customerId={id} name={client.name} />
+        </section>
         </aside>
       </div>
     </>
