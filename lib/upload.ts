@@ -5,7 +5,9 @@ import { finishWelcomeUpload, startWelcomeUpload } from "@/app/admin-actions";
 // Der Zugangsschlüssel bleibt auf dem Server; der Browser bekommt nur
 // zeitlich begrenzte Upload-Links.
 
-function putPart(url: string, blob: Blob, mediaType: string, onProgress: (loaded: number) => void) {
+const RETRY_DELAYS = [2000, 5000, 10000, 20000, 30000]; // Pausen zwischen den Versuchen (ms)
+
+function putPartOnce(url: string, blob: Blob, mediaType: string, onProgress: (loaded: number) => void) {
   return new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
@@ -14,9 +16,24 @@ function putPart(url: string, blob: Blob, mediaType: string, onProgress: (loaded
     xhr.upload.onprogress = (e) => onProgress(e.loaded);
     xhr.onload = () =>
       xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload fehlgeschlagen (${xhr.status})`));
-    xhr.onerror = () => reject(new Error("Netzwerkfehler beim Upload"));
+    xhr.onerror = () => reject(new Error("Verbindung unterbrochen"));
     xhr.send(blob);
   });
+}
+
+// Einen Teil hochladen – bei Fehlern bis zu 5-mal erneut versuchen
+async function putPart(url: string, blob: Blob, mediaType: string, onProgress: (loaded: number) => void) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await putPartOnce(url, blob, mediaType, onProgress);
+    } catch (err) {
+      if (attempt >= RETRY_DELAYS.length) {
+        throw new Error("Die Verbindung ist mehrfach abgebrochen – bitte erneut versuchen.");
+      }
+      onProgress(0); // Fortschritt dieses Teils zurücksetzen
+      await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
+    }
+  }
 }
 
 export async function uploadFile(
