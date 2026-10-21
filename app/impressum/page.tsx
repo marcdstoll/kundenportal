@@ -42,7 +42,7 @@ async function Content() {
         <dl className="space-y-3 text-sm">
           <Row label="Unternehmer">
             {LEGAL.owner}
-            <span className="block text-muted">Einzelunternehmer“</span>
+            <span className="block text-muted">Einzelunternehmer</span>
           </Row>
           <Row label="Anschrift">
             {LEGAL.street}
