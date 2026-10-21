@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   clientLogos,
   loadComments,
+  mentionCandidates,
   loadJob,
   listUsers,
   nextPartTitle,
@@ -199,27 +200,38 @@ function FileList({
 const ROLE_LABELS: Record<string, string> = { kunde: "Client", cutter: "Cutter", admin: "Admin" };
 
 // Kommentarverlauf + Eingabe. Eigene Kommentare bearbeiten/löschen, Admins dürfen alle löschen.
+// Mit @ lassen sich Beteiligte erwähnen – sie bekommen dann direkt eine Meldung in der Inbox.
 async function Comments({
-  jobId,
-  meId,
-  isAdmin,
+  job,
+  viewer,
   canWrite,
 }: {
-  jobId: string;
-  meId: string;
-  isAdmin: boolean;
+  job: JobView;
+  viewer: { id: string; role: string };
   canWrite: boolean;
 }) {
-  const comments = await loadComments(jobId);
+  const [comments, candidates] = await Promise.all([loadComments(job.id), mentionCandidates(job, viewer)]);
+  const isAdmin = viewer.role === "admin";
+  const isKunde = viewer.role === "kunde";
+  // Kunden sehen das Team als „Team“, alle anderen die Rolle
+  const people = candidates.map((p) => ({
+    id: p.id,
+    name: p.name,
+    email: p.email,
+    role: p.role === "admin" ? (isKunde ? "Team" : "Admin") : (ROLE_LABELS[p.role] ?? p.role),
+  }));
   return (
     <Section title={`Kommentare${comments.length ? ` (${comments.length})` : ""}`}>
       {comments.length === 0 && <p className="text-sm text-muted">Noch keine Kommentare.</p>}
       <ul className="space-y-3">
         {comments.map((c) => {
-          const mine = !!c.authorId && c.authorId === meId;
+          const mine = !!c.authorId && c.authorId === viewer.id;
           return (
             <JobComment
               key={`${c.id}-${c.editedAt?.getTime() ?? 0}`}
+              meId={viewer.id}
+              people={people}
+              showEmail={!isKunde}
               comment={{
                 id: c.id,
                 body: c.body,
@@ -235,7 +247,7 @@ async function Comments({
           );
         })}
       </ul>
-      {canWrite && <CommentForm jobId={jobId} />}
+      {canWrite && <CommentForm jobId={job.id} people={people} showEmail={!isKunde} />}
     </Section>
   );
 }
@@ -349,7 +361,7 @@ export async function JobDrawer({
         {job.status !== "storniert" && <AddFiles jobId={job.id} title={job.title} />}
       </Section>
 
-      <Comments jobId={job.id} meId={me.id} isAdmin={isAdmin} canWrite={job.status !== "storniert"} />
+      <Comments job={job} viewer={me} canWrite={job.status !== "storniert"} />
 
       {isAdmin && (
         <Section title="Veröffentlichungsdatum">
@@ -461,7 +473,11 @@ export async function CustomerJobDrawer({
         {job.status !== "storniert" && <AddFiles jobId={job.id} title={job.title} label="Weiteres Material hochladen" />}
       </Section>
 
-      <Comments jobId={job.id} meId={viewerId} isAdmin={viewerId !== customerId} canWrite={job.status !== "storniert"} />
+      <Comments
+        job={job}
+        viewer={{ id: viewerId, role: viewerId === customerId ? "kunde" : "admin" }}
+        canWrite={job.status !== "storniert"}
+      />
 
       {canDelete && (
         <Section title="Projekt löschen">

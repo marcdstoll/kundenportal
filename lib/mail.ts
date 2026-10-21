@@ -1,4 +1,5 @@
 import nodemailer, { type Transporter } from "nodemailer";
+import { LEGAL, portalUrl } from "@/lib/legal";
 
 // E-Mail-Versand über SMTP. Alles kommt aus Umgebungsvariablen (Coolify → Environment Variables):
 //   SMTP_HOST, SMTP_PORT (587), SMTP_USER, SMTP_PASS, SMTP_SECURE ("true" nur bei Port 465), MAIL_FROM
@@ -49,7 +50,7 @@ export async function trySendMail(
       to,
       subject,
       html,
-      text,
+      text: text + textFooter(),
     });
     console.log(`[Mail] verschickt: "${subject}" an ${to}`);
     return { ok: true };
@@ -77,6 +78,21 @@ function escape(s: string) {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 }
 
+// Absenderangaben unter jeder Mail (Name, Anschrift, Kontakt, Impressum)
+function footer() {
+  const impressum = portalUrl("/impressum");
+  return [
+    `${escape(LEGAL.brand)} · ${escape(LEGAL.owner)} · ${escape(LEGAL.street)}, ${escape(LEGAL.city)}`,
+    `<a href="mailto:${LEGAL.email}" style="color:#8c92a3">${escape(LEGAL.email)}</a>` +
+      (impressum.startsWith("http") ? ` · <a href="${impressum}" style="color:#8c92a3">Impressum</a>` : ""),
+  ].join("<br>");
+}
+
+function textFooter() {
+  const impressum = portalUrl("/impressum");
+  return `\n\n--\n${LEGAL.brand} · ${LEGAL.owner} · ${LEGAL.street}, ${LEGAL.city}\n${LEGAL.email}${impressum.startsWith("http") ? `\nImpressum: ${impressum}` : ""}`;
+}
+
 // Schlichtes, mail-taugliches Layout (Tabellen + Inline-Styles, funktioniert auch in Outlook)
 function layout(title: string, body: string) {
   return `<!doctype html><html lang="de"><body style="margin:0;background:#f4f5f8;font-family:Arial,Helvetica,sans-serif;color:#171923">
@@ -86,7 +102,7 @@ function layout(title: string, body: string) {
 <tr><td style="font-size:22px;font-weight:bold;padding-bottom:16px">${escape(title)}</td></tr>
 <tr><td style="font-size:15px;line-height:1.55">${body}</td></tr>
 </table>
-<p style="font-size:12px;color:#8c92a3;margin-top:16px">Diese Nachricht wurde automatisch vom Portal von Great Influence verschickt.</p>
+<p style="font-size:12px;line-height:1.6;color:#8c92a3;margin-top:16px">Diese Nachricht wurde automatisch vom Portal von Great Influence verschickt.<br>${footer()}</p>
 </td></tr></table></body></html>`;
 }
 
@@ -126,5 +142,17 @@ export function inviteMail(opts: {
     `<p>${intro}</p>${videos}${button(opts.link, "Zugang einrichten")}<p style="color:#636a7c;font-size:13px">Über den Button legst du dein Passwort fest. Der Link ist 7 Tage gültig.</p>`,
   );
   const text = `Hallo ${first},\n\n${intro}\n\nZugang einrichten: ${opts.link}\n\nDer Link ist 7 Tage gültig.`;
+  return { subject, html, text };
+}
+
+// Testmail aus den Einstellungen – im selben Layout wie die echten Mails
+export function testMail(name: string) {
+  const first = name.split(" ")[0];
+  const subject = "Testmail aus dem Portal von Great Influence";
+  const html = layout(
+    `Hallo ${first},`,
+    "<p>wenn du das liest, funktioniert der Mailversand aus dem Portal. Einladungen, Passwort-Links und Benachrichtigungen kommen genauso bei dir an.</p>",
+  );
+  const text = `Hallo ${first},\n\nwenn du das liest, funktioniert der Mailversand aus dem Portal.`;
   return { subject, html, text };
 }

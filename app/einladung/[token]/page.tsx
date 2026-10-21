@@ -6,6 +6,7 @@ import { VideoEmbed } from "@/app/components/video-embed";
 import { WelcomePlayer } from "@/app/components/welcome-recorder";
 import { AcceptInviteForm } from "./accept-form";
 import { InviteSteps } from "./steps";
+import { LegalFooter } from "@/app/components/legal-footer";
 
 // Öffentliche Seite über den Einladungslink:
 // 1. persönliche Begrüßung (falls hinterlegt) → 2. Onboarding-Video (falls hinterlegt) → 3. Passwort festlegen.
@@ -46,7 +47,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
 
   if (problem || !row) {
     return (
-      <main className="flex min-h-screen items-center justify-center p-4">
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-4">
         <div className="w-full max-w-sm space-y-4 rounded-xl border border-line bg-surface p-6">
           {header}
           <h1 className="text-xl font-semibold tracking-tight">Einladung</h1>
@@ -55,6 +56,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
             Zur Anmeldung
           </a>
         </div>
+        <LegalFooter />
       </main>
     );
   }
@@ -98,7 +100,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   ];
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-4">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-4">
       <div className="w-full max-w-xl space-y-4 rounded-xl border border-line bg-surface p-6">
         {header}
         <h1 className="text-xl font-semibold tracking-tight">
@@ -106,6 +108,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
         </h1>
         <InviteSteps steps={steps} />
       </div>
+      <LegalFooter />
     </main>
   );
 }

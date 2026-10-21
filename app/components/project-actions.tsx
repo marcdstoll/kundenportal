@@ -23,6 +23,8 @@ import { ACCEPT, ALLOWED_LABEL, filterAllowed } from "@/lib/file-types";
 import { startNachreichen, useUploads } from "@/lib/upload-manager";
 import { UploadOverview } from "./upload-tree";
 import { Avatar, buttonPrimary, buttonSecondary, inputField } from "./ui";
+import { MentionInput, MentionText, type MentionInputHandle } from "./mention-input";
+import { encodeMentions, toEditable, type MentionPerson } from "@/lib/mentions";
 import { ConfirmDialog } from "./confirm-dialog";
 
 function ErrorText({ error }: { error: string | null }) {
@@ -174,33 +176,47 @@ export function DeleteJobButton({ jobId, title, afterHref }: { jobId: string; ti
 
 // ---------- Kommentare ----------
 
-export function CommentForm({ jobId }: { jobId: string }) {
+export function CommentForm({
+  jobId,
+  people,
+  showEmail,
+}: {
+  jobId: string;
+  people: MentionPerson[];
+  showEmail?: boolean;
+}) {
   const [text, setText] = useState("");
+  const [mentions, setMentions] = useState<MentionPerson[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const ref = useRef<HTMLTextAreaElement>(null);
+  const ref = useRef<MentionInputHandle>(null);
 
   async function send() {
     if (!text.trim()) return;
     setBusy(true);
     setError(null);
-    const res = await addComment(jobId, text);
+    const res = await addComment(jobId, encodeMentions(text, mentions));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setText("");
+    setMentions([]);
     ref.current?.focus();
   }
 
   return (
     <div className="space-y-2">
-      <textarea
+      <MentionInput
         ref={ref}
-        rows={2}
-        className={inputField}
-        placeholder="Kommentar schreiben …"
         value={text}
+        mentions={mentions}
+        people={people}
+        showEmail={showEmail}
+        placeholder={people.length ? "Kommentar schreiben … (@ erwähnt jemanden)" : "Kommentar schreiben …"}
         disabled={busy}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(value, next) => {
+          setText(value);
+          setMentions(next);
+        }}
       />
       <div className="flex items-center justify-between gap-3">
         <ErrorText error={error} />
@@ -214,7 +230,7 @@ export function CommentForm({ jobId }: { jobId: string }) {
 
 export type JobCommentView = {
   id: string;
-  body: string;
+  body: string; // mit Erwähnungs-Tokens
   author: string;
   avatarName: string;
   role: string | null;
@@ -225,9 +241,21 @@ export type JobCommentView = {
 };
 
 // Ein Kommentar im Verlauf – mit Bearbeiten (Verfasser) und Löschen (Verfasser oder Admin)
-export function JobComment({ comment: c }: { comment: JobCommentView }) {
+export function JobComment({
+  comment: c,
+  meId,
+  people,
+  showEmail,
+}: {
+  comment: JobCommentView;
+  meId: string;
+  people: MentionPerson[];
+  showEmail?: boolean;
+}) {
+  const editable = toEditable(c.body);
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(c.body);
+  const [draft, setDraft] = useState(editable.text);
+  const [draftMentions, setDraftMentions] = useState<MentionPerson[]>(editable.mentions);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
@@ -248,13 +276,18 @@ export function JobComment({ comment: c }: { comment: JobCommentView }) {
         </p>
         {editing ? (
           <div className="space-y-2 pt-1">
-            <textarea
+            <MentionInput
               rows={3}
-              className={inputField}
               value={draft}
+              mentions={draftMentions}
+              people={people}
+              showEmail={showEmail}
               disabled={busy}
               autoFocus
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(value, next) => {
+                setDraft(value);
+                setDraftMentions(next);
+              }}
             />
             <ErrorText error={error} />
             <div className="flex justify-end gap-2">
@@ -263,7 +296,8 @@ export function JobComment({ comment: c }: { comment: JobCommentView }) {
                 className={buttonSecondary}
                 disabled={busy}
                 onClick={() => {
-                  setDraft(c.body);
+                  setDraft(editable.text);
+                  setDraftMentions(editable.mentions);
                   setError(null);
                   setEditing(false);
                 }}
@@ -277,7 +311,7 @@ export function JobComment({ comment: c }: { comment: JobCommentView }) {
                 onClick={async () => {
                   setBusy(true);
                   setError(null);
-                  const res = await editComment(c.id, draft);
+                  const res = await editComment(c.id, encodeMentions(draft, draftMentions));
                   setBusy(false);
                   if (!res.ok) return setError(res.error);
                   setEditing(false);
@@ -288,7 +322,9 @@ export function JobComment({ comment: c }: { comment: JobCommentView }) {
             </div>
           </div>
         ) : (
-          <p className="whitespace-pre-wrap text-sm">{c.body}</p>
+          <p className="whitespace-pre-wrap text-sm">
+            <MentionText body={c.body} meId={meId} />
+          </p>
         )}
         {!editing && (c.canEdit || c.canDelete) && (
           <div className="flex gap-3 pt-0.5 text-xs">

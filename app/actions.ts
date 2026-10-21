@@ -1,13 +1,14 @@
 "use server";
 
 import { randomUUID } from "crypto";
-import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { db } from "@/db";
 import { jobComments, jobCutters, jobFiles, jobs, notifications, user } from "@/db/schema";
 import { FrameioError, createFolder, createJobFolder, createUpload, deleteFile, deleteFolder, renameFolder } from "@/lib/frameio";
 import { requireUser } from "@/lib/session";
-import { nextPartTitle } from "@/lib/queries";
+import { mentionCandidates, nextPartTitle } from "@/lib/queries";
+import { keepAllowedMentions, mentionIds, toPlain } from "@/lib/mentions";
 import { canSeeJob, clientIdsOfCutter } from "@/lib/access";
 import { CUSTOMER_DATE_STATUSES, FORMATS, STATUSES, VIDEO_LENGTHS } from "@/lib/status";
 import { isAllowedFile, ALLOWED_LABEL } from "@/lib/file-types";
@@ -643,26 +644,61 @@ export async function setPublishDate(jobId: string, date: string) {
 
 // ---------- Kommentare & Inbox ----------
 
-// Kommentar am Projekt schreiben – landet bei den Beteiligten in der Inbox
+// Inbox-Texte, die ein Kommentar erzeugt (zum Anpassen/Entfernen beim Bearbeiten/Löschen)
+function preview(body: string) {
+  const text = toPlain(body);
+  return text.length > 80 ? `${text.slice(0, 80)} …` : text;
+}
+function commentNotice(authorName: string, body: string) {
+  return `${authorName}: „${preview(body)}“`;
+}
+function mentionNotice(authorName: string, body: string) {
+  return `${authorName} hat dich erwähnt: „${preview(body)}“`;
+}
+
+// Erwähnungen prüfen: nur Personen, die man in diesem Projekt erwähnen darf (sonst bleibt es normaler Text)
+async function cleanMentions(job: Job, me: { id: string; role: string }, body: string) {
+  const allowed = new Set((await mentionCandidates(job, me)).map((p) => p.id));
+  const text = keepAllowedMentions(body, allowed);
+  return { text, ids: mentionIds(text).filter((id) => id !== me.id) };
+}
+
+async function notifyMentions(job: Job, me: { id: string; name: string }, ids: string[], body: string) {
+  if (ids.length === 0) return;
+  await db.insert(notifications).values(
+    ids.map((userId) => ({
+      id: randomUUID(),
+      userId,
+      jobId: job.id,
+      type: "mention",
+      text: mentionNotice(me.name, body),
+      actorId: me.id,
+    })),
+  );
+}
+
+function checkCommentText(body: string) {
+  const plain = toPlain(body).trim();
+  if (!plain) throw new Error("Bitte einen Kommentar eingeben.");
+  if (plain.length > 5000) throw new Error("Der Kommentar ist zu lang (max. 5000 Zeichen).");
+}
+
+// Kommentar am Projekt schreiben – landet bei den Beteiligten in der Inbox.
+// Mit @ erwähnte Personen bekommen eine eigene Meldung („… hat dich erwähnt“), auch Admins.
 export async function addComment(jobId: string, body: string) {
   return run(async () => {
     const me = await requireUser();
     const job = await getJob(jobId);
     await assertCanSee(me, job);
-    const text = body.trim();
-    if (!text) throw new Error("Bitte einen Kommentar eingeben.");
-    if (text.length > 5000) throw new Error("Der Kommentar ist zu lang (max. 5000 Zeichen).");
+    checkCommentText(body);
+    const { text, ids } = await cleanMentions(job, me, body.trim());
     await db.insert(jobComments).values({ id: randomUUID(), jobId, authorId: me.id, body: text });
-    await notify(job, me, "comment", commentNotice(me.name, text));
+    await notifyMentions(job, me, ids, text);
+    // Wer erwähnt wurde, bekommt nicht zusätzlich die normale Kommentar-Meldung
+    await notify(job, me, "comment", commentNotice(me.name, text), undefined, new Set(ids));
     refresh();
     return null;
   });
-}
-
-// Inbox-Text, den ein Kommentar bei den Beteiligten erzeugt (zum Anpassen/Entfernen beim Bearbeiten/Löschen)
-function commentNotice(authorName: string, text: string) {
-  const preview = text.length > 80 ? `${text.slice(0, 80)} …` : text;
-  return `${authorName}: „${preview}“`;
 }
 
 async function getComment(commentId: string) {
@@ -671,30 +707,48 @@ async function getComment(commentId: string) {
   return c;
 }
 
-// Eigenen Kommentar bearbeiten – wird mit „bearbeitet“ gekennzeichnet
+// Inbox-Meldungen eines Kommentars (normale + Erwähnungen) finden
+function noticesOf(jobId: string, authorId: string, authorName: string, body: string, type: "comment" | "mention") {
+  return and(
+    eq(notifications.jobId, jobId),
+    eq(notifications.type, type),
+    eq(notifications.actorId, authorId),
+    eq(notifications.text, type === "comment" ? commentNotice(authorName, body) : mentionNotice(authorName, body)),
+  );
+}
+
+// Eigenen Kommentar bearbeiten – wird mit „bearbeitet“ gekennzeichnet.
+// Neu Erwähnte werden benachrichtigt, entfernte Erwähnungen verschwinden aus deren Inbox.
 export async function editComment(commentId: string, body: string) {
   return run(async () => {
     const me = await requireUser();
     const c = await getComment(commentId);
     if (c.authorId !== me.id) throw new Error("Nur der Verfasser kann den Kommentar bearbeiten.");
-    await assertCanSee(me, await getJob(c.jobId));
-    const text = body.trim();
-    if (!text) throw new Error("Der Kommentar darf nicht leer sein.");
-    if (text.length > 5000) throw new Error("Der Kommentar ist zu lang (max. 5000 Zeichen).");
+    const job = await getJob(c.jobId);
+    await assertCanSee(me, job);
+    checkCommentText(body);
+    const { text, ids } = await cleanMentions(job, me, body.trim());
     if (text === c.body) return null;
     await db.update(jobComments).set({ body: text, editedAt: new Date() }).where(eq(jobComments.id, commentId));
-    // Inbox-Einträge zu diesem Kommentar zeigen den neuen Text
+
+    const before = new Set(mentionIds(c.body));
+    const added = ids.filter((id) => !before.has(id));
+    const removed = [...before].filter((id) => !ids.includes(id));
+    // Bestehende Meldungen zeigen den neuen Text
     await db
       .update(notifications)
       .set({ text: commentNotice(me.name, text) })
-      .where(
-        and(
-          eq(notifications.jobId, c.jobId),
-          eq(notifications.type, "comment"),
-          eq(notifications.actorId, me.id),
-          eq(notifications.text, commentNotice(me.name, c.body)),
-        ),
-      );
+      .where(noticesOf(c.jobId, me.id, me.name, c.body, "comment"));
+    if (removed.length) {
+      await db
+        .delete(notifications)
+        .where(and(noticesOf(c.jobId, me.id, me.name, c.body, "mention"), inArray(notifications.userId, removed)));
+    }
+    await db
+      .update(notifications)
+      .set({ text: mentionNotice(me.name, text) })
+      .where(noticesOf(c.jobId, me.id, me.name, c.body, "mention"));
+    await notifyMentions(job, me, added, text);
     refresh();
     return null;
   });
@@ -708,18 +762,16 @@ export async function deleteComment(commentId: string) {
     if (c.authorId !== me.id && me.role !== "admin") throw new Error("Keine Berechtigung.");
     await assertCanSee(me, await getJob(c.jobId));
     await db.delete(jobComments).where(eq(jobComments.id, commentId));
-    // Zugehörige Inbox-Einträge mit entfernen
+    // Zugehörige Inbox-Einträge (normale + Erwähnungen) mit entfernen
     if (c.authorId) {
       const [author] = await db.select({ name: user.name }).from(user).where(eq(user.id, c.authorId));
       if (author) {
         await db
           .delete(notifications)
           .where(
-            and(
-              eq(notifications.jobId, c.jobId),
-              eq(notifications.type, "comment"),
-              eq(notifications.actorId, c.authorId),
-              eq(notifications.text, commentNotice(author.name, c.body)),
+            or(
+              noticesOf(c.jobId, c.authorId, author.name, c.body, "comment"),
+              noticesOf(c.jobId, c.authorId, author.name, c.body, "mention"),
             ),
           );
       }

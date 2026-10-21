@@ -11,7 +11,7 @@ import { hashPassword } from "better-auth/crypto";
 import { db } from "@/db";
 import { auth } from "@/lib/auth";
 import { requireUser } from "@/lib/session";
-import { inviteMail, mailConfigured, trySendMail } from "@/lib/mail";
+import { inviteMail, mailConfigured, testMail, trySendMail } from "@/lib/mail";
 import { SETTING_KEYS, getSetting, onboardingVideoFor, setSetting } from "@/lib/settings";
 
 import { account, cutterClients, invites, jobs, profiles, user } from "@/db/schema";
@@ -250,12 +250,8 @@ export async function sendTestMail(toInput?: string) {
     const me = await requireUser("admin");
     const to = toInput?.trim() || me.email;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) throw new Error("Bitte eine gültige E-Mail-Adresse eingeben.");
-    const res = await trySendMail(
-      to,
-      "Testmail aus dem Portal von Great Influence",
-      "<p>Wenn du das liest, funktioniert der Mailversand. 🎉</p>",
-      "Wenn du das liest, funktioniert der Mailversand.",
-    );
+    const mail = testMail(me.name);
+    const res = await trySendMail(to, mail.subject, mail.html, mail.text);
     if (!res.ok) throw new Error(res.error);
     return { to };
   });

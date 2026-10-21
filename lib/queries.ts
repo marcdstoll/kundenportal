@@ -275,3 +275,36 @@ export async function activeJobsOnlyWith(cutterId: string) {
   const covered = new Set(shared.map((r) => r.jobId));
   return active.filter((j) => !covered.has(j.id)).length;
 }
+
+// Wen darf man in den Kommentaren eines Projekts mit @ erwähnen?
+// Staff: alle, die das Projekt sehen (Kunde, zugeordnete + freigegebene Cutter, Admins).
+// Kunden: die zugeordneten Cutter und das Team (Admins). Man selbst ist nie dabei.
+export async function mentionCandidates(
+  job: { id: string; customerId: string },
+  viewer: { id: string; role: string },
+): Promise<{ id: string; name: string; email: string; role: string }[]> {
+  const [assigned, freigabe, admins] = await Promise.all([
+    db.select({ id: jobCutters.userId }).from(jobCutters).where(eq(jobCutters.jobId, job.id)),
+    viewer.role === "kunde"
+      ? Promise.resolve([] as { id: string }[])
+      : db.select({ id: cutterClients.cutterId }).from(cutterClients).where(eq(cutterClients.clientId, job.customerId)),
+    listUsers("admin"),
+  ]);
+  const ids = new Set([
+    ...assigned.map((r) => r.id),
+    ...freigabe.map((r) => r.id),
+    ...(viewer.role === "kunde" ? [] : [job.customerId]),
+  ]);
+  const others = ids.size
+    ? await db
+        .select({ id: user.id, name: user.name, email: user.email, role: user.role, active: user.active })
+        .from(user)
+        .where(inArray(user.id, [...ids]))
+    : [];
+  const all = new Map<string, { id: string; name: string; email: string; role: string; active: boolean | null }>();
+  for (const p of [...others, ...admins]) all.set(p.id, { ...p, role: p.role ?? "kunde" });
+  return [...all.values()]
+    .filter((p) => p.id !== viewer.id && p.active !== false)
+    .sort((a, b) => a.name.localeCompare(b.name, "de"))
+    .map(({ id, name, email, role }) => ({ id, name, email, role }));
+}

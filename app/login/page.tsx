@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { LegalFooter } from "@/app/components/legal-footer";
 
 // Fehlermeldungen von Better Auth auf Deutsch
 function translate(message?: string) {
@@ -35,7 +36,7 @@ export default function LoginPage() {
   const field = "w-full rounded-md border border-line bg-canvas px-3 py-2 text-sm placeholder:text-muted/70";
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-4">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-4">
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 rounded-xl border border-line bg-surface p-6">
         <img src="/lightLogo.png" alt="Great Influence" className="logo-on-light h-8 w-auto"/>
         <img src="/darkLogo.png" alt="Great Influence" className="logo-on-dark h-8 w-auto"/>
@@ -70,6 +71,7 @@ export default function LoginPage() {
           Noch kein Zugang oder Passwort vergessen? Melde dich bei uns – du bekommst einen Link per E-Mail.
         </p>
       </form>
+      <LegalFooter />
     </main>
   );
 }

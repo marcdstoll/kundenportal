@@ -155,6 +155,9 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
         <ThemeToggle />
         {user.role === "admin" && <NavLinks items={[{ href: "/einstellungen", label: "Einstellungen" }]} />}
         <SignOutButton />
+        <Link href="/impressum" className="block px-2.5 pt-1 text-xs text-muted hover:text-text hover:underline">
+          Impressum
+        </Link>
       </div>
     </>
   );

@@ -20,6 +20,7 @@ export type InboxItem = {
 const TYPE_ICON: Record<string, string> = {
   file: "📎",
   comment: "💬",
+  mention: "@",
   storno_request: "⏸",
   storno_decision: "⚖️",
   status: "🎬",
