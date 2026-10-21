@@ -20,7 +20,7 @@ function projectNav(featureUnread: number): NavItem[] {
   return [
     { href: "/featureboard", label: "Featureboard", badge: featureUnread },
     { href: "/ideen", label: "Projekt-Ideen" },
-    { href: "/neu", label: "Projekt anlegen" },
+    { href: "/neu", label: "Projekt-Upload" },
   ];
 }
 
