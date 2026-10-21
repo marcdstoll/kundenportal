@@ -233,17 +233,7 @@ export async function setAssignment(cutterId: string, clientId: string, on: bool
   });
 }
 
-// ---------- Einstellungen: Onboarding-Videos & Mail-Test ----------
-
-export async function saveOnboardingVideos(input: { kunde: string; cutter: string }) {
-  return run(async () => {
-    await requireUser("admin");
-    await setSetting(SETTING_KEYS.onboardingKunde, checkUrl(input.kunde));
-    await setSetting(SETTING_KEYS.onboardingCutter, checkUrl(input.cutter));
-    refresh();
-    return null;
-  });
-}
+// ---------- Einstellungen: Mail-Test ----------
 
 export async function sendTestMail(toInput?: string) {
   return run(async () => {
@@ -325,6 +315,69 @@ export async function removeWelcomeVideo(userId: string) {
     if (prof?.welcome?.startsWith(WELCOME_PREFIX)) {
       await deleteFile(prof.welcome.slice(WELCOME_PREFIX.length)).catch((e) =>
         console.error("Begrüßungsvideo konnte nicht gelöscht werden:", e),
+      );
+    }
+    refresh();
+    return null;
+  });
+}
+
+// ---------- Onboarding-Videos (für alle neuen Kunden bzw. Cutter) – liegen ebenfalls in Frame.io ----------
+// In den Einstellungen steht dann "frameio:<Datei-ID>". Ältere Einträge können noch ein Link (YouTube/Vimeo) sein.
+
+const ONBOARDING_MAX_BYTES = 2 * 1024 * 1024 * 1024;
+const onboardingKey = (role: string) => {
+  if (role === "kunde") return SETTING_KEYS.onboardingKunde;
+  if (role === "cutter") return SETTING_KEYS.onboardingCutter;
+  throw new Error("Unbekannte Rolle.");
+};
+
+export async function startOnboardingUpload(role: string, input: { size: number; type: string; name: string }) {
+  return run(async () => {
+    await requireUser("admin");
+    onboardingKey(role);
+    const ext = WELCOME_TYPES[input.type.split(";")[0].trim()];
+    if (!ext) throw new Error("Bitte ein Video im Format MP4, MOV oder WebM auswählen.");
+    if (!input.size || input.size > ONBOARDING_MAX_BYTES) throw new Error("Das Video ist zu groß (max. 2 GB).");
+    const stamp = new Date().toISOString().slice(0, 16).replace("T", " ").replace(":", "-");
+    const name = `Onboarding ${role === "cutter" ? "Cutter" : "Kunden"} ${stamp}.${ext}`;
+    let upload;
+    try {
+      upload = await createUpload(await welcomeFolderId(), name, input.size);
+    } catch (e) {
+      if (!(e instanceof FrameioError) || e.status !== 404) throw e;
+      upload = await createUpload(await welcomeFolderId(true), name, input.size);
+    }
+    return { fileId: upload.fileId, mediaType: upload.mediaType, parts: upload.parts };
+  });
+}
+
+// Upload fertig → als Onboarding-Video setzen (ein altes Video wird in Frame.io gelöscht)
+export async function finishOnboardingUpload(role: string, fileId: string) {
+  return run(async () => {
+    await requireUser("admin");
+    const key = onboardingKey(role);
+    const old = await getSetting(key);
+    await setSetting(key, `${WELCOME_PREFIX}${fileId}`);
+    if (old?.startsWith(WELCOME_PREFIX)) {
+      await deleteFile(old.slice(WELCOME_PREFIX.length)).catch((e) =>
+        console.error("Altes Onboarding-Video konnte nicht gelöscht werden:", e),
+      );
+    }
+    refresh();
+    return null;
+  });
+}
+
+export async function removeOnboardingVideo(role: string) {
+  return run(async () => {
+    await requireUser("admin");
+    const key = onboardingKey(role);
+    const old = await getSetting(key);
+    await setSetting(key, null);
+    if (old?.startsWith(WELCOME_PREFIX)) {
+      await deleteFile(old.slice(WELCOME_PREFIX.length)).catch((e) =>
+        console.error("Onboarding-Video konnte nicht gelöscht werden:", e),
       );
     }
     refresh();

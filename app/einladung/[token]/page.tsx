@@ -94,7 +94,19 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
         ]
       : []),
     ...(onboarding
-      ? [{ title: "So funktioniert das Portal", body: <VideoEmbed url={onboarding} title="Onboarding-Video" /> }]
+      ? [
+          {
+            title: "So funktioniert das Portal",
+            // Video aus Frame.io im eigenen Player – ältere Einträge können noch ein Link sein
+            body: onboarding.startsWith("frameio:") ? (
+              <WelcomePlayer
+                src={`/api/onboarding/${row.role === "cutter" ? "cutter" : "kunde"}?t=${encodeURIComponent(token)}`}
+              />
+            ) : (
+              <VideoEmbed url={onboarding} title="Onboarding-Video" />
+            ),
+          },
+        ]
       : []),
     { title: isReset ? "Neues Passwort" : "Passwort festlegen", body: passwordStep },
   ];

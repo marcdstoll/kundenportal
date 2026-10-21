@@ -260,6 +260,21 @@ export function WelcomeVideoSection({
   const [recording, setRecording] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [fileKey, setFileKey] = useState(0);
+
+  // Aufnahme oder hochgeladene Datei zu Frame.io schicken und der Person zuordnen
+  async function save(video: Blob) {
+    setMsg(null);
+    setProgress(0);
+    try {
+      await uploadWelcomeVideo(userId, video, setProgress);
+      setMsg({ ok: true, text: "✓ Gespeichert. Es wird beim Öffnen der Einladung gezeigt." });
+      router.refresh();
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof Error ? err.message : "Upload fehlgeschlagen." });
+    }
+    setProgress(null);
+  }
 
   if (recording) {
     return (
@@ -268,16 +283,7 @@ export function WelcomeVideoSection({
         onCancel={() => setRecording(false)}
         onAccept={async (blob) => {
           setRecording(false);
-          setMsg(null);
-          setProgress(0);
-          try {
-            await uploadWelcomeVideo(userId, blob, setProgress);
-            setMsg({ ok: true, text: "✓ Gespeichert. Es wird beim Öffnen der Einladung gezeigt." });
-            router.refresh();
-          } catch (err) {
-            setMsg({ ok: false, text: err instanceof Error ? err.message : "Upload fehlgeschlagen." });
-          }
-          setProgress(null);
+          await save(blob);
         }}
       />
     );
@@ -301,6 +307,21 @@ export function WelcomeVideoSection({
           <button type="button" className={buttonSecondary} onClick={() => setRecording(true)}>
             {hasVideo ? "Neu aufnehmen" : "🎥 Video aufnehmen"}
           </button>
+          {/* Alternativ eine fertige Videodatei hochladen (landet ebenfalls in Frame.io) */}
+          <label className={`${buttonSecondary} cursor-pointer`}>
+            {hasVideo ? "Datei ersetzen" : "Datei hochladen"}
+            <input
+              key={fileKey}
+              type="file"
+              accept="video/mp4,video/quicktime,video/webm"
+              className="sr-only"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                setFileKey((k) => k + 1);
+                if (file) save(file);
+              }}
+            />
+          </label>
           {hasVideo && (
             <button
               type="button"

@@ -1,5 +1,10 @@
 import { confirmUpload, requestUpload } from "@/app/actions";
-import { finishWelcomeUpload, startWelcomeUpload } from "@/app/admin-actions";
+import {
+  finishOnboardingUpload,
+  finishWelcomeUpload,
+  startOnboardingUpload,
+  startWelcomeUpload,
+} from "@/app/admin-actions";
 
 // Läuft im Browser: lädt eine Datei in Teilen direkt zu Frame.io hoch.
 // Der Zugangsschlüssel bleibt auf dem Server; der Browser bekommt nur
@@ -100,5 +105,15 @@ export async function uploadWelcomeVideo(userId: string, video: Blob, onProgress
   if (!res.ok) throw new Error(res.error);
   await uploadParts(res.data.parts, video, res.data.mediaType || type, onProgress);
   const done = await finishWelcomeUpload(userId, res.data.fileId);
+  if (!done.ok) throw new Error(done.error);
+}
+
+// Onboarding-Video (für alle neuen Kunden bzw. Cutter) direkt zu Frame.io hochladen
+export async function uploadOnboardingVideo(role: string, video: File, onProgress: (percent: number) => void) {
+  const type = video.type.split(";")[0];
+  const res = await startOnboardingUpload(role, { size: video.size, type, name: video.name });
+  if (!res.ok) throw new Error(res.error);
+  await uploadParts(res.data.parts, video, res.data.mediaType || type, onProgress);
+  const done = await finishOnboardingUpload(role, res.data.fileId);
   if (!done.ok) throw new Error(done.error);
 }
