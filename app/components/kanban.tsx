@@ -58,7 +58,6 @@ export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread
                 style={{
                   background: `color-mix(in oklab, ${color} 5%, var(--card))`,
                   borderColor: mine ? "var(--accent)" : `color-mix(in oklab, ${color} 20%, var(--line))`,
-                  borderLeft: `3px solid ${color}`,
                 }}
               >
                 <div className="flex items-start justify-between gap-2">

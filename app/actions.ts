@@ -9,7 +9,7 @@ import { FrameioError, createFolder, createJobFolder, createUpload, deleteFile, 
 import { requireUser } from "@/lib/session";
 import { nextPartTitle } from "@/lib/queries";
 import { canSeeJob, clientIdsOfCutter } from "@/lib/access";
-import { CUSTOMER_DATE_STATUSES, FORMATS, STATUSES } from "@/lib/status";
+import { CUSTOMER_DATE_STATUSES, FORMATS, STATUSES, VIDEO_LENGTHS } from "@/lib/status";
 import { isAllowedFile, ALLOWED_LABEL } from "@/lib/file-types";
 
 // ---------- Hilfsfunktionen ----------
@@ -190,13 +190,17 @@ export async function createJob(input: NewJobInput) {
     const platforms = [...new Set(input.platforms.map((p) => p.trim()).filter(Boolean))];
     if (platforms.length === 0) throw new Error("Bitte mindestens eine Plattform auswählen.");
 
-    const required = [input.title, input.videoLength, input.content, input.specialNotes].map((v) => v.trim());
+    const required = [input.title, input.content, input.specialNotes].map((v) => v.trim());
     if (required.some((v) => v.length === 0)) {
       throw new Error("Bitte alle Pflichtfelder ausfüllen.");
     }
     if (!FORMATS.some((f) => f.value === input.format)) {
       throw new Error("Bitte ein Format auswählen.");
     }
+    // Videolänge: feste Kategorie je Format, bei Clipping keine
+    const lengths = VIDEO_LENGTHS[input.format] ?? [];
+    if (lengths.length > 0 && !lengths.includes(input.videoLength)) throw new Error("Bitte eine Videolänge auswählen.");
+    if (lengths.length === 0) input.videoLength = "";
 
     // Für wen ist das Projekt? Kunden immer für sich selbst, Admins und Cutter für einen Client
     let customer = { id: me.id, name: me.name };

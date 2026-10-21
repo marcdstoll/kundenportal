@@ -128,7 +128,7 @@ function Briefing({ job }: { job: JobView }) {
     <Section title="Briefing">
       <div className="rounded-lg border border-line bg-canvas/40 px-3 py-1.5 text-sm">
         <Row label="Plattformen">{job.platform}</Row>
-        <Row label="Videolänge">{job.videoLength}</Row>
+        {job.videoLength && <Row label="Videolänge">{job.videoLength}</Row>}
         <Row label="Inhalt">
           <p className="whitespace-pre-wrap">{job.content}</p>
         </Row>

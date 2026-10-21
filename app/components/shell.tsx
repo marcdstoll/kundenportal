@@ -115,6 +115,7 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
 
       <NavLinks items={navFor(user.role)} />
       <UploadTree />
+      <NavLinks items={[{ href: "/ideen", label: "Projekt-Ideen" }]} />
 
       {clients.length > 0 && (
         <div className="space-y-1">

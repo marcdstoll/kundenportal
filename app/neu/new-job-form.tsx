@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FORMATS, PLATFORMS } from "@/lib/status";
+import { FORMATS, PLATFORMS, VIDEO_LENGTHS } from "@/lib/status";
 import { ACCEPT, ALLOWED_LABEL, filterAllowed } from "@/lib/file-types";
 import { startProjektUpload } from "@/lib/upload-manager";
 import { MultiSelect } from "@/app/components/multi-select";
@@ -60,7 +60,7 @@ export function NewJobForm({ clients, isStaff }: Props) {
     if (isStaff && !values.customerId) e.customerId = "Bitte einen Client auswählen.";
     if (!values.title.trim()) e.title = "Bitte einen Titel eingeben.";
     if (platforms.length === 0) e.platforms = "Bitte mindestens eine Plattform wählen.";
-    if (!values.videoLength.trim()) e.videoLength = "Bitte die gewünschte Länge angeben.";
+    if ((VIDEO_LENGTHS[format] ?? []).length > 0 && !values.videoLength) e.videoLength = "Bitte eine Länge auswählen.";
     if (!values.content.trim()) e.content = "Bitte kurz beschreiben, worum es geht.";
     if (!values.specialNotes.trim()) e.specialNotes = "Bitte ausfüllen – sonst einfach „keine“.";
     if (files.length === 0 && !isStaff) e.files = "Bitte mindestens eine Datei auswählen.";
@@ -138,7 +138,11 @@ export function NewJobForm({ clients, isStaff }: Props) {
               key={f.value}
               type="button"
               disabled={busy}
-              onClick={() => setFormat(f.value)}
+              onClick={() => {
+                // Andere Kategorien je Format → Auswahl zurücksetzen
+                if (f.value !== format) set("videoLength", "");
+                setFormat(f.value);
+              }}
               className={`rounded-md border px-3 py-2 text-sm transition-colors ${
                 format === f.value ? "border-accent bg-accent/10 text-text" : "border-line text-muted hover:bg-surface"
               }`}
@@ -168,15 +172,24 @@ export function NewJobForm({ clients, isStaff }: Props) {
           />
           {errors.platforms && <span className="block text-xs text-danger">{errors.platforms}</span>}
         </div>
-        <Field label="Videolänge" error={errors.videoLength}>
-          <input
-            className={fieldClass(errors.videoLength)}
-            placeholder="z. B. 30–60 Sekunden"
-            value={values.videoLength}
-            onChange={(e) => set("videoLength", e.target.value)}
-            disabled={busy}
-          />
-        </Field>
+        {/* Clipping: keine Längenangabe */}
+        {(VIDEO_LENGTHS[format] ?? []).length > 0 && (
+          <Field label="Videolänge" error={errors.videoLength}>
+            <select
+              className={fieldClass(errors.videoLength)}
+              value={values.videoLength}
+              onChange={(e) => set("videoLength", e.target.value)}
+              disabled={busy}
+            >
+              <option value="">Länge wählen …</option>
+              {VIDEO_LENGTHS[format].map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
       </div>
 
       <Field label="Inhalt" error={errors.content}>

@@ -177,3 +177,21 @@ export const settings = pgTable("settings", {
   value: text("value"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+// Projekt-Ideen: Kunden notieren Ideen (Titel + Notiz), Admins/Cutter sehen sie und haken sie ab
+export const projectIdeas = pgTable(
+  "project_ideas",
+  {
+    id: text("id").primaryKey(),
+    customerId: text("customer_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    note: text("note"),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    doneAt: timestamp("done_at"),
+    doneBy: text("done_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("project_ideas_customer_idx").on(t.customerId)]
+);
