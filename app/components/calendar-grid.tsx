@@ -3,7 +3,6 @@
 import { useEffect, useOptimistic, useState, useTransition } from "react";
 import Link from "next/link";
 import { setPublishDate } from "@/app/actions";
-import { statusColor } from "@/lib/status";
 import { FormatTag, StatusBadge } from "./ui";
 
 export type CalendarDay = { key: string; day: number; inMonth: boolean; isToday: boolean };
@@ -11,6 +10,7 @@ export type CalendarItem = {
   id: string;
   title: string;
   customerName: string;
+  color: string; // Farbe des Kunden (Grundfarbe des Eintrags, unabhängig vom Status)
   format: string;
   status: string;
   date: string; // "YYYY-MM-DD"
@@ -125,7 +125,7 @@ export function CalendarGrid({ days, items, showClient }: { days: CalendarDay[];
                   </span>
                 </div>
                 {dayItems.map((it) => {
-                  const color = statusColor(it.status);
+                  const color = it.color;
                   return (
                     <Link
                       key={it.id}
@@ -192,7 +192,7 @@ function AgendaList({ days, items, showClient }: { days: CalendarDay[]; items: C
             {items
               .filter((it) => it.date === d.key)
               .map((it) => {
-                const color = statusColor(it.status);
+                const color = it.color;
                 return (
                   <Link
                     key={it.id}

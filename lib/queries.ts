@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { account, cutterClients, featureRequests, jobComments, jobCutters, jobFiles, jobs, notifications, profiles, user } from "@/db/schema";
+import { account, cutterClients, featureRequests, projectIdeas, jobComments, jobCutters, jobFiles, jobs, notifications, profiles, user } from "@/db/schema";
 
 export type JobFileView = typeof jobFiles.$inferSelect & { uploaderName: string | null };
 
@@ -129,19 +129,27 @@ export async function nextPartTitle(job: { id: string; title: string; parentJobI
 // Ungelesene Benachrichtigungen je Projekt (für "Neu"-Markierungen auf Board und Karten)
 export async function unreadByJob(userId: string) {
   const rows = await db
-    .select({ jobId: notifications.jobId, featureId: notifications.featureId, fileId: notifications.fileId })
+    .select({
+      jobId: notifications.jobId,
+      featureId: notifications.featureId,
+      ideaId: notifications.ideaId,
+      fileId: notifications.fileId,
+    })
     .from(notifications)
     .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
   const jobsMap = new Map<string, number>();
   const features = new Map<string, number>();
+  const ideas = new Map<string, number>();
   const files = new Set<string>();
   for (const r of rows) {
     if (r.jobId) jobsMap.set(r.jobId, (jobsMap.get(r.jobId) ?? 0) + 1);
     if (r.featureId) features.set(r.featureId, (features.get(r.featureId) ?? 0) + 1);
+    if (r.ideaId) ideas.set(r.ideaId, (ideas.get(r.ideaId) ?? 0) + 1);
     if (r.fileId) files.add(r.fileId);
   }
   const featureTotal = [...features.values()].reduce((a, b) => a + b, 0);
-  return { jobs: jobsMap, features, featureTotal, files, total: rows.length };
+  const ideaTotal = [...ideas.values()].reduce((a, b) => a + b, 0);
+  return { jobs: jobsMap, features, featureTotal, ideas, ideaTotal, files, total: rows.length };
 }
 
 export async function loadInbox(userId: string, limit = 200) {
@@ -150,6 +158,7 @@ export async function loadInbox(userId: string, limit = 200) {
       id: notifications.id,
       jobId: notifications.jobId,
       featureId: notifications.featureId,
+      ideaId: notifications.ideaId,
       type: notifications.type,
       text: notifications.text,
       createdAt: notifications.createdAt,
@@ -157,10 +166,12 @@ export async function loadInbox(userId: string, limit = 200) {
       jobTitle: jobs.title,
       jobStatus: jobs.status,
       featureTitle: featureRequests.title,
+      ideaTitle: projectIdeas.title,
     })
     .from(notifications)
     .leftJoin(jobs, eq(notifications.jobId, jobs.id))
     .leftJoin(featureRequests, eq(notifications.featureId, featureRequests.id))
+    .leftJoin(projectIdeas, eq(notifications.ideaId, projectIdeas.id))
     .where(eq(notifications.userId, userId))
     .orderBy(desc(notifications.createdAt))
     .limit(limit);
@@ -197,6 +208,7 @@ export type PersonView = {
   notes: string | null;
   welcomeVideo: string | null;
   birthday: string | null;
+  color: string | null;
   hasLogo: boolean;
   logoVersion: number;
   // eingeladen = Passwort noch nicht gesetzt
@@ -216,6 +228,7 @@ export async function loadPeople(...roles: ("kunde" | "cutter" | "admin")[]): Pr
       notes: profiles.notes,
       welcomeVideo: profiles.welcomeVideo,
       birthday: profiles.birthday,
+      color: profiles.color,
       hasLogo: sql<boolean>`${profiles.logo} is not null`,
       logoUpdated: profiles.updatedAt,
       accountId: account.id,
@@ -307,4 +320,12 @@ export async function mentionCandidates(
     .filter((p) => p.id !== viewer.id && p.active !== false)
     .sort((a, b) => a.name.localeCompare(b.name, "de"))
     .map(({ id, name, email, role }) => ({ id, name, email, role }));
+}
+
+// Gewählte Personenfarben (nur Personen, die selbst eine Farbe gesetzt haben)
+export async function loadColors() {
+  return db
+    .select({ id: profiles.userId, color: profiles.color })
+    .from(profiles)
+    .where(isNotNull(profiles.color));
 }

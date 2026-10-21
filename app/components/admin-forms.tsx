@@ -399,7 +399,7 @@ export function ProfileForm({
       }}
     >
       <div className="flex items-center gap-4">
-        <Avatar name={name || "?"} size="lg" logoUrl={preview} />
+        <Avatar name={name || "?"} id={person.id} size="lg" logoUrl={preview} />
         <div className="space-y-1">
           <label className={`${buttonSecondary} inline-block cursor-pointer`}>
             Logo auswählen

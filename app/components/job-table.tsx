@@ -130,12 +130,12 @@ export function JobTable({ jobs, hrefFor, isAdmin, sort, sortHref, logos }: Prop
                 <FormatTag format={job.format} />
               </td>
               <td className="px-4 py-2.5">
-                <Person name={job.customerName} logoUrl={logos?.get(job.customerId)} />
+                <Person name={job.customerName} id={job.customerId} logoUrl={logos?.get(job.customerId)} />
               </td>
               <td className="px-4 py-2.5">
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
                   {job.cutters.map((c) => (
-                    <Person key={c.id} name={c.name} logoUrl={logos?.get(c.id)} />
+                    <Person key={c.id} name={c.name} id={c.id} logoUrl={logos?.get(c.id)} />
                   ))}
                 </div>
               </td>
@@ -192,7 +192,7 @@ export function PersonTabs({
             p.id === activeId ? "bg-raised text-text" : "text-muted hover:bg-surface hover:text-text"
           }`}
         >
-          <Avatar name={p.name} logoUrl={logos?.get(p.id)} />
+          <Avatar name={p.name} id={p.id} logoUrl={logos?.get(p.id)} />
           {p.name}
         </Link>
       ))}

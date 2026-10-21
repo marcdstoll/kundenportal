@@ -233,6 +233,7 @@ export type JobCommentView = {
   body: string; // mit Erwähnungs-Tokens
   author: string;
   avatarName: string;
+  avatarId: string | null;
   role: string | null;
   createdAt: string;
   editedAt: string | null;
@@ -262,7 +263,7 @@ export function JobComment({
 
   return (
     <li className="flex gap-2.5" data-testid="job-comment">
-      <Avatar name={c.avatarName} />
+      <Avatar name={c.avatarName} id={c.avatarId} />
       <div className="min-w-0 flex-1 space-y-0.5">
         <p className="text-xs text-muted">
           <span className="font-medium text-text">{c.author}</span>

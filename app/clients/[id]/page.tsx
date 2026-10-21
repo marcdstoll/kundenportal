@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { loadAssignments, loadPeople, loadPerson, logoUrl } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
+import { ColorPicker } from "@/app/components/color-picker";
 import { buttonSecondary } from "@/app/components/ui";
 import { AssignmentSelect, ProfileForm, RegenerateInvite, WelcomeVideoSection, DeleteCustomerButton } from "@/app/components/admin-forms";
 
@@ -36,6 +37,15 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           <ProfileForm key={client.logoVersion} person={client} logoUrl={logoUrl(client)} showNotes />
         </section>
         <aside className="space-y-8">
+          <section className="space-y-2">
+            <h2 className="text-sm font-medium">Farbe</h2>
+            <p className="text-xs text-muted">
+              {client.role === "kunde"
+                ? "Färbt die Projekte dieses Kunden im Kalender und auf dem Board."
+                : "Färbt Avatar und Einträge dieser Person."}
+            </p>
+            <ColorPicker userId={id} name={client.name} color={client.color} />
+          </section>
           <section className="space-y-2">
             <h2 className="text-sm font-medium">Betreuende Cutter</h2>
             {cutters.length > 0 ? (

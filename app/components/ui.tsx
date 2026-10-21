@@ -1,4 +1,5 @@
 import { FORMAT_LABELS, STATUS_LABELS, statusColor } from "@/lib/status";
+import { personColor } from "@/lib/colors";
 
 // Farbiger Status-Chip (Farbe kommt aus globals.css, passt sich hell/dunkel an)
 export function StatusBadge({ status, label }: { status: string; label?: string }) {
@@ -32,13 +33,20 @@ export function FormatTag({ format }: { format: string }) {
   );
 }
 
-// Farbe aus dem Namen ableiten, damit jede Person immer dieselbe Farbe hat
-export function personHue(name: string) {
-  return [...name].reduce((a, c) => a + c.charCodeAt(0) * 7, 0) % 360;
-}
+export { personHue } from "@/lib/colors";
 
-// Logo (falls hinterlegt), sonst runde Initialen
-export function Avatar({ name, size = "sm", logoUrl }: { name: string; size?: "sm" | "md" | "lg"; logoUrl?: string | null }) {
+// Logo (falls hinterlegt), sonst runde Initialen in der Personenfarbe (siehe lib/colors.ts)
+export function Avatar({
+  name,
+  id,
+  size = "sm",
+  logoUrl,
+}: {
+  name: string;
+  id?: string | null;
+  size?: "sm" | "md" | "lg";
+  logoUrl?: string | null;
+}) {
   const dims = size === "lg" ? "size-14 text-lg" : size === "md" ? "size-8 text-xs" : "size-5 text-[10px]";
   if (logoUrl) {
     return (
@@ -52,11 +60,11 @@ export function Avatar({ name, size = "sm", logoUrl }: { name: string; size?: "s
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase())
     .join("");
-  const hue = personHue(name);
+  const color = personColor(id, name);
   return (
     <span
       className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white ${dims}`}
-      style={{ background: `linear-gradient(135deg, hsl(${hue} 65% 55%), hsl(${(hue + 40) % 360} 60% 42%))` }}
+      style={{ background: `linear-gradient(135deg, ${color}, color-mix(in oklab, ${color} 70%, black))` }}
       aria-hidden
     >
       {initials}
@@ -64,10 +72,10 @@ export function Avatar({ name, size = "sm", logoUrl }: { name: string; size?: "s
   );
 }
 
-export function Person({ name, logoUrl }: { name: string; logoUrl?: string | null }) {
+export function Person({ name, id, logoUrl }: { name: string; id?: string | null; logoUrl?: string | null }) {
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-      <Avatar name={name} logoUrl={logoUrl} />
+      <Avatar name={name} id={id} logoUrl={logoUrl} />
       <span>{name}</span>
     </span>
   );

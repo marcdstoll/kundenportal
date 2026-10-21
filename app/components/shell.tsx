@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { SignOutButton } from "@/app/dashboard/sign-out-button";
-import { clientLogos, listUsers, loadInbox, unreadByJob } from "@/lib/queries";
+import { clientLogos, listUsers, loadColors, loadInbox, unreadByJob } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/session";
-import { Avatar, personHue } from "./ui";
+import { Avatar } from "./ui";
+import { colorStyles, personColor } from "@/lib/colors";
 import { NavLinks, type NavItem } from "./nav-links";
 import { ThemeToggle } from "./theme-toggle";
 import { MobileFrame } from "./mobile-frame";
@@ -16,10 +17,10 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 // Für alle Rollen gleich, unter der Hauptnavigation: Featureboard, Projekt-Ideen, Projekt anlegen (darunter der Upload-Baum)
-function projectNav(featureUnread: number): NavItem[] {
+function projectNav(featureUnread: number, ideaUnread: number): NavItem[] {
   return [
     { href: "/featureboard", label: "Featureboard", badge: featureUnread },
-    { href: "/ideen", label: "Projekt-Ideen" },
+    { href: "/ideen", label: "Projekt-Ideen", badge: ideaUnread },
     { href: "/neu", label: "Projekt-Upload" },
   ];
 }
@@ -54,10 +55,20 @@ function navFor(role: string): NavItem[] {
 async function safeUnread(userId: string) {
   try {
     const u = await unreadByJob(userId);
-    return { total: u.total, features: u.featureTotal };
+    return { total: u.total, features: u.featureTotal, ideas: u.ideaTotal };
   } catch (e) {
     console.error("Inbox-Zähler nicht verfügbar:", e);
-    return { total: 0, features: 0 };
+    return { total: 0, features: 0, ideas: 0 };
+  }
+}
+
+// Gewählte Personenfarben als CSS-Variablen (ausfallsicher, z. B. falls die Spalte noch fehlt)
+async function safeColors() {
+  try {
+    return colorStyles(await loadColors());
+  } catch (e) {
+    console.error("Personenfarben nicht verfügbar:", e);
+    return "";
   }
 }
 
@@ -69,11 +80,12 @@ async function safeInbox(userId: string): Promise<InboxItem[]> {
       id: r.id,
       jobId: r.jobId,
       featureId: r.featureId,
+      ideaId: r.ideaId,
       type: r.type,
       text: r.text,
       createdAt: r.createdAt,
       read: !!r.readAt,
-      title: r.jobTitle ?? r.featureTitle ?? "",
+      title: r.jobTitle ?? r.featureTitle ?? r.ideaTitle ?? "",
       jobStatus: r.jobStatus,
     }));
   } catch (e) {
@@ -100,11 +112,12 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
   if (!user) return <>{children}</>;
 
   // Admins sehen links alle Kunden und können deren Ansicht öffnen
-  const [clients, unread, logos, inboxItems] = await Promise.all([
+  const [clients, unread, logos, inboxItems, colors] = await Promise.all([
     user.role === "admin" ? listUsers("kunde") : Promise.resolve([]),
     safeUnread(user.id),
     safeLogos(),
     safeInbox(user.id),
+    safeColors(),
   ]);
   const inbox = (
     <InboxButton
@@ -126,7 +139,7 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
       </div>
 
       <div className="space-y-0.5">
-        <NavLinks items={[...navFor(user.role), ...projectNav(unread.features)]} />
+        <NavLinks items={[...navFor(user.role), ...projectNav(unread.features, unread.ideas)]} />
         <UploadTree />
       </div>
 
@@ -137,7 +150,7 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
             items={clients.map((c) => ({
               href: `/kunde?as=${c.id}`,
               label: c.name,
-              color: logos.has(c.id) ? undefined : `hsl(${personHue(c.name)} 65% 55%)`,
+              color: logos.has(c.id) ? undefined : personColor(c.id, c.name),
               logo: logos.get(c.id),
             }))}
           />
@@ -145,13 +158,17 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="mt-auto space-y-1 border-t border-line pt-3">
-        <div className="flex items-center gap-2 px-2.5 pb-1">
-          <Avatar name={user.name} logoUrl={logos.get(user.id)} />
+        <Link
+          href="/profil"
+          title="Mein Profil"
+          className="flex items-center gap-2 rounded-md px-2.5 py-1 transition-colors hover:bg-raised/60"
+        >
+          <Avatar name={user.name} id={user.id} logoUrl={logos.get(user.id)} />
           <div className="min-w-0 flex-1 text-xs">
             <p className="truncate">{user.name}</p>
             <p className="text-muted">{ROLE_LABELS[user.role] ?? user.role}</p>
           </div>
-        </div>
+        </Link>
         <ThemeToggle />
         {user.role === "admin" && <NavLinks items={[{ href: "/einstellungen", label: "Einstellungen" }]} />}
         <SignOutButton />
@@ -163,9 +180,13 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <MobileFrame inbox={inbox} sidebar={sidebar}>
-      {children}
-    </MobileFrame>
+    <>
+      {/* Gewählte Personenfarben (nur geprüfte Hex-Werte, siehe lib/colors.ts) */}
+      {colors && <style dangerouslySetInnerHTML={{ __html: colors }} />}
+      <MobileFrame inbox={inbox} sidebar={sidebar}>
+        {children}
+      </MobileFrame>
+    </>
   );
 }
 

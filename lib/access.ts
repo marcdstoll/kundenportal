@@ -55,3 +55,10 @@ export async function canSeeJob(me: Viewer, job: { id: string; customerId: strin
     .where(and(eq(jobCutters.jobId, job.id), eq(jobCutters.userId, me.id)));
   return !!assigned;
 }
+
+// Projekt-Ideen eines Kunden sehen: der Kunde selbst, für ihn freigegebene Cutter, Admins
+export async function canSeeIdea(me: Viewer, customerId: string) {
+  if (me.role === "admin") return true;
+  if (me.role === "kunde") return customerId === me.id;
+  return (await clientIdsOfCutter(me.id)).includes(customerId);
+}

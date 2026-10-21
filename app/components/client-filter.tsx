@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { personHue } from "./ui";
+import { personColor } from "@/lib/colors";
 
 // Dropdown mit Mehrfachauswahl: einen, mehrere oder alle Kunden anzeigen.
 // Die Auswahl steht in der URL (?k=id1,id2), damit Links und Neuladen sie behalten.
@@ -79,7 +79,7 @@ export function ClientFilter({ clients, selected }: { clients: { id: string; nam
                   checked={picked.includes(c.id)}
                   onChange={() => toggle(c.id)}
                 />
-                <span className="size-2 shrink-0 rounded-full" style={{ background: `hsl(${personHue(c.name)} 65% 55%)` }} />
+                <span className="size-2 shrink-0 rounded-full" style={{ background: personColor(c.id, c.name) }} />
                 <span className="truncate">{c.name}</span>
               </label>
             ))}

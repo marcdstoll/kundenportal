@@ -1,15 +1,24 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, type SQL } from "drizzle-orm";
+import { count, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { projectIdeas, user } from "@/db/schema";
+import { ideaAttachments, ideaComments, ideaVotes, projectIdeas, user } from "@/db/schema";
 import { getCurrentUser } from "@/lib/session";
-import { clientLogos, listUsers } from "@/lib/queries";
+import { clientLogos, listUsers, unreadByJob } from "@/lib/queries";
 import { clientIdsOfCutter } from "@/lib/access";
+import {
+  IDEA_STATUSES,
+  IDEA_STATUS_LABELS,
+  PRIORITIES,
+  PRIORITY_COLORS,
+  PRIORITY_LABELS,
+  PRIORITY_RANK,
+} from "@/lib/ideas";
 import { PageHeader } from "@/app/components/shell";
 import { ClientFilter } from "@/app/components/client-filter";
-import { Avatar } from "@/app/components/ui";
-import { DeleteIdeaButton, IdeaCheck, NewIdeaForm } from "./idea-forms";
+import { Person } from "@/app/components/ui";
+import { IdeaVoteButton, NewIdeaForm } from "./idea-forms";
+import { IdeaDrawer, IdeaStatusBadge, PriorityBadge, fmtDay } from "./idea-drawer";
 
 type Params = Promise<Record<string, string | string[] | undefined>>;
 
@@ -17,52 +26,69 @@ export default function IdeasPage({ searchParams }: { searchParams: Params }) {
   return <Content searchParams={searchParams} />;
 }
 
-const fmt = (d: Date) => d.toLocaleDateString("de-DE", { day: "numeric", month: "short", year: "numeric" });
-
-// Projekt-Ideen: Kunden sehen ihre eigenen, Cutter die ihrer freigegebenen Kunden, Admins alle.
-// Zwei Tabs: Offen / Abgehakt. Staff kann nach Kunden filtern (?k=id1,id2).
+// Projekt-Ideen je Kunde – aufgebaut wie das Featureboard.
+// Sehen: der Kunde selbst, für ihn freigegebene Cutter, Admins. Meiste Stimmen oben.
+// Oben rechts: Kunden-Filter (Team, ?k=) und Prioritäts-Filter (?p=). Darunter Status-Reiter (?s=).
 async function Content({ searchParams }: { searchParams: Params }) {
   const me = await getCurrentUser();
   if (!me) redirect("/login");
   const params = await searchParams;
-  const showDone = params.tab === "abgehakt";
   const isKunde = me.role === "kunde";
+  const one = (k: string) => (typeof params[k] === "string" ? (params[k] as string) : "");
 
-  // Sichtbare Kunden + Filter
+  // Sichtbare Kunden (+ Filter)
   let clients: { id: string; name: string }[] = [];
-  let scope: SQL | undefined;
+  let scope: string[] | null = null; // null = alle
   if (isKunde) {
-    scope = eq(projectIdeas.customerId, me.id);
+    scope = [me.id];
   } else {
     const all = await listUsers("kunde");
     const allowed = me.role === "cutter" ? await clientIdsOfCutter(me.id) : null;
     clients = (allowed ? all.filter((c) => allowed.includes(c.id)) : all).map((c) => ({ id: c.id, name: c.name }));
-    const picked =
-      typeof params.k === "string" ? params.k.split(",").filter((id) => clients.some((c) => c.id === id)) : [];
-    const ids = picked.length > 0 ? picked : allowed;
-    if (ids) scope = inArray(projectIdeas.customerId, ids.length > 0 ? ids : ["-"]);
+    const picked = one("k")
+      .split(",")
+      .filter((id) => clients.some((c) => c.id === id));
+    scope = picked.length > 0 ? picked : allowed;
   }
-  const picked = typeof params.k === "string" ? params.k : "";
+  const pickedClients = one("k");
 
-  const [ideas, [openCount], [doneCount], logos] = await Promise.all([
-    db
-      .select()
-      .from(projectIdeas)
-      .where(and(scope, showDone ? isNotNull(projectIdeas.doneAt) : isNull(projectIdeas.doneAt)))
-      .orderBy(showDone ? desc(projectIdeas.doneAt) : desc(projectIdeas.createdAt), asc(projectIdeas.title)),
-    db
-      .select({ n: count() })
-      .from(projectIdeas)
-      .where(and(scope, isNull(projectIdeas.doneAt))),
-    db
-      .select({ n: count() })
-      .from(projectIdeas)
-      .where(and(scope, isNotNull(projectIdeas.doneAt))),
+  const allPrios = PRIORITIES as readonly string[];
+  const prioPicked = one("p")
+    .split(",")
+    .filter((p) => allPrios.includes(p));
+  const prios = prioPicked.length > 0 ? prioPicked : [...allPrios];
+  const status = (IDEA_STATUSES as readonly string[]).includes(one("s")) ? one("s") : "";
+  const openId = one("i") || null;
+
+  const query = (extra: Record<string, string> = {}) => {
+    const p = new URLSearchParams();
+    if (pickedClients) p.set("k", pickedClients);
+    if (prioPicked.length > 0 && prioPicked.length < allPrios.length) p.set("p", prios.join(","));
+    if (status) p.set("s", status);
+    for (const [k, v] of Object.entries(extra)) {
+      if (v) p.set(k, v);
+      else p.delete(k);
+    }
+    const q = p.toString();
+    return q ? `/ideen?${q}` : "/ideen";
+  };
+
+  const where = scope === null ? undefined : inArray(projectIdeas.customerId, scope.length ? scope : ["-"]);
+  const [ideas, votes, myVotes, comments, images, unread, logos] = await Promise.all([
+    db.select().from(projectIdeas).where(where).orderBy(desc(projectIdeas.createdAt)),
+    db.select({ id: ideaVotes.ideaId, n: count() }).from(ideaVotes).groupBy(ideaVotes.ideaId),
+    db.select({ id: ideaVotes.ideaId }).from(ideaVotes).where(eq(ideaVotes.userId, me.id)),
+    db.select({ id: ideaComments.ideaId, n: count() }).from(ideaComments).groupBy(ideaComments.ideaId),
+    db.select({ id: ideaAttachments.ideaId, n: count() }).from(ideaAttachments).groupBy(ideaAttachments.ideaId),
+    unreadByJob(me.id).then((u) => u.ideas),
     clientLogos(),
   ]);
+  const voteCount = new Map(votes.map((v) => [v.id, v.n]));
+  const voted = new Set(myVotes.map((v) => v.id));
+  const commentCount = new Map(comments.map((c) => [c.id, c.n]));
+  const imageCount = new Map(images.map((c) => [c.id, c.n]));
 
-  // Namen für Kunde und „abgehakt von“
-  const nameIds = [...new Set(ideas.flatMap((i) => [i.customerId, i.doneBy]).filter((x): x is string => !!x))];
+  const nameIds = [...new Set(ideas.flatMap((i) => [i.customerId, i.createdBy]).filter(Boolean))] as string[];
   const names = new Map(
     nameIds.length
       ? (await db.select({ id: user.id, name: user.name }).from(user).where(inArray(user.id, nameIds))).map((u) => [
@@ -72,116 +98,184 @@ async function Content({ searchParams }: { searchParams: Params }) {
       : [],
   );
 
-  const tabHref = (done: boolean) => {
-    const p = new URLSearchParams();
-    if (done) p.set("tab", "abgehakt");
-    if (picked) p.set("k", picked);
-    const q = p.toString();
-    return q ? `/ideen?${q}` : "/ideen";
-  };
-  const canDelete = me.role === "admin" || isKunde;
+  // Zähler für Reiter (nach Priorität gefiltert) und Prioritäts-Chips (nach Status gefiltert)
+  const inPrio = ideas.filter((i) => prios.includes(i.priority));
+  const statusCount = (s: string) => inPrio.filter((i) => !s || i.status === s).length;
+  const prioCount = (p: string) => ideas.filter((i) => i.priority === p && (!status || i.status === status)).length;
+
+  // Meiste Stimmen oben, dann höhere Priorität, dann die neueste
+  const list = inPrio
+    .filter((i) => !status || i.status === status)
+    .sort(
+      (a, b) =>
+        (voteCount.get(b.id) ?? 0) - (voteCount.get(a.id) ?? 0) ||
+        PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority],
+    );
 
   return (
     <>
       <PageHeader title="Projekt-Ideen">
-        {isKunde ? (
-          <NewIdeaForm />
-        ) : (
-          clients.length > 0 && <ClientFilter clients={clients} selected={picked ? picked.split(",") : []} />
+        {clients.length > 0 && (
+          <ClientFilter clients={clients} selected={pickedClients ? pickedClients.split(",") : []} />
         )}
+        <PriorityFilter active={prios} counts={prioCount} hrefFor={(p) => query({ p })} />
       </PageHeader>
+
       <div className="space-y-4 px-4 pb-10 sm:px-6 md:px-10">
-        <nav className="flex gap-1 border-b border-line" aria-label="Ideen filtern">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <p className="max-w-2xl text-sm text-muted">
+            {isKunde
+              ? "Halte hier deine Ideen für kommende Videos fest. Vote für das, was dir am wichtigsten ist – wir sehen es und melden uns."
+              : "Ideen der Kunden für kommende Videos. Status setzen Team und Cutter, Priorität und Stimmen alle Beteiligten."}
+          </p>
+          <NewIdeaForm clients={isKunde ? null : clients} />
+        </div>
+
+        <nav className="flex gap-1 overflow-x-auto border-b border-line" aria-label="Ideen nach Status">
           {[
-            { done: false, label: "Offen", n: openCount.n },
-            { done: true, label: "Abgehakt", n: doneCount.n },
+            { value: "", label: "Alle" },
+            ...IDEA_STATUSES.map((s) => ({ value: s, label: IDEA_STATUS_LABELS[s] })),
           ].map((t) => {
-            const active = t.done === showDone;
+            const active = t.value === status;
             return (
               <Link
                 key={t.label}
-                href={tabHref(t.done)}
+                href={query({ s: t.value, i: "" })}
                 scroll={false}
                 aria-current={active ? "page" : undefined}
-                className={`-mb-px border-b-2 px-3 py-2 text-sm transition-colors ${
+                className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors ${
                   active ? "border-accent font-medium text-text" : "border-transparent text-muted hover:text-text"
                 }`}
               >
-                {t.label} <span className="text-xs text-muted">{t.n}</span>
+                {t.label} <span className="text-xs text-muted">{statusCount(t.value)}</span>
               </Link>
             );
           })}
         </nav>
 
-        {ideas.length === 0 ? (
+        {list.length === 0 ? (
           <p className="rounded-xl border border-dashed border-line p-6 text-center text-sm text-muted">
-            {showDone
-              ? "Noch nichts abgehakt."
-              : isKunde
+            {ideas.length === 0
+              ? isKunde
                 ? "Noch keine Ideen. Über „+ Neue Idee“ hältst du deine erste fest."
-                : "Keine offenen Ideen."}
+                : "Noch keine Ideen."
+              : "Keine Ideen mit diesem Filter."}
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-line">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead className="bg-surface text-xs text-muted">
-                <tr>
-                  <th className="w-10 px-4 py-2.5 font-medium">
-                    <span className="sr-only">Abhaken</span>
-                  </th>
-                  <th className="px-4 py-2.5 font-medium">Titel</th>
-                  <th className="px-4 py-2.5 font-medium">Notiz</th>
-                  {!isKunde && <th className="px-4 py-2.5 font-medium">Kunde</th>}
-                  <th className="px-4 py-2.5 font-medium">{showDone ? "Abgehakt" : "Erstellt"}</th>
-                  {canDelete && (
-                    <th className="w-10 px-4 py-2.5 font-medium">
-                      <span className="sr-only">Löschen</span>
-                    </th>
-                  )}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {ideas.map((i) => (
-                  <tr key={i.id} className={showDone ? "text-muted" : ""}>
-                    <td className="px-4 py-3 align-top">
-                      <IdeaCheck id={i.id} done={!!i.doneAt} title={i.title} />
-                    </td>
-                    <td className={`px-4 py-3 align-top font-medium ${showDone ? "line-through" : "text-text"}`}>
-                      {i.title}
-                    </td>
-                    <td className="max-w-md px-4 py-3 align-top">
-                      <p className="whitespace-pre-wrap text-muted">{i.note || "–"}</p>
-                    </td>
-                    {!isKunde && (
-                      <td className="px-4 py-3 align-top">
-                        <span className="inline-flex items-center gap-2 whitespace-nowrap">
-                          <Avatar name={names.get(i.customerId) ?? "?"} logoUrl={logos.get(i.customerId)} />
-                          {names.get(i.customerId) ?? "–"}
+          <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line" aria-label="Ideen">
+            {list.map((i) => {
+              const isNew = !!unread.get(i.id);
+              const nComments = commentCount.get(i.id) ?? 0;
+              const nImages = imageCount.get(i.id) ?? 0;
+              const customerName = names.get(i.customerId) ?? "–";
+              return (
+                <li
+                  key={i.id}
+                  className="flex items-center gap-3 bg-surface px-3 py-3 sm:gap-4 sm:px-4"
+                  data-testid="idea-row"
+                >
+                  <IdeaVoteButton ideaId={i.id} count={voteCount.get(i.id) ?? 0} voted={voted.has(i.id)} />
+                  <Link
+                    href={query({ i: i.id })}
+                    scroll={false}
+                    className={`group flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-4 gap-y-1.5 rounded-md ${
+                      openId === i.id ? "text-accent" : ""
+                    }`}
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <p className="flex flex-wrap items-center gap-2 font-medium leading-snug group-hover:underline">
+                        <span className="min-w-0 break-words">{i.title}</span>
+                        {isNew && (
+                          <span
+                            className="rounded px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-white"
+                            style={{ background: "var(--rec)" }}
+                            title="Neue Einträge in der Inbox"
+                          >
+                            Neu
+                          </span>
+                        )}
+                      </p>
+                      <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted">
+                        {!isKunde && <Person name={customerName} id={i.customerId} logoUrl={logos.get(i.customerId)} />}
+                        <span>
+                          Von {i.createdBy === me.id ? "dir" : i.createdBy ? (names.get(i.createdBy) ?? "–") : "–"}
                         </span>
-                      </td>
-                    )}
-                    <td className="whitespace-nowrap px-4 py-3 align-top text-muted">
-                      {showDone && i.doneAt ? (
-                        <>
-                          {fmt(i.doneAt)}
-                          {i.doneBy && <span className="block text-xs">von {names.get(i.doneBy) ?? "–"}</span>}
-                        </>
-                      ) : (
-                        fmt(i.createdAt)
-                      )}
-                    </td>
-                    {canDelete && (
-                      <td className="px-4 py-3 align-top">
-                        <DeleteIdeaButton id={i.id} title={i.title} />
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        <span>Erstellt {fmtDay(i.createdAt)}</span>
+                        {i.doneAt && <span>Abgeschlossen {fmtDay(i.doneAt)}</span>}
+                        {nComments > 0 && <span title="Kommentare">💬 {nComments}</span>}
+                        {nImages > 0 && <span title="Screenshots">🖼 {nImages}</span>}
+                      </p>
+                    </div>
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      <PriorityBadge priority={i.priority} />
+                      <IdeaStatusBadge status={i.status} />
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
+
+      {openId && (
+        <IdeaDrawer ideaId={openId} closeHref={query({ i: "" })} me={me} imageError={one("bild") === "fehler"} />
+      )}
     </>
+  );
+}
+
+// Filter-Chips wie beim Featureboard: Klick zeigt nur diese Priorität, weitere dazu- bzw. wegschalten
+function PriorityFilter({
+  active,
+  counts,
+  hrefFor,
+}: {
+  active: string[];
+  counts: (p: string) => number;
+  hrefFor: (p: string) => string;
+}) {
+  const all = PRIORITIES as readonly string[];
+  const allOn = active.length === all.length;
+  const nextFor = (value: string) => {
+    const isOn = active.includes(value);
+    let next = allOn ? [value] : isOn ? active.filter((s) => s !== value) : [...active, value];
+    if (next.length === 0 || next.length === all.length) next = [];
+    return all.filter((s) => next.includes(s)).join(",");
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Priorität filtern">
+      {PRIORITIES.map((p) => {
+        const on = active.includes(p) && !allOn;
+        const color = PRIORITY_COLORS[p];
+        return (
+          <Link
+            key={p}
+            href={hrefFor(nextFor(p))}
+            scroll={false}
+            aria-pressed={active.includes(p)}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors ${
+              on
+                ? "text-text"
+                : allOn
+                  ? "border-line text-muted hover:text-text"
+                  : "border-line text-muted/60 hover:text-text"
+            }`}
+            style={
+              on ? { borderColor: color, background: `color-mix(in oklab, ${color} 14%, transparent)` } : undefined
+            }
+          >
+            <span className="size-2 rounded-full" style={{ background: color, opacity: allOn || on ? 1 : 0.4 }} />
+            {PRIORITY_LABELS[p]}
+            <span className="text-xs text-muted">{counts(p)}</span>
+          </Link>
+        );
+      })}
+      {!allOn && (
+        <Link href={hrefFor("")} scroll={false} className="px-2 text-xs text-muted hover:text-text">
+          Alle
+        </Link>
+      )}
+    </div>
   );
 }

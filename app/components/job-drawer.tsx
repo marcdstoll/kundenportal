@@ -237,6 +237,7 @@ async function Comments({
                 body: c.body,
                 author: mine ? "Du" : (c.authorName ?? "Gelöschter Nutzer"),
                 avatarName: c.authorName ?? "?",
+                avatarId: c.authorId,
                 role: c.authorRole ? (ROLE_LABELS[c.authorRole] ?? c.authorRole) : null,
                 createdAt: formatDateTime(c.createdAt),
                 editedAt: c.editedAt ? formatDateTime(c.editedAt) : null,
@@ -294,7 +295,7 @@ export async function JobDrawer({
 
       <section>
         <Row label="Client">
-          <Person name={job.customerName} logoUrl={logos.get(job.customerId)} />
+          <Person name={job.customerName} id={job.customerId} logoUrl={logos.get(job.customerId)} />
         </Row>
         <Row label="Cutter">
           {job.cutters.length === 0 ? (
@@ -302,7 +303,7 @@ export async function JobDrawer({
           ) : (
             <div className="flex flex-wrap gap-x-3 gap-y-1">
               {job.cutters.map((c) => (
-                <Person key={c.id} name={c.name} />
+                <Person key={c.id} name={c.name} id={c.id} />
               ))}
             </div>
           )}

@@ -34,7 +34,7 @@ export default async function ClientsPage() {
               className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4 transition-colors hover:border-muted/40"
             >
               <div className="flex items-center gap-3">
-                <Avatar name={c.name} size="lg" logoUrl={logoUrl(c)} />
+                <Avatar name={c.name} id={c.id} size="lg" logoUrl={logoUrl(c)} />
                 <div className="min-w-0">
                   <p className="truncate font-medium">{c.name}</p>
                   <p className="truncate text-xs text-muted">{c.email}</p>

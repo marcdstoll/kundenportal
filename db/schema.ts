@@ -104,8 +104,8 @@ export const jobComments = pgTable(
   (t) => [index("job_comments_job_idx").on(t.jobId)]
 );
 
-// Inbox: eine Benachrichtigung pro Empfänger – gehört entweder zu einem Projekt (jobId) oder einem Feature (featureId)
-// type: file | comment | storno_request | storno_decision | status | feature | feature_comment | feature_status
+// Inbox: eine Benachrichtigung pro Empfänger – gehört zu einem Projekt (jobId), einem Feature (featureId) oder einer Projekt-Idee (ideaId)
+// type: file | comment | mention | storno_request | storno_decision | status | feature | feature_comment | feature_status | idea | idea_comment | idea_status
 export const notifications = pgTable(
   "notifications",
   {
@@ -115,6 +115,7 @@ export const notifications = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     jobId: text("job_id").references(() => jobs.id, { onDelete: "cascade" }),
     featureId: text("feature_id").references(() => featureRequests.id, { onDelete: "cascade" }),
+    ideaId: text("idea_id").references(() => projectIdeas.id, { onDelete: "cascade" }),
     type: text("type").notNull(),
     text: text("text").notNull(),
     actorId: text("actor_id"),
@@ -156,6 +157,8 @@ export const profiles = pgTable("profiles", {
   welcomeVideo: text("welcome_video"),
   // Geburtsdatum ("YYYY-MM-DD"), optional
   birthday: date("birthday"),
+  // Persönliche Farbe ("#rrggbb"), sonst automatisch aus dem Namen – färbt Avatar, Board-Karten und Kalender
+  color: text("color"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
@@ -187,13 +190,64 @@ export const projectIdeas = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
+    // Beschreibung
     note: text("note"),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    // offen | in_arbeit | abgeschlossen (setzen Admins und Cutter)
+    status: text("status").notNull().default("offen"),
+    // hoch | mittel | niedrig (setzen alle, die die Idee sehen)
+    priority: text("priority").notNull().default("mittel"),
+    // Abschlussdatum (beim Status „abgeschlossen“) und wer abgeschlossen hat
     doneAt: timestamp("done_at"),
     doneBy: text("done_by").references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [index("project_ideas_customer_idx").on(t.customerId)]
+);
+
+// Stimmen, Kommentare und Screenshots zu Projekt-Ideen (wie beim Featureboard)
+export const ideaVotes = pgTable(
+  "idea_votes",
+  {
+    ideaId: text("idea_id")
+      .notNull()
+      .references(() => projectIdeas.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.ideaId, t.userId] })]
+);
+
+export const ideaComments = pgTable(
+  "idea_comments",
+  {
+    id: text("id").primaryKey(),
+    ideaId: text("idea_id")
+      .notNull()
+      .references(() => projectIdeas.id, { onDelete: "cascade" }),
+    authorId: text("author_id").references(() => user.id, { onDelete: "set null" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    editedAt: timestamp("edited_at"),
+  },
+  (t) => [index("idea_comments_idea_idx").on(t.ideaId)]
+);
+
+export const ideaAttachments = pgTable(
+  "idea_attachments",
+  {
+    id: text("id").primaryKey(),
+    ideaId: text("idea_id")
+      .notNull()
+      .references(() => projectIdeas.id, { onDelete: "cascade" }),
+    // Bild als data-URL (im Browser verkleinert)
+    data: text("data").notNull(),
+    size: integer("size").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("idea_attachments_idea_idx").on(t.ideaId)]
 );
 
 // ---------- Featureboard ----------

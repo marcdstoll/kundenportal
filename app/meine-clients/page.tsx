@@ -59,7 +59,7 @@ export default async function MeineClientsPage() {
           return (
             <section key={c.id} className="space-y-4 rounded-xl border border-line bg-surface p-5">
               <div className="flex items-center gap-3">
-                <Avatar name={c.name} size="lg" logoUrl={logoUrl(c)} />
+                <Avatar name={c.name} id={c.id} size="lg" logoUrl={logoUrl(c)} />
                 <div>
                   <h2 className="text-lg font-semibold tracking-tight">{c.name}</h2>
                   <p className="text-sm text-muted">{open.length} offene Projekte</p>

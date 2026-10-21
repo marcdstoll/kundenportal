@@ -186,7 +186,12 @@ export async function FeatureDrawer({
                 ))}
               </ul>
             )}
-            {canManage && <AddScreenshots featureId={f.id} used={images.reduce((sum, i) => sum + i.size, 0)} />}
+            {canManage && (
+              <AddScreenshots
+                uploadUrl={`/api/features/${f.id}/images`}
+                used={images.reduce((sum, i) => sum + i.size, 0)}
+              />
+            )}
           </section>
         )}
 

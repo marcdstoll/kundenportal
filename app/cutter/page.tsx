@@ -63,7 +63,7 @@ export default async function CutterPage() {
                         href={`/cutter/${p.id}`}
                         className="inline-flex items-center gap-2 font-medium hover:underline"
                       >
-                        <Avatar name={p.name} logoUrl={logoUrl(p)} />
+                        <Avatar name={p.name} id={p.id} logoUrl={logoUrl(p)} />
                         {p.name}
                       </Link>
                       {p.role === "admin" && <span className="ml-2 text-xs text-muted">Admin</span>}

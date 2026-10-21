@@ -127,7 +127,7 @@ export const MentionInput = forwardRef<
                 onMouseEnter={() => setActive(i)}
                 onClick={() => pick(p)}
               >
-                <Avatar name={p.name} />
+                <Avatar name={p.name} id={p.id} />
                 <span className="min-w-0 flex-1 truncate">
                   {p.name}
                   {showEmail && p.email && <span className="ml-2 text-xs text-muted">{p.email}</span>}

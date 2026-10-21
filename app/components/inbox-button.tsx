@@ -8,7 +8,8 @@ import { StatusBadge, formatDateTime } from "./ui";
 export type InboxItem = {
   id: string;
   jobId: string | null; // Projekt-Meldung …
-  featureId: string | null; // … oder Featureboard-Meldung
+  featureId: string | null; // … oder Featureboard-Meldung …
+  ideaId: string | null; // … oder Projekt-Idee
   type: string;
   text: string;
   createdAt: Date;
@@ -27,6 +28,9 @@ const TYPE_ICON: Record<string, string> = {
   feature: "💡",
   feature_comment: "💬",
   feature_status: "🏷",
+  idea: "💡",
+  idea_comment: "💬",
+  idea_status: "🏷",
 };
 
 function Bell() {
@@ -94,7 +98,13 @@ export function InboxButton({ items, unread, jobHref }: { items: InboxItem[]; un
               {items.map((n) => (
                 <li key={n.id}>
                   <Link
-                    href={n.featureId ? `/featureboard?f=${n.featureId}` : jobHref.replace("JOBID", n.jobId ?? "")}
+                    href={
+                      n.featureId
+                        ? `/featureboard?f=${n.featureId}`
+                        : n.ideaId
+                          ? `/ideen?i=${n.ideaId}`
+                          : jobHref.replace("JOBID", n.jobId ?? "")
+                    }
                     scroll={false}
                     onClick={() => setOpen(false)}
                     className={`flex items-start gap-3 px-4 py-3 transition-colors hover:bg-raised/60 ${n.read ? "" : "bg-accent/5"}`}
@@ -108,7 +118,9 @@ export function InboxButton({ items, unread, jobHref }: { items: InboxItem[]; un
                         {n.jobStatus ? (
                           <StatusBadge status={n.jobStatus} />
                         ) : (
-                          <span className="shrink-0 rounded bg-raised px-1.5 py-px text-[11px] text-muted">Featureboard</span>
+                          <span className="shrink-0 rounded bg-raised px-1.5 py-px text-[11px] text-muted">
+                            {n.ideaId ? "Projekt-Idee" : "Featureboard"}
+                          </span>
                         )}
                       </div>
                       <p className={`line-clamp-2 text-sm ${n.read ? "text-muted" : ""}`}>{n.text}</p>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { personColor } from "@/lib/colors";
 import type { JobView } from "@/lib/queries";
 import { BOARD_COLUMNS, STATUS_HINTS, STATUS_LABELS, statusColor } from "@/lib/status";
 import { FormatTag, Person, formatDate } from "./ui";
@@ -49,6 +50,8 @@ export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread
         <>
           {items.map((job) => {
             const mine = !!meId && job.cutters.some((c) => c.id === meId);
+            // Grundfarbe der Karte = Farbe des Kunden (unabhängig vom Status)
+            const base = personColor(job.customerId, job.customerName);
             return (
               <Link
                 key={job.id}
@@ -56,8 +59,9 @@ export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread
                 scroll={false}
                 className="block space-y-2.5 rounded-lg border p-3 text-sm shadow-sm transition-transform hover:-translate-y-px"
                 style={{
-                  background: `color-mix(in oklab, ${color} 5%, var(--card))`,
-                  borderColor: mine ? "var(--accent)" : `color-mix(in oklab, ${color} 20%, var(--line))`,
+                  background: `color-mix(in oklab, ${base} 6%, var(--card))`,
+                  borderColor: mine ? "var(--accent)" : `color-mix(in oklab, ${base} 25%, var(--line))`,
+                  borderLeft: `3px solid ${base}`,
                 }}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -81,11 +85,11 @@ export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread
                   </p>
                 )}
                 <div className="space-y-1.5 text-xs text-muted">
-                  {!customerView && <Person name={job.customerName} logoUrl={logos?.get(job.customerId)} />}
+                  {!customerView && <Person name={job.customerName} id={job.customerId} logoUrl={logos?.get(job.customerId)} />}
                   {!customerView && job.cutters.length > 0 && (
                     <div className="flex flex-wrap gap-x-3 gap-y-1">
                       {job.cutters.map((c) => (
-                        <Person key={c.id} name={c.name} logoUrl={logos?.get(c.id)} />
+                        <Person key={c.id} name={c.name} id={c.id} logoUrl={logos?.get(c.id)} />
                       ))}
                     </div>
                   )}

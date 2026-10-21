@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { JobView } from "@/lib/queries";
+import { personColor } from "@/lib/colors";
 import { CalendarGrid, type CalendarDay, type CalendarItem } from "./calendar-grid";
 
 function iso(d: Date) {
@@ -60,6 +61,7 @@ export function Calendar({ month, jobs, hrefFor, monthHref, showClient, lockReas
       id: j.id,
       title: j.title,
       customerName: j.customerName,
+      color: personColor(j.customerId, j.customerName),
       format: j.format,
       status: j.status,
       date: j.publishDate!,

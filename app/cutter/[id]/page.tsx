@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { activeJobsOnlyWith, loadAssignments, loadPeople, loadPerson, logoUrl } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
+import { ColorPicker } from "@/app/components/color-picker";
 import {
   AssignmentSelect,
   DeleteCutterButton,
@@ -38,6 +39,15 @@ export default async function CutterDetailPage({ params }: { params: Promise<{ i
           <ProfileForm key={cutter.logoVersion} person={cutter} logoUrl={logoUrl(cutter)} showNotes={false} />
         </section>
         <aside className="space-y-8">
+          <section className="space-y-2">
+            <h2 className="text-sm font-medium">Farbe</h2>
+            <p className="text-xs text-muted">
+              {cutter.role === "kunde"
+                ? "Färbt die Projekte dieses Kunden im Kalender und auf dem Board."
+                : "Färbt Avatar und Einträge dieser Person."}
+            </p>
+            <ColorPicker userId={id} name={cutter.name} color={cutter.color} />
+          </section>
           {cutter.role === "cutter" && (
             <section className="space-y-2">
               <h2 className="text-sm font-medium">Freigegebene Kunden</h2>
