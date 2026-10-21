@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { createJob, submitJob } from "@/app/actions";
-import { uploadFile } from "@/lib/upload";
 import { FORMATS, PLATFORMS } from "@/lib/status";
+import { ACCEPT, ALLOWED_LABEL, filterAllowed } from "@/lib/file-types";
+import { startProjektUpload } from "@/lib/upload-manager";
 import { MultiSelect } from "@/app/components/multi-select";
+import { UploadOverview } from "@/app/components/upload-tree";
 
-type FileState = { file: File; progress: number };
+type FileState = { file: File };
 
 type Props = {
   clients: { id: string; name: string }[];
@@ -38,15 +38,13 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 const EMPTY = { customerId: "", title: "", videoLength: "", content: "", specialNotes: "" };
 
 export function NewJobForm({ clients, isStaff }: Props) {
-  const router = useRouter();
   const [values, setValues] = useState(EMPTY);
   const [format, setFormat] = useState<string>(FORMATS[0].value);
   const [platforms, setPlatforms] = useState<string[]>([]);
   const [files, setFiles] = useState<FileState[]>([]);
   const [fileInputKey, setFileInputKey] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [step, setStep] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Hochgeladen wird im Hintergrund (Upload-Manager) – das Formular ist sofort wieder frei
+  const busy = false;
   const [errors, setErrors] = useState<Errors>({});
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -69,23 +67,17 @@ export function NewJobForm({ clients, isStaff }: Props) {
     return e;
   }
 
-  function setProgress(index: number, progress: number) {
-    setFiles((prev) => prev.map((f, i) => (i === index ? { ...f, progress } : f)));
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
     setSuccess(null);
     const found = validate();
     setErrors(found);
     if (Object.keys(found).length > 0) return;
-    setBusy(true);
 
-    try {
-      // 1. Projekt anlegen (inkl. Ordner in Frame.io)
-      setStep("Projekt wird angelegt …");
-      const created = await createJob({
+    // Projekt + Dateien an den Upload-Manager übergeben: läuft im Hintergrund weiter,
+    // auch wenn man die Seite wechselt oder gleich das nächste Projekt anlegt
+    startProjektUpload(
+      {
         title: values.title,
         format,
         platforms,
@@ -93,37 +85,19 @@ export function NewJobForm({ clients, isStaff }: Props) {
         content: values.content,
         specialNotes: values.specialNotes,
         customerId: isStaff ? values.customerId : undefined,
-      });
-      if (!created.ok) throw new Error(created.error);
-      const { jobId } = created.data;
+      },
+      files.map((f) => f.file),
+    );
 
-      // 2. Dateien nacheinander direkt zu Frame.io hochladen
-      for (let i = 0; i < files.length; i++) {
-        setStep(`Datei ${i + 1} von ${files.length} wird hochgeladen …`);
-        await uploadFile(jobId, "roh", files[i].file, (p) => setProgress(i, p));
-      }
-
-      // 3. Abschicken → erscheint bei den Cuttern in "To Dos"
-      setStep("Projekt wird abgeschickt …");
-      const submitted = await submitJob(jobId);
-      if (!submitted.ok) throw new Error(submitted.error);
-
-      // 4. Formular leeren – auch falls man auf der Seite bleibt
-      const title = values.title;
-      setValues(EMPTY);
-      setFormat(FORMATS[0].value);
-      setPlatforms([]);
-      setFiles([]);
-      setFileInputKey((k) => k + 1);
-      setBusy(false);
-      setStep(null);
-      setSuccess(`„${title}“ wurde abgeschickt.`);
-      router.push(isStaff ? `/board?job=${jobId}` : "/kunde");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Etwas ist schiefgelaufen.");
-      setBusy(false);
-      setStep(null);
-    }
+    const title = values.title;
+    setValues(EMPTY);
+    setFormat(FORMATS[0].value);
+    setPlatforms([]);
+    setFiles([]);
+    setFileInputKey((k) => k + 1);
+    setSuccess(
+      `„${title}“ wird hochgeladen. Den Fortschritt siehst du links unter „Projekt-Upload“ – du kannst direkt das nächste Projekt anlegen.`,
+    );
   }
 
   return (
@@ -177,7 +151,9 @@ export function NewJobForm({ clients, isStaff }: Props) {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <span className={`text-sm ${errors.platforms ? "text-danger" : "text-muted"}`}>Plattformen (mehrere möglich)</span>
+          <span className={`text-sm ${errors.platforms ? "text-danger" : "text-muted"}`}>
+            Plattformen (mehrere möglich)
+          </span>
           <MultiSelect
             label="Plattformen"
             options={PLATFORMS}
@@ -234,18 +210,26 @@ export function NewJobForm({ clients, isStaff }: Props) {
           <span className="block text-sm">
             {files.length > 0 ? "Andere Dateien auswählen" : "Videomaterial und Assets auswählen"}
           </span>
-          <span className="block text-xs text-muted">
-            Mehrere Dateien möglich, auch große Videos.
-          </span>
+          <span className="block text-xs text-muted">Mehrere Dateien möglich · Erlaubt: {ALLOWED_LABEL}</span>
           <input
             key={fileInputKey}
             type="file"
             multiple
+            accept={ACCEPT}
             disabled={busy}
             className="sr-only"
             onChange={(e) => {
-              setFiles(Array.from(e.target.files ?? []).map((file) => ({ file, progress: 0 })));
-              setErrors((er) => ({ ...er, files: undefined }));
+              // Unerlaubte Dateien (z. B. XML) still aussortieren – Hinweis nur, wenn gar nichts übrig bleibt
+              const picked = Array.from(e.target.files ?? []);
+              const { allowed } = filterAllowed(picked);
+              setFiles(allowed.map((file) => ({ file })));
+              setErrors((er) => ({
+                ...er,
+                files:
+                  picked.length > 0 && allowed.length === 0
+                    ? `Dieser Dateityp wird nicht unterstützt. Erlaubt: ${ALLOWED_LABEL}.`
+                    : undefined,
+              }));
               setSuccess(null);
             }}
           />
@@ -260,29 +244,17 @@ export function NewJobForm({ clients, isStaff }: Props) {
               <div className="flex justify-between gap-3">
                 <span className="truncate">{f.file.name}</span>
                 <span className="shrink-0 text-muted">
-                  {(f.file.size / 1024 / 1024).toFixed(1)} MB ·{" "}
-                  {!busy
-                    ? "noch nicht hochgeladen"
-                    : f.progress >= 100
-                      ? "✓ hochgeladen"
-                      : f.progress > 0
-                        ? `${f.progress} %`
-                        : "wartet …"}
+                  {(f.file.size / 1024 / 1024).toFixed(1)} MB · noch nicht hochgeladen
                 </span>
               </div>
-              {busy && (
-                <div className="h-1.5 overflow-hidden rounded-full bg-raised">
-                  <div className="h-full bg-accent transition-all" style={{ width: `${f.progress}%` }} />
-                </div>
-              )}
             </li>
           ))}
         </ul>
       )}
 
-      {step && <p className="text-sm text-muted">{step}</p>}
-      {error && <p className="rounded-md border border-danger bg-danger/5 px-3 py-2 text-sm text-danger">{error}</p>}
-      {Object.values(errors).some(Boolean) && <p className="text-sm text-danger">Bitte die rot markierten Felder ausfüllen.</p>}
+      {Object.values(errors).some(Boolean) && (
+        <p className="text-sm text-danger">Bitte die rot markierten Felder ausfüllen.</p>
+      )}
       {success && (
         <p
           className="rounded-md px-3 py-2 text-sm"
@@ -309,8 +281,8 @@ export function NewJobForm({ clients, isStaff }: Props) {
             <b className="block">
               {files.length === 1 ? "Deine Datei ist" : `Deine ${files.length} Dateien sind`} noch nicht hochgeladen.
             </b>
-            Der Upload startet erst, wenn du unten auf <b>„Projekt absenden“</b> klickst. Lass das Fenster dann offen, bis
-            alles fertig ist.
+            Der Upload startet erst, wenn du unten auf <b>„Projekt absenden“</b> klickst. Danach kannst du im Portal
+            weiterarbeiten – nur diesen Tab bitte offen lassen, bis alles hochgeladen ist.
           </span>
         </div>
       )}
@@ -319,8 +291,11 @@ export function NewJobForm({ clients, isStaff }: Props) {
         disabled={busy}
         className="w-full rounded-md bg-accent py-2.5 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-40"
       >
-        {busy ? "Wird hochgeladen – Fenster bitte offen lassen" : "Projekt absenden"}
+        Projekt absenden
       </button>
+
+      {/* Laufende Uploads direkt hier sichtbar (zusätzlich zur Seitenleiste) */}
+      <UploadOverview />
     </form>
   );
 }

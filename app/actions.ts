@@ -10,6 +10,7 @@ import { requireUser } from "@/lib/session";
 import { nextPartTitle } from "@/lib/queries";
 import { canSeeJob, clientIdsOfCutter } from "@/lib/access";
 import { CUSTOMER_DATE_STATUSES, FORMATS, STATUSES } from "@/lib/status";
+import { isAllowedFile, ALLOWED_LABEL } from "@/lib/file-types";
 
 // ---------- Hilfsfunktionen ----------
 
@@ -90,7 +91,9 @@ async function adminIds() {
 }
 
 // Inbox-Einträge erzeugen. Wer bekommt was?
-// - "beteiligte": Kunde + zugeordnete Cutter (gibt es noch keinen Cutter, die Admins)
+// - "file" (nachgereicht): Kunde + zugeordnete Cutter (gibt es noch keinen Cutter, die Admins)
+// - "comment": Kunde + zugeordnete Cutter, nie Admins
+// - "status": genau die übergebenen Empfänger
 // - "storno_request": Cutter + alle Admins (Admins entscheiden)
 // - "storno_decision": Kunde + Cutter
 // Wer die Aktion selbst ausgelöst hat, bekommt nichts.
@@ -109,6 +112,8 @@ async function notify(
   if (to) recipients = to;
   else if (type === "storno_request") recipients = [...cutters, ...(await adminIds())];
   else if (type === "storno_decision") recipients = [job.customerId, ...cutters];
+  // Kommentare: nur Kunde und zuständige Cutter – Admins nie (auch nicht, solange kein Cutter zugeordnet ist)
+  else if (type === "comment") recipients = [job.customerId, ...cutters];
   else recipients = [job.customerId, ...(cutters.length > 0 ? cutters : await adminIds())];
 
   const unique = [...new Set(recipients)].filter((id) => id !== actor.id && !skip.has(id));
@@ -239,6 +244,7 @@ export async function requestUpload(jobId: string, kind: "roh" | "fertig", file:
     if (kind === "roh") {
       await assertCanSee(me, job);
       if (job.status === "storniert") throw new Error("Das Projekt ist storniert.");
+      if (!isAllowedFile(file.name)) throw new Error(`Dieser Dateityp wird nicht unterstützt (erlaubt: ${ALLOWED_LABEL}).`);
     } else {
       await requireCutterOf(jobId);
       assertNotPaused(job);
@@ -260,6 +266,7 @@ export async function requestUpload(jobId: string, kind: "roh" | "fertig", file:
       }
     }
     const upload = await createUpload(folderId, file.name, file.size);
+    await db.update(jobs).set({ updatedAt: new Date() }).where(eq(jobs.id, jobId)); // Lebenszeichen
     const id = randomUUID();
     await db.insert(jobFiles).values({
       id,
@@ -314,6 +321,51 @@ export async function submitJob(jobId: string) {
     // Kunden müssen Material mitschicken; Staff darf ohne Dateien anlegen (z. B. Material liegt schon in Frame.io)
     if (files.length === 0 && me.role === "kunde") throw new Error("Bitte mindestens eine Datei hochladen.");
     await changeStatus(jobId, "entwurf", "todo", { submittedAt: new Date() });
+    refresh();
+    return null;
+  });
+}
+
+// ---------- Upload-Vorgänge: Lebenszeichen & Verwerfen ----------
+// Solange im Browser ein Upload läuft, meldet er sich alle paar Minuten. Bleibt das 30 Minuten aus
+// (Tab geschlossen, neu geladen, Rechner aus), räumt lib/cleanup.ts den Entwurf bzw. halbe Dateien weg.
+
+export async function uploadHeartbeat(jobIds: string[]) {
+  return run(async () => {
+    const me = await requireUser();
+    for (const jobId of jobIds.slice(0, 20)) {
+      const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId));
+      if (job && (await canSeeJob(me, job))) {
+        await db.update(jobs).set({ updatedAt: new Date() }).where(eq(jobs.id, jobId));
+      }
+    }
+    return null;
+  });
+}
+
+// Upload-Vorgang verwerfen:
+// - neues Projekt (noch Entwurf): Projekt samt Frame.io-Ordner und Dateien löschen
+// - nachgereichtes Material: nur die eigenen, nicht fertig hochgeladenen Dateien entfernen
+export async function discardUpload(jobId: string) {
+  return run(async () => {
+    const me = await requireUser();
+    const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId));
+    if (!job) return null; // schon weg (z. B. automatisch aufgeräumt)
+    await assertCanSee(me, job);
+    if (job.status === "entwurf") {
+      if (job.frameioFolderId && !(await folderShared(job))) await deleteFolder(job.frameioFolderId).catch(deleteError);
+      await db.delete(jobs).where(eq(jobs.id, jobId));
+    } else {
+      const pending = await db
+        .select()
+        .from(jobFiles)
+        .where(and(eq(jobFiles.jobId, jobId), eq(jobFiles.uploaded, false), eq(jobFiles.uploadedBy, me.id)));
+      for (const f of pending) {
+        await deleteFile(f.frameioFileId).catch((e) => console.error("Halbe Datei nicht gelöscht:", e));
+        await db.delete(jobFiles).where(eq(jobFiles.id, f.id));
+      }
+    }
+    refresh();
     return null;
   });
 }

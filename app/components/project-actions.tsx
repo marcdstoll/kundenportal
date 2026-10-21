@@ -17,7 +17,9 @@ import {
   clientRequestChanges,
   type Result,
 } from "@/app/actions";
-import { uploadFile } from "@/lib/upload";
+import { ACCEPT, ALLOWED_LABEL, filterAllowed } from "@/lib/file-types";
+import { startNachreichen, useUploads } from "@/lib/upload-manager";
+import { UploadOverview } from "./upload-tree";
 import { buttonPrimary, buttonSecondary, inputField } from "./ui";
 import { ConfirmDialog } from "./confirm-dialog";
 
@@ -35,67 +37,46 @@ export function MarkRead({ jobId }: { jobId: string }) {
 }
 
 // ---------- Material nachreichen ----------
+// Läuft über den Upload-Manager: geht beim Schließen des Projekts oder Seitenwechsel nicht verloren.
 
-export function AddFiles({ jobId, label = "Material nachreichen" }: { jobId: string; label?: string }) {
-  const router = useRouter();
-  const [queue, setQueue] = useState<{ name: string; progress: number }[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export function AddFiles({
+  jobId,
+  title,
+  label = "Material nachreichen",
+}: {
+  jobId: string;
+  title: string;
+  label?: string;
+}) {
   const [inputKey, setInputKey] = useState(0);
-
-  async function upload(files: File[]) {
-    setBusy(true);
-    setError(null);
-    setQueue(files.map((f) => ({ name: f.name, progress: 0 })));
-    try {
-      for (let i = 0; i < files.length; i++) {
-        await uploadFile(jobId, "roh", files[i], (p) =>
-          setQueue((q) => q.map((item, idx) => (idx === i ? { ...item, progress: p } : item))),
-        );
-      }
-      setQueue([]);
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload fehlgeschlagen.");
-    }
-    setBusy(false);
-    setInputKey((k) => k + 1);
-  }
+  const [error, setError] = useState<string | null>(null);
+  const running = useUploads().some(
+    (v) => v.jobId === jobId && v.kind === "nachreichen" && (v.status === "laeuft" || v.status === "wartet"),
+  );
 
   return (
     <div className="space-y-2">
-      <label
-        className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-line px-3 py-2.5 text-sm transition-colors hover:bg-raised/50 ${
-          busy ? "pointer-events-none opacity-60" : ""
-        }`}
-      >
+      <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-line px-3 py-2.5 text-sm transition-colors hover:bg-raised/50">
         <span aria-hidden>＋</span>
-        {busy ? "Wird hochgeladen – Fenster bitte offen lassen" : label}
+        {running ? "Weitere Dateien hinzufügen" : label}
         <input
           key={inputKey}
           type="file"
           multiple
-          disabled={busy}
+          accept={ACCEPT}
           className="sr-only"
           onChange={(e) => {
-            const files = Array.from(e.target.files ?? []);
-            if (files.length) upload(files);
+            // Unerlaubte Dateien still aussortieren – Hinweis nur, wenn nichts übrig bleibt
+            const picked = Array.from(e.target.files ?? []);
+            const { allowed } = filterAllowed(picked);
+            setError(picked.length > 0 && allowed.length === 0 ? `Dieser Dateityp wird nicht unterstützt.` : null);
+            if (allowed.length) startNachreichen(jobId, title, allowed);
+            setInputKey((k) => k + 1);
           }}
         />
       </label>
-      {queue.map((q) => (
-        <div key={q.name} className="space-y-1 text-xs">
-          <div className="flex justify-between gap-3">
-            <span className="truncate">{q.name}</span>
-            <span className="text-muted">
-              {q.progress >= 100 ? "✓" : q.progress > 0 ? `${q.progress} %` : "wartet …"}
-            </span>
-          </div>
-          <div className="h-1 overflow-hidden rounded-full bg-raised">
-            <div className="h-full bg-accent transition-all" style={{ width: `${q.progress}%` }} />
-          </div>
-        </div>
-      ))}
+      <p className="text-xs text-muted">Erlaubt: {ALLOWED_LABEL}</p>
+      <UploadOverview jobId={jobId} />
       <ErrorText error={error} />
     </div>
   );

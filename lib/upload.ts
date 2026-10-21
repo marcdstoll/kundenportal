@@ -5,7 +5,8 @@ import { finishWelcomeUpload, startWelcomeUpload } from "@/app/admin-actions";
 // Der Zugangsschlüssel bleibt auf dem Server; der Browser bekommt nur
 // zeitlich begrenzte Upload-Links.
 
-const RETRY_DELAYS = [2000, 5000, 10000, 20000, 30000]; // Pausen zwischen den Versuchen (ms)
+// Pausen zwischen den Versuchen, wenn ein Teil nicht durchkommt (z. B. kurzer WLAN-Aussetzer)
+const RETRY_DELAYS = [2000, 5000, 10000, 20000, 30000];
 
 function putPartOnce(url: string, blob: Blob, mediaType: string, onProgress: (loaded: number) => void) {
   return new Promise<void>((resolve, reject) => {
@@ -26,9 +27,9 @@ async function putPart(url: string, blob: Blob, mediaType: string, onProgress: (
   for (let attempt = 0; ; attempt++) {
     try {
       return await putPartOnce(url, blob, mediaType, onProgress);
-    } catch (err) {
+    } catch {
       if (attempt >= RETRY_DELAYS.length) {
-        throw new Error("Die Verbindung ist mehrfach abgebrochen – bitte erneut versuchen.");
+        throw new Error("Die Verbindung ist mehrfach abgebrochen. Bitte erneut versuchen – am besten per Kabel.");
       }
       onProgress(0); // Fortschritt dieses Teils zurücksetzen
       await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));

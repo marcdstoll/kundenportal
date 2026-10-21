@@ -329,7 +329,7 @@ export async function JobDrawer({
           canDownload
           canDelete={isAdmin && DELETABLE.includes(job.status)}
         />
-        {job.status !== "storniert" && <AddFiles jobId={job.id} />}
+        {job.status !== "storniert" && <AddFiles jobId={job.id} title={job.title} />}
       </Section>
 
       <Comments jobId={job.id} meId={me.id} canWrite={job.status !== "storniert"} />
@@ -441,7 +441,7 @@ export async function CustomerJobDrawer({
 
       <Section title="Deine Dateien">
         <FileList files={rawFiles} unread={unread.files} canDownload canDelete={canDelete} />
-        {job.status !== "storniert" && <AddFiles jobId={job.id} label="Weiteres Material hochladen" />}
+        {job.status !== "storniert" && <AddFiles jobId={job.id} title={job.title} label="Weiteres Material hochladen" />}
       </Section>
 
       <Comments jobId={job.id} meId={viewerId} canWrite={job.status !== "storniert"} />

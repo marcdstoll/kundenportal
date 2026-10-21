@@ -7,6 +7,7 @@ import { NavLinks, type NavItem } from "./nav-links";
 import { ThemeToggle } from "./theme-toggle";
 import { MobileFrame } from "./mobile-frame";
 import { InboxButton, type InboxItem } from "./inbox-button";
+import { UploadTree } from "./upload-tree";
 
 const ROLE_LABELS: Record<string, string> = {
   kunde: "Client",
@@ -113,6 +114,7 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
       </div>
 
       <NavLinks items={navFor(user.role)} />
+      <UploadTree />
 
       {clients.length > 0 && (
         <div className="space-y-1">
