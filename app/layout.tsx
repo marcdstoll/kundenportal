@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Contenthaus",
+  title: "Great Influence",
   description: "Projekte, Cutter und Clients an einem Ort",
 };
 

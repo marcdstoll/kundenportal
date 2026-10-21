@@ -93,5 +93,5 @@ export const VIDEO_LENGTHS: Record<string, string[]> = {
   clipping: [],
 };
 
-// Auswahl im Formular "Neues Projekt" (mehrere möglich) – hier einfach Einträge ergänzen oder löschen
+// Auswahl im Formular "Projekt anlegen" (mehrere möglich) – hier einfach Einträge ergänzen oder löschen
 export const PLATFORMS = ["Instagram", "TikTok", "YouTube", "Sonstiges"];

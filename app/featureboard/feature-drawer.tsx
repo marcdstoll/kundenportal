@@ -2,7 +2,7 @@ import Link from "next/link";
 import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { featureAttachments, featureComments, featureRequests, featureVotes, user } from "@/db/schema";
-import { FEATURE_STATUS_COLORS, FEATURE_STATUS_LABELS, MAX_SCREENSHOTS, TEAM_NAME } from "@/lib/features";
+import { FEATURE_STATUS_COLORS, FEATURE_STATUS_LABELS, TEAM_NAME } from "@/lib/features";
 import { formatDateTime } from "@/app/components/ui";
 import {
   AddScreenshots,
@@ -71,7 +71,7 @@ export async function FeatureDrawer({
       .from(featureVotes)
       .where(and(eq(featureVotes.featureId, f.id), eq(featureVotes.userId, me.id))),
     db
-      .select({ id: featureAttachments.id })
+      .select({ id: featureAttachments.id, size: featureAttachments.size })
       .from(featureAttachments)
       .where(eq(featureAttachments.featureId, f.id))
       .orderBy(asc(featureAttachments.createdAt)),
@@ -186,7 +186,7 @@ export async function FeatureDrawer({
                 ))}
               </ul>
             )}
-            {canManage && <AddScreenshots featureId={f.id} room={MAX_SCREENSHOTS - images.length} />}
+            {canManage && <AddScreenshots featureId={f.id} used={images.reduce((sum, i) => sum + i.size, 0)} />}
           </section>
         )}
 

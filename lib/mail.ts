@@ -45,7 +45,7 @@ export async function trySendMail(
   }
   try {
     await getTransporter().sendMail({
-      from: process.env.MAIL_FROM ?? "Contenthaus <noreply@contenthaus.local>",
+      from: process.env.MAIL_FROM ?? "Great Influence <noreply@great-influence.local>",
       to,
       subject,
       html,
@@ -82,11 +82,11 @@ function layout(title: string, body: string) {
   return `<!doctype html><html lang="de"><body style="margin:0;background:#f4f5f8;font-family:Arial,Helvetica,sans-serif;color:#171923">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f8;padding:32px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:12px;padding:32px">
-<tr><td style="font-size:14px;font-weight:bold;color:#636a7c;padding-bottom:20px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#e5383f;margin-right:6px"></span>Contenthaus</td></tr>
+<tr><td style="font-size:14px;font-weight:bold;letter-spacing:0.04em;color:#636a7c;padding-bottom:20px">Great Influence</td></tr>
 <tr><td style="font-size:22px;font-weight:bold;padding-bottom:16px">${escape(title)}</td></tr>
 <tr><td style="font-size:15px;line-height:1.55">${body}</td></tr>
 </table>
-<p style="font-size:12px;color:#8c92a3;margin-top:16px">Diese Nachricht wurde automatisch vom Contenthaus-Portal verschickt.</p>
+<p style="font-size:12px;color:#8c92a3;margin-top:16px">Diese Nachricht wurde automatisch vom Portal von Great Influence verschickt.</p>
 </td></tr></table></body></html>`;
 }
 
@@ -107,20 +107,20 @@ export function inviteMail(opts: {
     const subject = "Dein Link zum Passwort-Zurücksetzen";
     const html = layout(
       `Hallo ${first},`,
-      `<p>hier ist dein Link, um ein neues Passwort für das Contenthaus-Portal festzulegen.</p>${button(opts.link, "Neues Passwort festlegen")}<p style="color:#636a7c;font-size:13px">Der Link ist 7 Tage gültig und funktioniert einmal. Falls du das nicht angefragt hast, kannst du diese Mail ignorieren.</p>`,
+      `<p>hier ist dein Link, um ein neues Passwort für das Portal von Great Influence festzulegen.</p>${button(opts.link, "Neues Passwort festlegen")}<p style="color:#636a7c;font-size:13px">Der Link ist 7 Tage gültig und funktioniert einmal. Falls du das nicht angefragt hast, kannst du diese Mail ignorieren.</p>`,
     );
     return { subject, html, text: `Hallo ${first},\n\nneues Passwort festlegen: ${opts.link}\n\nDer Link ist 7 Tage gültig.` };
   }
   const intro =
     opts.role === "cutter"
-      ? "willkommen im Team! Im Contenthaus-Portal findest du deine Projekte, das Rohmaterial und lädst deine fertigen Videos hoch."
-      : "willkommen bei Contenthaus!";
+      ? "willkommen im Team! Im Portal von Great Influence findest du deine Projekte, das Rohmaterial und lädst deine fertigen Videos hoch."
+      : "willkommen bei Great Influence!";
   const videos = opts.personal
     ? "<p>Nach dem Klick wartet eine persönliche Videobotschaft von uns auf dich.</p>"
     : opts.hasVideos
       ? "<p>Nach dem Klick wartet ein kurzes Video auf dich, das dir alles Wichtige zeigt.</p>"
       : "";
-  const subject = "Willkommen bei Contenthaus – dein Zugang";
+  const subject = "Willkommen bei Great Influence – dein Zugang";
   const html = layout(
     `Hallo ${first},`,
     `<p>${intro}</p>${videos}${button(opts.link, "Zugang einrichten")}<p style="color:#636a7c;font-size:13px">Über den Button legst du dein Passwort fest. Der Link ist 7 Tage gültig.</p>`,

@@ -15,6 +15,7 @@ import { inviteMail, mailConfigured, trySendMail } from "@/lib/mail";
 import { SETTING_KEYS, getSetting, onboardingVideoFor, setSetting } from "@/lib/settings";
 
 import { account, cutterClients, invites, jobs, profiles, user } from "@/db/schema";
+import { activeJobsOnlyWith } from "@/lib/queries";
 import { FrameioError, createRootFolder, createUpload, deleteFile, deleteFolder } from "@/lib/frameio";
 
 export type Result<T = null> = { ok: true; data: T } | { ok: false; error: string };
@@ -251,7 +252,7 @@ export async function sendTestMail(toInput?: string) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) throw new Error("Bitte eine gültige E-Mail-Adresse eingeben.");
     const res = await trySendMail(
       to,
-      "Testmail aus dem Contenthaus-Portal",
+      "Testmail aus dem Portal von Great Influence",
       "<p>Wenn du das liest, funktioniert der Mailversand. 🎉</p>",
       "Wenn du das liest, funktioniert der Mailversand.",
     );
@@ -372,5 +373,32 @@ export async function deleteCustomer(customerId: string) {
 
     refresh();
     return { projects: customerJobs.length };
+  });
+}
+
+// Cutter löschen: nur der Zugang und das Profil verschwinden.
+// Projekte, Dateien (auch seine hochgeladenen Videos) und Kommentare bleiben – Cutter laden im Namen der Kunden hoch.
+// Seine Projekte verlieren nur die Zuordnung zu ihm und können neu verteilt werden.
+export async function deleteCutter(cutterId: string) {
+  return run(async () => {
+    const me = await requireUser("admin");
+    const [u] = await db.select().from(user).where(eq(user.id, cutterId));
+    if (!u || u.role !== "cutter") throw new Error("Cutter nicht gefunden.");
+    if (u.id === me.id) throw new Error("Du kannst dich nicht selbst löschen.");
+
+    const orphaned = await activeJobsOnlyWith(cutterId);
+
+    // Persönliches Begrüßungsvideo gehört nur ihm → in Frame.io löschen
+    const [prof] = await db.select({ welcome: profiles.welcomeVideo }).from(profiles).where(eq(profiles.userId, cutterId));
+    if (prof?.welcome?.startsWith("frameio:")) {
+      await deleteFile(prof.welcome.slice("frameio:".length)).catch((e) => console.error(e));
+    }
+
+    // Person löschen: Login, Profil, Einladungen, Kunden-Freigaben und Projekt-Zuordnungen gehen automatisch mit.
+    // Kommentare bleiben (Verfasser wird leer → „Gelöschter Nutzer“), Dateien bleiben unverändert.
+    await db.delete(user).where(eq(user.id, cutterId));
+
+    refresh();
+    return { withoutCutter: orphaned };
   });
 }

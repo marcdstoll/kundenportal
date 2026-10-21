@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { account, cutterClients, featureRequests, jobComments, jobCutters, jobFiles, jobs, notifications, profiles, user } from "@/db/schema";
 
@@ -173,12 +173,13 @@ export async function loadComments(jobId: string) {
       id: jobComments.id,
       body: jobComments.body,
       createdAt: jobComments.createdAt,
-      authorId: user.id,
+      editedAt: jobComments.editedAt,
+      authorId: jobComments.authorId,
       authorName: user.name,
       authorRole: user.role,
     })
     .from(jobComments)
-    .innerJoin(user, eq(jobComments.authorId, user.id))
+    .leftJoin(user, eq(jobComments.authorId, user.id))
     .where(eq(jobComments.jobId, jobId))
     .orderBy(asc(jobComments.createdAt));
 }
@@ -254,4 +255,23 @@ export async function clientLogos() {
     .from(profiles)
     .where(isNotNull(profiles.logo));
   return new Map(rows.map((r) => [r.id, `/api/logo/${r.id}?v=${r.updated.getTime()}`]));
+}
+
+// Laufende Projekte (nicht Online/Storniert), in denen dieser Cutter der einzige zugeordnete Cutter ist
+export async function activeJobsOnlyWith(cutterId: string) {
+  const own = await db.select({ jobId: jobCutters.jobId }).from(jobCutters).where(eq(jobCutters.userId, cutterId));
+  const ids = own.map((r) => r.jobId);
+  if (ids.length === 0) return 0;
+  const [shared, active] = await Promise.all([
+    db
+      .select({ jobId: jobCutters.jobId })
+      .from(jobCutters)
+      .where(and(inArray(jobCutters.jobId, ids), ne(jobCutters.userId, cutterId))),
+    db
+      .select({ id: jobs.id })
+      .from(jobs)
+      .where(and(inArray(jobs.id, ids), notInArray(jobs.status, ["online", "storniert", "entwurf"]))),
+  ]);
+  const covered = new Set(shared.map((r) => r.jobId));
+  return active.filter((j) => !covered.has(j.id)).length;
 }

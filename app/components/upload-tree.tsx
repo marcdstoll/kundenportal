@@ -138,7 +138,7 @@ export function UploadStatus({ vorgang: v, compact = false }: { vorgang: Vorgang
   );
 }
 
-// Alle laufenden Vorgänge kompakt (z. B. unter dem Formular „Neues Projekt“)
+// Alle laufenden Vorgänge kompakt (z. B. unter dem Formular „Projekt anlegen“)
 export function UploadOverview({ jobId }: { jobId?: string }) {
   const uploads = useUploads().filter((v) => !jobId || v.jobId === jobId);
   if (uploads.length === 0) return null;

@@ -94,11 +94,12 @@ export const jobComments = pgTable(
     jobId: text("job_id")
       .notNull()
       .references(() => jobs.id, { onDelete: "cascade" }),
-    authorId: text("author_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    // Wird der Verfasser gelöscht (z. B. ein Cutter), bleibt der Kommentar stehen → „Gelöschter Nutzer“
+    authorId: text("author_id").references(() => user.id, { onDelete: "set null" }),
     body: text("body").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
+    // Zuletzt bearbeitet (nur der Verfasser kann bearbeiten)
+    editedAt: timestamp("edited_at"),
   },
   (t) => [index("job_comments_job_idx").on(t.jobId)]
 );

@@ -10,7 +10,8 @@ import {
   removeWelcomeVideo,
   setAssignment,
   updateProfile,
-  deleteCustomer
+  deleteCustomer,
+  deleteCutter,
 } from "@/app/admin-actions";
 import { uploadWelcomeVideo } from "@/lib/upload";
 import { Avatar, buttonPrimary, buttonSecondary, inputField } from "./ui";
@@ -542,6 +543,65 @@ export function DeleteCustomerButton({ customerId, name }: { customerId: string;
           if (!res.ok) return setError(res.error);
           setOpen(false);
           router.push("/clients");
+        }}
+      />
+    </>
+  );
+}
+
+// Cutter löschen: nur Zugang + Profil. Projekte, Dateien und Kommentare bleiben erhalten.
+export function DeleteCutterButton({
+  cutterId,
+  name,
+  activeAlone,
+}: {
+  cutterId: string;
+  name: string;
+  activeAlone: number; // laufende Projekte, in denen er der einzige Cutter ist
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setError(null);
+          setOpen(true);
+        }}
+        className="w-full rounded-md border border-danger/40 px-3 py-2 text-sm text-danger transition-colors hover:bg-danger/10"
+      >
+        Cutter löschen
+      </button>
+      <ConfirmDialog
+        open={open}
+        title="Cutter löschen?"
+        message={
+          <>
+            Der Zugang von „<b className="text-text">{name}</b>“ wird endgültig gelöscht.{" "}
+            <b className="text-text">Projekte, Dateien und Kommentare bleiben erhalten</b> – auch in Frame.io.
+            {activeAlone > 0 && (
+              <>
+                {" "}
+                {activeAlone === 1 ? "Ein laufendes Projekt hat" : `${activeAlone} laufende Projekte haben`} danach
+                keinen Cutter mehr und {activeAlone === 1 ? "muss" : "müssen"} neu zugeteilt werden.
+              </>
+            )}
+          </>
+        }
+        confirmLabel="Endgültig löschen"
+        busy={busy}
+        error={error}
+        onCancel={() => setOpen(false)}
+        onConfirm={async () => {
+          setBusy(true);
+          const res = await deleteCutter(cutterId);
+          setBusy(false);
+          if (!res.ok) return setError(res.error);
+          setOpen(false);
+          router.push("/cutter");
         }}
       />
     </>

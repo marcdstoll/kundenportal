@@ -24,7 +24,7 @@ async function Content() {
 
   return (
     <>
-      <PageHeader title="Neues Projekt" />
+      <PageHeader title="Projekt anlegen" />
       <div className="max-w-2xl px-4 pb-10 sm:px-6 md:px-10">
         <NewJobForm clients={clients.map((c) => ({ id: c.id, name: c.name }))} isStaff={isStaff} />
       </div>

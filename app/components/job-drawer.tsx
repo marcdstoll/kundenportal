@@ -12,7 +12,6 @@ import {
 import { CUSTOMER_DATE_STATUSES, CUSTOMER_VIDEO_STATUSES, statusColor } from "@/lib/status";
 import { canSeeJob } from "@/lib/access";
 import {
-  Avatar,
   ExternalLink,
   FormatTag,
   Person,
@@ -32,6 +31,7 @@ import {
   CancelDecision,
   CancelRequestForm,
   CommentForm,
+  JobComment,
   DeleteFileButton,
   DeleteJobButton,
   DuplicateForm,
@@ -198,25 +198,42 @@ function FileList({
 
 const ROLE_LABELS: Record<string, string> = { kunde: "Client", cutter: "Cutter", admin: "Admin" };
 
-// Kommentarverlauf + Eingabe
-async function Comments({ jobId, meId, canWrite }: { jobId: string; meId: string; canWrite: boolean }) {
+// Kommentarverlauf + Eingabe. Eigene Kommentare bearbeiten/löschen, Admins dürfen alle löschen.
+async function Comments({
+  jobId,
+  meId,
+  isAdmin,
+  canWrite,
+}: {
+  jobId: string;
+  meId: string;
+  isAdmin: boolean;
+  canWrite: boolean;
+}) {
   const comments = await loadComments(jobId);
   return (
     <Section title={`Kommentare${comments.length ? ` (${comments.length})` : ""}`}>
       {comments.length === 0 && <p className="text-sm text-muted">Noch keine Kommentare.</p>}
       <ul className="space-y-3">
-        {comments.map((c) => (
-          <li key={c.id} className="flex gap-2.5">
-            <Avatar name={c.authorName} />
-            <div className="min-w-0 flex-1 space-y-0.5">
-              <p className="text-xs text-muted">
-                <span className="font-medium text-text">{c.authorId === meId ? "Du" : c.authorName}</span> ·{" "}
-                {ROLE_LABELS[c.authorRole ?? ""] ?? c.authorRole} · {formatDateTime(c.createdAt)}
-              </p>
-              <p className="whitespace-pre-wrap text-sm">{c.body}</p>
-            </div>
-          </li>
-        ))}
+        {comments.map((c) => {
+          const mine = !!c.authorId && c.authorId === meId;
+          return (
+            <JobComment
+              key={`${c.id}-${c.editedAt?.getTime() ?? 0}`}
+              comment={{
+                id: c.id,
+                body: c.body,
+                author: mine ? "Du" : (c.authorName ?? "Gelöschter Nutzer"),
+                avatarName: c.authorName ?? "?",
+                role: c.authorRole ? (ROLE_LABELS[c.authorRole] ?? c.authorRole) : null,
+                createdAt: formatDateTime(c.createdAt),
+                editedAt: c.editedAt ? formatDateTime(c.editedAt) : null,
+                canEdit: mine,
+                canDelete: mine || isAdmin,
+              }}
+            />
+          );
+        })}
       </ul>
       {canWrite && <CommentForm jobId={jobId} />}
     </Section>
@@ -332,7 +349,7 @@ export async function JobDrawer({
         {job.status !== "storniert" && <AddFiles jobId={job.id} title={job.title} />}
       </Section>
 
-      <Comments jobId={job.id} meId={me.id} canWrite={job.status !== "storniert"} />
+      <Comments jobId={job.id} meId={me.id} isAdmin={isAdmin} canWrite={job.status !== "storniert"} />
 
       {isAdmin && (
         <Section title="Veröffentlichungsdatum">
@@ -444,7 +461,7 @@ export async function CustomerJobDrawer({
         {job.status !== "storniert" && <AddFiles jobId={job.id} title={job.title} label="Weiteres Material hochladen" />}
       </Section>
 
-      <Comments jobId={job.id} meId={viewerId} canWrite={job.status !== "storniert"} />
+      <Comments jobId={job.id} meId={viewerId} isAdmin={viewerId !== customerId} canWrite={job.status !== "storniert"} />
 
       {canDelete && (
         <Section title="Projekt löschen">

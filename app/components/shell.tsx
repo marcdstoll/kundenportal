@@ -15,12 +15,12 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
 };
 
-// Für alle Rollen gleich, unter der Hauptnavigation: Featureboard, Projekt-Ideen, Neues Projekt (darunter der Upload-Baum)
+// Für alle Rollen gleich, unter der Hauptnavigation: Featureboard, Projekt-Ideen, Projekt anlegen (darunter der Upload-Baum)
 function projectNav(featureUnread: number): NavItem[] {
   return [
     { href: "/featureboard", label: "Featureboard", badge: featureUnread },
     { href: "/ideen", label: "Projekt-Ideen" },
-    { href: "/neu", label: "Neues Projekt" },
+    { href: "/neu", label: "Projekt anlegen" },
   ];
 }
 
@@ -119,8 +119,8 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
       <div className="hidden items-center justify-between gap-2 pl-2.5 pt-1 md:flex">
         <Link href="/dashboard" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
           {/*<span className="rec-dot size-2.5 rounded-full bg-rec" aria-hidden /> */}
-          <img src="/lightLogo.png" className="logo-on-light h-6 w-auto"/>
-          <img src="/darkLogo.png" className="logo-on-dark h-6 w-auto"/>
+          <img src="/lightLogo.png" alt="Great Influence" className="logo-on-light h-6 w-auto"/>
+          <img src="/darkLogo.png" alt="Great Influence" className="logo-on-dark h-6 w-auto"/>
         </Link>
         {inbox}
       </div>

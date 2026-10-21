@@ -17,12 +17,21 @@ import {
 } from "@/app/feature-actions";
 import { ConfirmDialog } from "@/app/components/confirm-dialog";
 import { buttonPrimary, buttonSecondary, inputField } from "@/app/components/ui";
-import { FEATURE_STATUSES, FEATURE_STATUS_COLORS, FEATURE_STATUS_LABELS, MAX_SCREENSHOTS } from "@/lib/features";
+import { FEATURE_STATUSES, FEATURE_STATUS_COLORS, FEATURE_STATUS_LABELS, MAX_SCREENSHOT_TOTAL } from "@/lib/features";
 
-// ---------- Screenshots: im Browser verkleinern, dann hochladen ----------
+// ---------- Screenshots: gleich beim Auswählen verkleinern, dann hochladen ----------
+// Beliebig viele Bilder pro Vorschlag, zusammen höchstens 5 MB (nach dem Verkleinern).
 
 const MAX_EDGE = 2000; // längste Kante in Pixeln – reicht für gut lesbare Screenshots
-const MAX_ORIGINAL = 25 * 1024 * 1024; // größere Dateien gar nicht erst einlesen
+const MAX_ORIGINAL = 50 * 1024 * 1024; // noch größere Dateien gar nicht erst einlesen
+
+type Shot = { name: string; blob: Blob; url: string };
+
+// 1,2 MB bzw. 340 KB bzw. 5 MB
+function fmtMB(bytes: number) {
+  if (bytes < 100 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(Math.round((bytes / 1024 / 1024) * 10) / 10).toLocaleString("de-DE")} MB`;
+}
 
 async function shrinkScreenshot(file: File): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
@@ -41,68 +50,91 @@ async function shrinkScreenshot(file: File): Promise<Blob> {
   return jpeg;
 }
 
-async function uploadScreenshots(featureId: string, files: File[]) {
-  for (const file of files) {
-    const blob = await shrinkScreenshot(file);
+async function uploadScreenshots(featureId: string, shots: Shot[]) {
+  for (const shot of shots) {
     const res = await fetch(`/api/features/${featureId}/images`, {
       method: "POST",
-      headers: { "Content-Type": blob.type },
-      body: blob,
+      headers: { "Content-Type": shot.blob.type },
+      body: shot.blob,
     });
     if (!res.ok) throw new Error((await res.text()) || "Screenshot konnte nicht gespeichert werden.");
   }
 }
 
-function checkImages(files: File[], room: number): string | null {
-  if (files.some((f) => !f.type.startsWith("image/"))) return "Bitte nur Bilder (PNG, JPG, WebP) auswählen.";
-  if (files.some((f) => f.size > MAX_ORIGINAL)) return "Ein Bild ist zu groß (max. 25 MB).";
-  if (files.length > room) return `Höchstens ${MAX_SCREENSHOTS} Screenshots pro Vorschlag.`;
-  return null;
-}
+const releaseShots = (shots: Shot[]) => shots.forEach((s) => URL.revokeObjectURL(s.url));
 
-// Auswahl mit kleinen Vorschaubildern (vor dem Absenden)
+// Auswahl mit kleinen Vorschaubildern und Speicheranzeige (vor dem Absenden)
 function ScreenshotPicker({
-  files,
+  shots,
   onChange,
-  room,
+  used = 0,
   disabled,
 }: {
-  files: File[];
-  onChange: (files: File[], error: string | null) => void;
-  room: number;
+  shots: Shot[];
+  onChange: (shots: Shot[], error: string | null) => void;
+  used?: number; // schon gespeicherte Bytes dieses Vorschlags
   disabled?: boolean;
 }) {
-  const [urls, setUrls] = useState<string[]>([]);
-  useEffect(() => {
-    const next = files.map((f) => URL.createObjectURL(f));
-    const t = setTimeout(() => setUrls(next));
-    return () => {
-      clearTimeout(t);
-      next.forEach((u) => URL.revokeObjectURL(u));
-    };
-  }, [files]);
+  const [working, setWorking] = useState(false);
+  const total = used + shots.reduce((sum, s) => sum + s.blob.size, 0);
+  const full = total >= MAX_SCREENSHOT_TOTAL;
+
+  async function add(files: File[]) {
+    if (files.some((f) => !f.type.startsWith("image/")))
+      return onChange(shots, "Bitte nur Bilder (PNG, JPG, WebP) auswählen.");
+    if (files.some((f) => f.size > MAX_ORIGINAL)) return onChange(shots, "Ein Bild ist zu groß (max. 50 MB).");
+    setWorking(true);
+    const next = [...shots];
+    let sum = total;
+    let skipped = 0;
+    let broken = 0;
+    for (const file of files) {
+      try {
+        const blob = await shrinkScreenshot(file);
+        if (sum + blob.size > MAX_SCREENSHOT_TOTAL) {
+          skipped++;
+          continue;
+        }
+        sum += blob.size;
+        next.push({ name: file.name, blob, url: URL.createObjectURL(blob) });
+      } catch {
+        broken++;
+      }
+    }
+    setWorking(false);
+    const error = skipped
+      ? `Zusammen höchstens ${fmtMB(MAX_SCREENSHOT_TOTAL)} pro Vorschlag – ${skipped === 1 ? "ein Bild passt" : `${skipped} Bilder passen`} nicht mehr hinein.`
+      : broken
+        ? "Ein Bild konnte nicht gelesen werden."
+        : null;
+    onChange(next, error);
+  }
 
   return (
     <div className="space-y-2">
-      {files.length > 0 && (
+      {shots.length > 0 && (
         <ul className="flex flex-wrap gap-2">
-          {files.map((f, i) => (
-            <li key={`${f.name}-${i}`} className="relative">
+          {shots.map((s, i) => (
+            <li key={s.url} className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element -- lokale Vorschau */}
-              {urls[i] && (
-                <img src={urls[i]} alt={f.name} className="size-16 rounded-md border border-line object-cover" />
-              )}
+              <img
+                src={s.url}
+                alt={s.name}
+                title={`${s.name} · ${fmtMB(s.blob.size)}`}
+                className="size-16 rounded-md border border-line object-cover"
+              />
               <button
                 type="button"
                 disabled={disabled}
-                aria-label={`${f.name} entfernen`}
+                aria-label={`${s.name} entfernen`}
                 className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border border-line bg-surface text-xs text-muted hover:text-danger"
-                onClick={() =>
+                onClick={() => {
+                  URL.revokeObjectURL(s.url);
                   onChange(
-                    files.filter((_, j) => j !== i),
+                    shots.filter((_, j) => j !== i),
                     null,
-                  )
-                }
+                  );
+                }}
               >
                 ×
               </button>
@@ -110,28 +142,31 @@ function ScreenshotPicker({
           ))}
         </ul>
       )}
-      {files.length < room && (
+      {!full && (
         <label
-          className={`inline-flex cursor-pointer items-center gap-1.5 text-sm text-accent hover:underline ${disabled ? "pointer-events-none opacity-50" : ""}`}
+          className={`inline-flex cursor-pointer items-center gap-1.5 text-sm text-accent hover:underline ${disabled || working ? "pointer-events-none opacity-50" : ""}`}
         >
-          + Screenshots hinzufügen
+          {working ? "Bilder werden verkleinert …" : "+ Screenshots hinzufügen"}
           <input
             type="file"
             accept="image/png,image/jpeg,image/webp"
             multiple
             className="sr-only"
-            disabled={disabled}
+            disabled={disabled || working}
             onChange={(e) => {
               const picked = [...(e.target.files ?? [])];
               e.target.value = "";
-              const all = [...files, ...picked];
-              const error = checkImages(all, room);
-              onChange(error ? files : all, error);
+              if (picked.length) add(picked);
             }}
           />
         </label>
       )}
-      <p className="text-xs text-muted">Optional, bis zu {room} Bilder – werden automatisch verkleinert.</p>
+      <p className="text-xs text-muted" data-testid="screenshot-usage">
+        {total > 0
+          ? `${fmtMB(total)} von ${fmtMB(MAX_SCREENSHOT_TOTAL)} belegt.`
+          : `Optional – beliebig viele Bilder, zusammen bis ${fmtMB(MAX_SCREENSHOT_TOTAL)}.`}{" "}
+        Bilder werden automatisch verkleinert.
+      </p>
     </div>
   );
 }
@@ -143,7 +178,7 @@ export function NewFeatureForm() {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
+  const [shots, setShots] = useState<Shot[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -158,7 +193,8 @@ export function NewFeatureForm() {
   const reset = () => {
     setTitle("");
     setDescription("");
-    setFiles([]);
+    releaseShots(shots);
+    setShots([]);
     setError(null);
     setOpen(false);
   };
@@ -177,7 +213,7 @@ export function NewFeatureForm() {
           return setError(res.error);
         }
         try {
-          if (files.length > 0) await uploadScreenshots(res.data.id, files);
+          if (shots.length > 0) await uploadScreenshots(res.data.id, shots);
         } catch {
           // Vorschlag ist gespeichert – nur ein Bild hat nicht geklappt → Vorschlag öffnen, dort erneut hinzufügen
           setBusy(false);
@@ -209,11 +245,10 @@ export function NewFeatureForm() {
         disabled={busy}
       />
       <ScreenshotPicker
-        files={files}
-        room={MAX_SCREENSHOTS}
+        shots={shots}
         disabled={busy}
         onChange={(next, err) => {
-          setFiles(next);
+          setShots(next);
           setError(err);
         }}
       />
@@ -467,26 +502,25 @@ export function FeatureComment({ c }: { c: CommentView }) {
 
 // ---------- Screenshots im geöffneten Vorschlag ----------
 
-export function AddScreenshots({ featureId, room }: { featureId: string; room: number }) {
+export function AddScreenshots({ featureId, used }: { featureId: string; used: number }) {
   const router = useRouter();
-  const [files, setFiles] = useState<File[]>([]);
+  const [shots, setShots] = useState<Shot[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (room <= 0) return null;
   return (
     <div className="space-y-2">
       <ScreenshotPicker
-        files={files}
-        room={room}
+        shots={shots}
+        used={used}
         disabled={busy}
         onChange={(next, err) => {
-          setFiles(next);
+          setShots(next);
           setError(err);
         }}
       />
       {error && <p className="text-sm text-danger">{error}</p>}
-      {files.length > 0 && (
+      {shots.length > 0 && (
         <button
           type="button"
           className={buttonPrimary}
@@ -495,8 +529,9 @@ export function AddScreenshots({ featureId, room }: { featureId: string; room: n
             setBusy(true);
             setError(null);
             try {
-              await uploadScreenshots(featureId, files);
-              setFiles([]);
+              await uploadScreenshots(featureId, shots);
+              releaseShots(shots);
+              setShots([]);
             } catch (err) {
               setError(err instanceof Error ? err.message : "Upload fehlgeschlagen.");
             }
@@ -504,7 +539,7 @@ export function AddScreenshots({ featureId, room }: { featureId: string; room: n
             router.refresh();
           }}
         >
-          {busy ? "Wird hochgeladen …" : `${files.length} Screenshot${files.length === 1 ? "" : "s"} speichern`}
+          {busy ? "Wird hochgeladen …" : `${shots.length} Screenshot${shots.length === 1 ? "" : "s"} speichern`}
         </button>
       )}
     </div>

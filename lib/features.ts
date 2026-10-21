@@ -15,8 +15,8 @@ export const FEATURE_STATUS_COLORS: Record<string, string> = {
   abgeschlossen: "var(--st-online)",
 };
 
-export const MAX_SCREENSHOTS = 5;
-export const MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024; // gespeichertes Bild (nach dem Verkleinern im Browser)
+// Screenshots: beliebig viele pro Vorschlag, zusammen höchstens 5 MB (gemessen nach dem Verkleinern im Browser)
+export const MAX_SCREENSHOT_TOTAL = 5 * 1024 * 1024;
 export const SCREENSHOT_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
 // So heißen Admin-Antworten für alle anderen

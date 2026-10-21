@@ -1,8 +1,14 @@
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
-import { loadAssignments, loadPeople, loadPerson, logoUrl } from "@/lib/queries";
+import { activeJobsOnlyWith, loadAssignments, loadPeople, loadPerson, logoUrl } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
-import { AssignmentSelect, ProfileForm, RegenerateInvite, WelcomeVideoSection } from "@/app/components/admin-forms";
+import {
+  AssignmentSelect,
+  DeleteCutterButton,
+  ProfileForm,
+  RegenerateInvite,
+  WelcomeVideoSection,
+} from "@/app/components/admin-forms";
 
 // Cutter bearbeiten (nur Admins): Kontakt, freigegebene Kunden, Zugang
 export default async function CutterDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -11,7 +17,12 @@ export default async function CutterDetailPage({ params }: { params: Promise<{ i
   if (me.role !== "admin") redirect("/dashboard");
 
   const { id } = await params;
-  const [cutter, clients, assignments] = await Promise.all([loadPerson(id), loadPeople("kunde"), loadAssignments()]);
+  const [cutter, clients, assignments, activeAlone] = await Promise.all([
+    loadPerson(id),
+    loadPeople("kunde"),
+    loadAssignments(),
+    activeJobsOnlyWith(id),
+  ]);
   if (!cutter || cutter.role === "kunde") notFound();
   const assigned = new Set(assignments.filter((a) => a.cutterId === id).map((a) => a.clientId));
 
@@ -57,6 +68,12 @@ export default async function CutterDetailPage({ params }: { params: Promise<{ i
             </p>
             <RegenerateInvite userId={id} invited={cutter.invited} />
           </section>
+          {cutter.role === "cutter" && (
+            <section className="space-y-2">
+              <h2 className="text-sm font-medium text-danger">Cutter löschen</h2>
+              <DeleteCutterButton cutterId={id} name={cutter.name} activeAlone={activeAlone} />
+            </section>
+          )}
         </aside>
       </div>
     </>

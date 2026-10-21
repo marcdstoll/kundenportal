@@ -7,6 +7,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   addComment,
+  deleteComment,
+  editComment,
   decideCancel,
   deleteJob,
   deleteJobFile,
@@ -20,7 +22,7 @@ import {
 import { ACCEPT, ALLOWED_LABEL, filterAllowed } from "@/lib/file-types";
 import { startNachreichen, useUploads } from "@/lib/upload-manager";
 import { UploadOverview } from "./upload-tree";
-import { buttonPrimary, buttonSecondary, inputField } from "./ui";
+import { Avatar, buttonPrimary, buttonSecondary, inputField } from "./ui";
 import { ConfirmDialog } from "./confirm-dialog";
 
 function ErrorText({ error }: { error: string | null }) {
@@ -207,6 +209,126 @@ export function CommentForm({ jobId }: { jobId: string }) {
         </button>
       </div>
     </div>
+  );
+}
+
+export type JobCommentView = {
+  id: string;
+  body: string;
+  author: string;
+  avatarName: string;
+  role: string | null;
+  createdAt: string;
+  editedAt: string | null;
+  canEdit: boolean;
+  canDelete: boolean;
+};
+
+// Ein Kommentar im Verlauf – mit Bearbeiten (Verfasser) und Löschen (Verfasser oder Admin)
+export function JobComment({ comment: c }: { comment: JobCommentView }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(c.body);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState(false);
+
+  return (
+    <li className="flex gap-2.5" data-testid="job-comment">
+      <Avatar name={c.avatarName} />
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <p className="text-xs text-muted">
+          <span className="font-medium text-text">{c.author}</span>
+          {c.role && ` · ${c.role}`} · {c.createdAt}
+          {c.editedAt && (
+            <span className="italic" title={`Bearbeitet am ${c.editedAt}`}>
+              {" "}
+              · bearbeitet
+            </span>
+          )}
+        </p>
+        {editing ? (
+          <div className="space-y-2 pt-1">
+            <textarea
+              rows={3}
+              className={inputField}
+              value={draft}
+              disabled={busy}
+              autoFocus
+              onChange={(e) => setDraft(e.target.value)}
+            />
+            <ErrorText error={error} />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className={buttonSecondary}
+                disabled={busy}
+                onClick={() => {
+                  setDraft(c.body);
+                  setError(null);
+                  setEditing(false);
+                }}
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                className={buttonPrimary}
+                disabled={busy || !draft.trim()}
+                onClick={async () => {
+                  setBusy(true);
+                  setError(null);
+                  const res = await editComment(c.id, draft);
+                  setBusy(false);
+                  if (!res.ok) return setError(res.error);
+                  setEditing(false);
+                }}
+              >
+                Speichern
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="whitespace-pre-wrap text-sm">{c.body}</p>
+        )}
+        {!editing && (c.canEdit || c.canDelete) && (
+          <div className="flex gap-3 pt-0.5 text-xs">
+            {c.canEdit && (
+              <button type="button" className="text-muted hover:text-text" onClick={() => setEditing(true)}>
+                Bearbeiten
+              </button>
+            )}
+            {c.canDelete && (
+              <button
+                type="button"
+                className="text-muted hover:text-danger"
+                onClick={() => {
+                  setError(null);
+                  setConfirm(true);
+                }}
+              >
+                Löschen
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      <ConfirmDialog
+        open={confirm}
+        title="Kommentar löschen?"
+        message="Der Kommentar wird endgültig entfernt – auch aus der Inbox der anderen."
+        confirmLabel="Löschen"
+        busy={busy}
+        error={error}
+        onCancel={() => setConfirm(false)}
+        onConfirm={async () => {
+          setBusy(true);
+          const res = await deleteComment(c.id);
+          setBusy(false);
+          if (!res.ok) return setError(res.error);
+          setConfirm(false);
+        }}
+      />
+    </li>
   );
 }
 

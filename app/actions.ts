@@ -653,8 +653,77 @@ export async function addComment(jobId: string, body: string) {
     if (!text) throw new Error("Bitte einen Kommentar eingeben.");
     if (text.length > 5000) throw new Error("Der Kommentar ist zu lang (max. 5000 Zeichen).");
     await db.insert(jobComments).values({ id: randomUUID(), jobId, authorId: me.id, body: text });
-    const preview = text.length > 80 ? `${text.slice(0, 80)} …` : text;
-    await notify(job, me, "comment", `${me.name}: „${preview}“`);
+    await notify(job, me, "comment", commentNotice(me.name, text));
+    refresh();
+    return null;
+  });
+}
+
+// Inbox-Text, den ein Kommentar bei den Beteiligten erzeugt (zum Anpassen/Entfernen beim Bearbeiten/Löschen)
+function commentNotice(authorName: string, text: string) {
+  const preview = text.length > 80 ? `${text.slice(0, 80)} …` : text;
+  return `${authorName}: „${preview}“`;
+}
+
+async function getComment(commentId: string) {
+  const [c] = await db.select().from(jobComments).where(eq(jobComments.id, commentId));
+  if (!c) throw new Error("Kommentar nicht gefunden.");
+  return c;
+}
+
+// Eigenen Kommentar bearbeiten – wird mit „bearbeitet“ gekennzeichnet
+export async function editComment(commentId: string, body: string) {
+  return run(async () => {
+    const me = await requireUser();
+    const c = await getComment(commentId);
+    if (c.authorId !== me.id) throw new Error("Nur der Verfasser kann den Kommentar bearbeiten.");
+    await assertCanSee(me, await getJob(c.jobId));
+    const text = body.trim();
+    if (!text) throw new Error("Der Kommentar darf nicht leer sein.");
+    if (text.length > 5000) throw new Error("Der Kommentar ist zu lang (max. 5000 Zeichen).");
+    if (text === c.body) return null;
+    await db.update(jobComments).set({ body: text, editedAt: new Date() }).where(eq(jobComments.id, commentId));
+    // Inbox-Einträge zu diesem Kommentar zeigen den neuen Text
+    await db
+      .update(notifications)
+      .set({ text: commentNotice(me.name, text) })
+      .where(
+        and(
+          eq(notifications.jobId, c.jobId),
+          eq(notifications.type, "comment"),
+          eq(notifications.actorId, me.id),
+          eq(notifications.text, commentNotice(me.name, c.body)),
+        ),
+      );
+    refresh();
+    return null;
+  });
+}
+
+// Kommentar löschen – der Verfasser selbst oder ein Admin
+export async function deleteComment(commentId: string) {
+  return run(async () => {
+    const me = await requireUser();
+    const c = await getComment(commentId);
+    if (c.authorId !== me.id && me.role !== "admin") throw new Error("Keine Berechtigung.");
+    await assertCanSee(me, await getJob(c.jobId));
+    await db.delete(jobComments).where(eq(jobComments.id, commentId));
+    // Zugehörige Inbox-Einträge mit entfernen
+    if (c.authorId) {
+      const [author] = await db.select({ name: user.name }).from(user).where(eq(user.id, c.authorId));
+      if (author) {
+        await db
+          .delete(notifications)
+          .where(
+            and(
+              eq(notifications.jobId, c.jobId),
+              eq(notifications.type, "comment"),
+              eq(notifications.actorId, c.authorId),
+              eq(notifications.text, commentNotice(author.name, c.body)),
+            ),
+          );
+      }
+    }
     refresh();
     return null;
   });

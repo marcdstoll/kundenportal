@@ -42,7 +42,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kunde">["se
         </Link>
         {!viewAs && (
           <Link href="/neu" className={buttonPrimary}>
-            Neues Projekt
+            Projekt anlegen
           </Link>
         )}
       </PageHeader>
@@ -50,7 +50,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kunde">["se
       <div className="space-y-4 px-4 pb-10 sm:px-6 md:px-10">
         {jobs.length === 0 ? (
           <div className="rounded-xl border border-dashed border-line p-10 text-center text-sm text-muted">
-            Noch keine Projekte. Lade dein erstes Material über „Neues Projekt“ hoch.
+            Noch keine Projekte. Lade dein erstes Material über „Projekt anlegen“ hoch.
           </div>
         ) : (
           <>

@@ -1,9 +1,9 @@
 import { randomUUID } from "crypto";
-import { count, eq } from "drizzle-orm";
+import { eq, sum } from "drizzle-orm";
 import { db } from "@/db";
 import { featureAttachments, featureRequests } from "@/db/schema";
 import { auth } from "@/lib/auth";
-import { MAX_SCREENSHOTS, MAX_SCREENSHOT_BYTES, SCREENSHOT_TYPES } from "@/lib/features";
+import { MAX_SCREENSHOT_TOTAL, SCREENSHOT_TYPES } from "@/lib/features";
 
 // Screenshot zu einem Feature hochladen (Ersteller oder Admin). Der Browser hat das Bild vorher verkleinert.
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -16,13 +16,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (session.user.role !== "admin" && feature.createdBy !== session.user.id) {
     return new Response("Keine Berechtigung", { status: 403 });
   }
-  const [{ n }] = await db.select({ n: count() }).from(featureAttachments).where(eq(featureAttachments.featureId, id));
-  if (n >= MAX_SCREENSHOTS) return new Response(`Höchstens ${MAX_SCREENSHOTS} Screenshots`, { status: 400 });
 
   const type = (req.headers.get("content-type") ?? "").split(";")[0];
   if (!SCREENSHOT_TYPES.includes(type)) return new Response("Nur PNG, JPG oder WebP", { status: 415 });
   const bytes = Buffer.from(await req.arrayBuffer());
-  if (bytes.length === 0 || bytes.length > MAX_SCREENSHOT_BYTES) return new Response("Bild zu groß", { status: 413 });
+  if (bytes.length === 0) return new Response("Leeres Bild", { status: 400 });
+
+  // Alle Screenshots eines Vorschlags zusammen höchstens 5 MB
+  const [{ used }] = await db
+    .select({ used: sum(featureAttachments.size).mapWith(Number) })
+    .from(featureAttachments)
+    .where(eq(featureAttachments.featureId, id));
+  if ((used ?? 0) + bytes.length > MAX_SCREENSHOT_TOTAL) {
+    return new Response("Zusammen höchstens 5 MB Screenshots pro Vorschlag", { status: 413 });
+  }
 
   await db.insert(featureAttachments).values({
     id: randomUUID(),

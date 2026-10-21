@@ -36,10 +36,12 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
         : null;
 
   const header = (
-    <p className="flex items-center gap-2 text-sm font-semibold tracking-tight text-muted">
-      <span className="rec-dot size-2 rounded-full bg-rec" aria-hidden />
-      Contenthaus
-    </p>
+    <div>
+      {/* eslint-disable-next-line @next/next/no-img-element -- Logo aus /public, je nach Design hell oder dunkel */}
+      <img src="/lightLogo.png" alt="Great Influence" className="logo-on-light h-8 w-auto" />
+      {/* eslint-disable-next-line @next/next/no-img-element -- Logo aus /public, je nach Design hell oder dunkel */}
+      <img src="/darkLogo.png" alt="Great Influence" className="logo-on-dark h-8 w-auto" />
+    </div>
   );
 
   if (problem || !row) {
