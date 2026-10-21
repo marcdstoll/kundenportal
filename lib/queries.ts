@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { account, cutterClients, jobComments, jobCutters, jobFiles, jobs, notifications, profiles, user } from "@/db/schema";
+import { account, cutterClients, featureRequests, jobComments, jobCutters, jobFiles, jobs, notifications, profiles, user } from "@/db/schema";
 
 export type JobFileView = typeof jobFiles.$inferSelect & { uploaderName: string | null };
 
@@ -129,16 +129,19 @@ export async function nextPartTitle(job: { id: string; title: string; parentJobI
 // Ungelesene Benachrichtigungen je Projekt (für "Neu"-Markierungen auf Board und Karten)
 export async function unreadByJob(userId: string) {
   const rows = await db
-    .select({ jobId: notifications.jobId, fileId: notifications.fileId })
+    .select({ jobId: notifications.jobId, featureId: notifications.featureId, fileId: notifications.fileId })
     .from(notifications)
     .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
   const jobsMap = new Map<string, number>();
+  const features = new Map<string, number>();
   const files = new Set<string>();
   for (const r of rows) {
-    jobsMap.set(r.jobId, (jobsMap.get(r.jobId) ?? 0) + 1);
+    if (r.jobId) jobsMap.set(r.jobId, (jobsMap.get(r.jobId) ?? 0) + 1);
+    if (r.featureId) features.set(r.featureId, (features.get(r.featureId) ?? 0) + 1);
     if (r.fileId) files.add(r.fileId);
   }
-  return { jobs: jobsMap, files, total: rows.length };
+  const featureTotal = [...features.values()].reduce((a, b) => a + b, 0);
+  return { jobs: jobsMap, features, featureTotal, files, total: rows.length };
 }
 
 export async function loadInbox(userId: string, limit = 200) {
@@ -146,15 +149,18 @@ export async function loadInbox(userId: string, limit = 200) {
     .select({
       id: notifications.id,
       jobId: notifications.jobId,
+      featureId: notifications.featureId,
       type: notifications.type,
       text: notifications.text,
       createdAt: notifications.createdAt,
       readAt: notifications.readAt,
       jobTitle: jobs.title,
       jobStatus: jobs.status,
+      featureTitle: featureRequests.title,
     })
     .from(notifications)
-    .innerJoin(jobs, eq(notifications.jobId, jobs.id))
+    .leftJoin(jobs, eq(notifications.jobId, jobs.id))
+    .leftJoin(featureRequests, eq(notifications.featureId, featureRequests.id))
     .where(eq(notifications.userId, userId))
     .orderBy(desc(notifications.createdAt))
     .limit(limit);

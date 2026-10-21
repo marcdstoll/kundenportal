@@ -15,12 +15,20 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
 };
 
+// Für alle Rollen gleich, unter der Hauptnavigation: Featureboard, Projekt-Ideen, Neues Projekt (darunter der Upload-Baum)
+function projectNav(featureUnread: number): NavItem[] {
+  return [
+    { href: "/featureboard", label: "Featureboard", badge: featureUnread },
+    { href: "/ideen", label: "Projekt-Ideen" },
+    { href: "/neu", label: "Neues Projekt" },
+  ];
+}
+
 function navFor(role: string): NavItem[] {
   if (role === "kunde") {
     return [
       { href: "/kunde", label: "Projekte" },
       { href: "/kalender", label: "Kalender" },
-      { href: "/neu", label: "Neues Projekt" },
     ];
   }
   if (role === "cutter") {
@@ -30,7 +38,6 @@ function navFor(role: string): NavItem[] {
       { href: "/kalender", label: "Kalender" },
       { href: "/nach-cutter", label: "Meine Projekte" },
       { href: "/meine-clients", label: "Meine Clients" },
-      { href: "/neu", label: "Neues Projekt" },
     ];
   }
   return [
@@ -40,17 +47,17 @@ function navFor(role: string): NavItem[] {
     { href: "/nach-clients", label: "Nach Clients" },
     { href: "/cutter", label: "Cutter" },
     { href: "/clients", label: "Clients" },
-    { href: "/neu", label: "Neues Projekt" },
   ];
 }
 
 // Inbox-Zähler: darf nie die ganze App lahmlegen (z. B. wenn eine Migration fehlt)
 async function safeUnread(userId: string) {
   try {
-    return (await unreadByJob(userId)).total;
+    const u = await unreadByJob(userId);
+    return { total: u.total, features: u.featureTotal };
   } catch (e) {
     console.error("Inbox-Zähler nicht verfügbar:", e);
-    return 0;
+    return { total: 0, features: 0 };
   }
 }
 
@@ -61,11 +68,12 @@ async function safeInbox(userId: string): Promise<InboxItem[]> {
     return rows.map((r) => ({
       id: r.id,
       jobId: r.jobId,
+      featureId: r.featureId,
       type: r.type,
       text: r.text,
       createdAt: r.createdAt,
       read: !!r.readAt,
-      jobTitle: r.jobTitle,
+      title: r.jobTitle ?? r.featureTitle ?? "",
       jobStatus: r.jobStatus,
     }));
   } catch (e) {
@@ -99,7 +107,11 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
     safeInbox(user.id),
   ]);
   const inbox = (
-    <InboxButton items={inboxItems} unread={unread} jobHref={user.role === "kunde" ? "/kunde?job=JOBID" : "/board?job=JOBID"} />
+    <InboxButton
+      items={inboxItems}
+      unread={unread.total}
+      jobHref={user.role === "kunde" ? "/kunde?job=JOBID" : "/board?job=JOBID"}
+    />
   );
 
   const sidebar = (
@@ -113,9 +125,10 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
         {inbox}
       </div>
 
-      <NavLinks items={navFor(user.role)} />
-      <UploadTree />
-      <NavLinks items={[{ href: "/ideen", label: "Projekt-Ideen" }]} />
+      <div className="space-y-0.5">
+        <NavLinks items={[...navFor(user.role), ...projectNav(unread.features)]} />
+        <UploadTree />
+      </div>
 
       {clients.length > 0 && (
         <div className="space-y-1">

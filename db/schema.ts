@@ -1,4 +1,4 @@
-import { bigint, boolean, date, index, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { bigint, boolean, date, index, integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 export * from "./auth-schema";
@@ -103,8 +103,8 @@ export const jobComments = pgTable(
   (t) => [index("job_comments_job_idx").on(t.jobId)]
 );
 
-// Inbox: eine Benachrichtigung pro Empfänger
-// type: file (Material nachgereicht) | comment | storno_request | storno_decision
+// Inbox: eine Benachrichtigung pro Empfänger – gehört entweder zu einem Projekt (jobId) oder einem Feature (featureId)
+// type: file | comment | storno_request | storno_decision | status | feature | feature_comment | feature_status
 export const notifications = pgTable(
   "notifications",
   {
@@ -112,9 +112,8 @@ export const notifications = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    jobId: text("job_id")
-      .notNull()
-      .references(() => jobs.id, { onDelete: "cascade" }),
+    jobId: text("job_id").references(() => jobs.id, { onDelete: "cascade" }),
+    featureId: text("feature_id").references(() => featureRequests.id, { onDelete: "cascade" }),
     type: text("type").notNull(),
     text: text("text").notNull(),
     actorId: text("actor_id"),
@@ -194,4 +193,62 @@ export const projectIdeas = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [index("project_ideas_customer_idx").on(t.customerId)]
+);
+
+// ---------- Featureboard ----------
+// status: offen | in_arbeit | abgeschlossen (setzen nur Admins); completedAt wird beim Abschließen gesetzt
+export const featureRequests = pgTable("feature_requests", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: text("status").notNull().default("offen"),
+  createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+// Eine Stimme pro Person und Feature
+export const featureVotes = pgTable(
+  "feature_votes",
+  {
+    featureId: text("feature_id")
+      .notNull()
+      .references(() => featureRequests.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.featureId, t.userId] })]
+);
+
+// Kommentare: schreiben dürfen nur der Ersteller des Features und Admins
+export const featureComments = pgTable(
+  "feature_comments",
+  {
+    id: text("id").primaryKey(),
+    featureId: text("feature_id")
+      .notNull()
+      .references(() => featureRequests.id, { onDelete: "cascade" }),
+    authorId: text("author_id").references(() => user.id, { onDelete: "set null" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    editedAt: timestamp("edited_at"),
+  },
+  (t) => [index("feature_comments_feature_idx").on(t.featureId)]
+);
+
+// Screenshots (im Browser verkleinert, als data-URL gespeichert, max. 5 pro Feature)
+export const featureAttachments = pgTable(
+  "feature_attachments",
+  {
+    id: text("id").primaryKey(),
+    featureId: text("feature_id")
+      .notNull()
+      .references(() => featureRequests.id, { onDelete: "cascade" }),
+    data: text("data").notNull(),
+    size: integer("size").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("feature_attachments_feature_idx").on(t.featureId)]
 );

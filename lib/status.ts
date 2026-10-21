@@ -69,23 +69,23 @@ export const FORMAT_LABELS: Record<string, string> = {
   clipping: "Clipping",
 };
 
-// Videolänge als feste Kategorien je Format (Briefing 02). Grenzen eindeutig: "bis unter" gehört zur nächsten Stufe.
+// Videolänge als feste Kategorien je Format (Briefing 02).
 // Clipping hat keine Längenangabe.
 export const VIDEO_LENGTHS: Record<string, string[]> = {
   shortform: [
     "Unter 10 Sekunden",
-    "10 bis unter 30 Sekunden",
-    "30 bis unter 60 Sekunden",
-    "60 bis unter 120 Sekunden",
+    "10 bis 30 Sekunden",
+    "30 bis 60 Sekunden",
+    "60 bis 120 Sekunden",
     "120 bis 180 Sekunden",
     "Noch offen",
   ],
   longform: [
     "Unter 5 Minuten",
-    "5 bis unter 12 Minuten",
-    "12 bis unter 20 Minuten",
-    "20 bis unter 30 Minuten",
-    "30 bis unter 45 Minuten",
+    "5 bis 12 Minuten",
+    "12 bis 20 Minuten",
+    "20 bis 30 Minuten",
+    "30 bis 45 Minuten",
     "45 bis 60 Minuten",
     "Über 60 Minuten",
     "Noch offen",

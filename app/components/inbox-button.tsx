@@ -7,16 +7,26 @@ import { StatusBadge, formatDateTime } from "./ui";
 
 export type InboxItem = {
   id: string;
-  jobId: string;
+  jobId: string | null; // Projekt-Meldung …
+  featureId: string | null; // … oder Featureboard-Meldung
   type: string;
   text: string;
   createdAt: Date;
   read: boolean;
-  jobTitle: string;
-  jobStatus: string;
+  title: string;
+  jobStatus: string | null;
 };
 
-const TYPE_ICON: Record<string, string> = { file: "📎", comment: "💬", storno_request: "⏸", storno_decision: "⚖️", status: "🎬" };
+const TYPE_ICON: Record<string, string> = {
+  file: "📎",
+  comment: "💬",
+  storno_request: "⏸",
+  storno_decision: "⚖️",
+  status: "🎬",
+  feature: "💡",
+  feature_comment: "💬",
+  feature_status: "🏷",
+};
 
 function Bell() {
   return (
@@ -83,7 +93,7 @@ export function InboxButton({ items, unread, jobHref }: { items: InboxItem[]; un
               {items.map((n) => (
                 <li key={n.id}>
                   <Link
-                    href={jobHref.replace("JOBID", n.jobId)}
+                    href={n.featureId ? `/featureboard?f=${n.featureId}` : jobHref.replace("JOBID", n.jobId ?? "")}
                     scroll={false}
                     onClick={() => setOpen(false)}
                     className={`flex items-start gap-3 px-4 py-3 transition-colors hover:bg-raised/60 ${n.read ? "" : "bg-accent/5"}`}
@@ -93,8 +103,12 @@ export function InboxButton({ items, unread, jobHref }: { items: InboxItem[]; un
                     </span>
                     <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className={`truncate text-sm ${n.read ? "text-muted" : "font-medium"}`}>{n.jobTitle}</span>
-                        <StatusBadge status={n.jobStatus} />
+                        <span className={`truncate text-sm ${n.read ? "text-muted" : "font-medium"}`}>{n.title}</span>
+                        {n.jobStatus ? (
+                          <StatusBadge status={n.jobStatus} />
+                        ) : (
+                          <span className="shrink-0 rounded bg-raised px-1.5 py-px text-[11px] text-muted">Featureboard</span>
+                        )}
                       </div>
                       <p className={`line-clamp-2 text-sm ${n.read ? "text-muted" : ""}`}>{n.text}</p>
                       <p className="text-xs text-muted">{formatDateTime(n.createdAt)}</p>
