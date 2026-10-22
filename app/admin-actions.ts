@@ -672,7 +672,7 @@ export async function setCustomerColor(customerId: string, color: string | null)
     if (color !== null && !/^#[0-9a-f]{6}$/i.test(color)) throw new Error("Ungültige Farbe.");
     await db
       .update(customers)
-      .set({ color: color?.toLowerCase() ?? null, updatedAt: new Date() })
+      .set({ color: color?.toLowerCase() ?? null }) // updatedAt bleibt: steuert die Bild-Versionen
       .where(eq(customers.id, customerId));
     refresh();
     return null;

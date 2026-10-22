@@ -19,7 +19,7 @@ export async function setPersonColor(userId: string, color: string | null) {
     await db
       .insert(profiles)
       .values({ userId, color: value })
-      .onConflictDoUpdate({ target: profiles.userId, set: { color: value, updatedAt: new Date() } });
+      .onConflictDoUpdate({ target: profiles.userId, set: { color: value } }); // updatedAt bleibt: steuert die Logo-Version
     refresh();
     return { ok: true as const };
   } catch (e) {

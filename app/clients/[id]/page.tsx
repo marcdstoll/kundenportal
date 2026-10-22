@@ -35,8 +35,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
       <div className="grid max-w-6xl gap-8 px-4 pb-10 sm:px-6 md:px-10 lg:grid-cols-[1fr_22rem]">
         <section className="space-y-3">
           <h2 className="text-sm font-medium">Profil</h2>
+          {/* kein key: Änderungen rechts (Farbe, Nutzer, Cutter) dürfen ungespeicherte Eingaben nicht verwerfen */}
           <CustomerForm
-            key={client.version}
             customer={client}
             logoUrl={customerLogoUrl(client)}
             coverUrl={customerCoverUrl(client)}

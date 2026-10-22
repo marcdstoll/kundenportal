@@ -140,7 +140,7 @@ async function Content({ searchParams }: { searchParams: Params }) {
           <NewIdeaForm clients={isKunde ? null : clients} />
         </div>
 
-        <nav className="flex gap-1 overflow-x-auto border-b border-line" aria-label="Ideen nach Status">
+        <nav className="flex flex-wrap gap-1 border-b border-line" aria-label="Ideen nach Status">
           {[
             { value: "", label: "Alle" },
             ...IDEA_STATUSES.map((s) => ({ value: s, label: IDEA_STATUS_LABELS[s] })),
