@@ -135,7 +135,7 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
             <div className="space-y-1">
               <input
                 className={inputField}
-                placeholder="Kunde / Firma (optional)"
+                placeholder="Kunde"
                 value={firm}
                 onChange={(e) => setFirm(e.target.value)}
                 disabled={busy}
