@@ -116,3 +116,11 @@ summary {
 .logo-on-light { display: none; }
 :root[data-theme="light"] .logo-on-dark {display : none;}
 :root[data-theme="light"] .logo-on-light {display : block;}
+
+/* Panel von rechts (Neuer Kunde / Neuer Cutter) */
+@keyframes slide-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.slide-in { animation: slide-in 0.18s ease-out; }
+@media (prefers-reduced-motion: reduce) { .slide-in { animation: none; } }

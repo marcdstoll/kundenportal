@@ -163,62 +163,7 @@ export async function acceptInvite(token: string, password: string) {
   });
 }
 
-// Link prüfen: leer erlaubt, sonst http(s)
-function checkUrl(value: string) {
-  const v = value.trim();
-  if (!v) return null;
-  if (!/^https?:\/\//i.test(v)) throw new Error("Video-Links müssen mit http:// oder https:// beginnen.");
-  return v;
-}
-
-// ---------- Profil & Freigaben ----------
-
-export async function updateProfile(
-  userId: string,
-  input: {
-    name: string;
-    phone: string;
-    links: string;
-    notes: string;
-    birthday?: string;
-    welcomeVideo?: string;
-    logo?: string | null;
-  },
-) {
-  return run(async () => {
-    await requireUser("admin");
-    const name = input.name.trim();
-    if (!name) throw new Error("Der Name darf nicht leer sein.");
-    // Logo: nur kleine Bilder als data-URL (wird im Browser vorher verkleinert)
-    if (input.logo && (!input.logo.startsWith("data:image/") || input.logo.length > 200_000)) {
-      throw new Error("Das Logo ist zu groß oder kein Bild.");
-    }
-    // Geburtstag: leer = entfernen, sonst echtes Datum in der Vergangenheit
-    const birthday = input.birthday?.trim() || null;
-    if (birthday) {
-      const d = new Date(`${birthday}T12:00:00`);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(birthday) || isNaN(d.getTime()) || d > new Date() || d.getFullYear() < 1900) {
-        throw new Error("Bitte ein gültiges Geburtsdatum eingeben.");
-      }
-    }
-    await db.update(user).set({ name, updatedAt: new Date() }).where(eq(user.id, userId));
-    const values = {
-      phone: input.phone.trim() || null,
-      links: input.links.trim() || null,
-      notes: input.notes.trim() || null,
-      ...(input.birthday !== undefined ? { birthday } : {}),
-      ...(input.welcomeVideo !== undefined ? { welcomeVideo: checkUrl(input.welcomeVideo) } : {}),
-      ...(input.logo !== undefined ? { logo: input.logo } : {}),
-      updatedAt: new Date(),
-    };
-    await db
-      .insert(profiles)
-      .values({ userId, ...values })
-      .onConflictDoUpdate({ target: profiles.userId, set: values });
-    refresh();
-    return null;
-  });
-}
+// ---------- Freigaben ----------
 
 // Cutter für einen Kunden freigeben bzw. Freigabe entziehen
 export async function setAssignment(cutterId: string, clientId: string, on: boolean) {
@@ -582,25 +527,57 @@ export async function resendMemberInvite(userId: string) {
   });
 }
 
-// Persönliche Daten eines Kunden-Nutzers (Name, Telefon, Geburtstag)
-export async function updateMember(userId: string, input: { name: string; phone: string; birthday: string }) {
+// Persönliche Daten einer Person (Name, Telefon, Geburtstag, Bild) – einheitlich für „Mein Profil“,
+// Cutter und Kunden-Nutzer. Erlaubt: die Person selbst, Admins, Admins des Kunden für ihre Nutzer.
+export async function savePerson(
+  userId: string,
+  input: { name: string; phone: string; birthday: string; logo?: string | null },
+) {
   return run(async () => {
-    const m = await memberOf(userId);
-    // Admins (Agentur und Kunde) für alle Nutzer des Kunden, sonst jeder nur für sich selbst
-    const self = await requireUser();
-    if (self.id !== userId) await requireCustomerManager(m.customerId);
+    const me = await requireUser();
+    if (me.id !== userId && me.role !== "admin") {
+      const [m] = await db.select().from(customerMembers).where(eq(customerMembers.userId, userId));
+      if (!m) throw new Error("Keine Berechtigung.");
+      await requireCustomerManager(m.customerId);
+    }
     const name = input.name.trim();
     if (!name) throw new Error("Der Name darf nicht leer sein.");
+    if (name.length > 120) throw new Error("Der Name ist zu lang.");
+    if (input.logo && (!input.logo.startsWith("data:image/") || input.logo.length > 200_000)) {
+      throw new Error("Das Bild ist zu groß oder kein Bild.");
+    }
     const birthday = input.birthday.trim() || null;
-    if (birthday && !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) throw new Error("Bitte ein gültiges Geburtsdatum eingeben.");
+    if (birthday) {
+      const d = new Date(`${birthday}T12:00:00`);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(birthday) || isNaN(d.getTime()) || d > new Date() || d.getFullYear() < 1900) {
+        throw new Error("Bitte ein gültiges Geburtsdatum eingeben.");
+      }
+    }
     await db.update(user).set({ name, updatedAt: new Date() }).where(eq(user.id, userId));
-    const values = { phone: input.phone.trim() || null, birthday, updatedAt: new Date() };
+    const values = {
+      phone: input.phone.trim() || null,
+      birthday,
+      ...(input.logo !== undefined ? { logo: input.logo } : {}),
+      updatedAt: new Date(),
+    };
     await db
       .insert(profiles)
       .values({ userId, ...values })
       .onConflictDoUpdate({ target: profiles.userId, set: values });
     refresh();
     return null;
+  });
+}
+
+// Passwort ändern: Link zum Neu-Festlegen an die eigene E-Mail-Adresse
+export async function sendOwnPasswordLink() {
+  return run(async () => {
+    const me = await requireUser();
+    if (!mailConfigured()) throw new Error("E-Mail-Versand ist nicht eingerichtet.");
+    const link = await issueInvite(me.id, me.id);
+    const mail = await mailInvite(me.id, link);
+    if (!mail.ok) throw new Error(mail.error);
+    return { to: mail.to };
   });
 }
 

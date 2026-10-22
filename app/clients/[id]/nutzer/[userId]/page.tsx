@@ -1,58 +1,54 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
-import { loadCustomer } from "@/lib/queries";
+import { loadCustomer, loadPerson, logoUrl } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
+import { Card, ProfileColumn } from "@/app/components/card";
+import { ColorPicker } from "@/app/components/color-picker";
 import { RegenerateInvite, WelcomeVideoSection } from "@/app/components/admin-forms";
-import { MemberForm } from "@/app/components/customer-forms";
+import { PersonForm } from "@/app/components/person-form";
 
-// Ein Nutzer eines Kunden (nur Admins): persönliche Daten, Begrüßungsvideo, Zugang
+// Ein Nutzer eines Kunden (nur Admins) – gleicher Aufbau wie Cutter-Profil und „Mein Profil“
 export default async function MemberPage({ params }: { params: Promise<{ id: string; userId: string }> }) {
   const me = await getCurrentUser();
   if (!me) redirect("/login");
   if (me.role !== "admin") redirect("/dashboard");
 
   const { id, userId } = await params;
-  const client = await loadCustomer(id);
+  const [client, person] = await Promise.all([loadCustomer(id), loadPerson(userId)]);
   const member = client?.members.find((m) => m.id === userId);
-  if (!client || !member) notFound();
+  if (!client || !member || !person) notFound();
 
   return (
     <>
-      <PageHeader title={member.name}>
+      <PageHeader title={person.name}>
         <Link href={`/clients/${id}`} className="text-sm text-accent hover:underline">
           ← {client.name}
         </Link>
       </PageHeader>
-      <div className="grid max-w-5xl gap-8 px-4 pb-10 sm:px-6 md:px-10 lg:grid-cols-[1fr_20rem]">
-        <section className="space-y-3">
-          <h2 className="text-sm font-medium">Persönliche Daten</h2>
-          <p className="text-sm text-muted">
-            Login-E-Mail: <span className="text-text">{member.email}</span> · {member.isAdmin ? "Admin" : "Nutzer"} bei{" "}
-            {client.name}
-          </p>
-          <MemberForm member={member} />
-        </section>
-        <aside className="space-y-8">
-          {member.invited && (
-            <section className="space-y-2">
-              <h2 className="text-sm font-medium">Persönliches Begrüßungsvideo</h2>
-              <WelcomeVideoSection
-                userId={member.id}
-                hasVideo={!!member.welcomeVideo?.startsWith("frameio:")}
-                version={member.version}
-              />
-            </section>
-          )}
-          <section className="space-y-2">
-            <h2 className="text-sm font-medium">Zugang</h2>
-            <p className="text-sm text-muted">
-              {member.invited ? "Eingeladen – Passwort noch nicht gesetzt." : "Aktiv – Passwort gesetzt."}
-            </p>
-            <RegenerateInvite userId={member.id} invited={member.invited} />
-          </section>
-        </aside>
-      </div>
+      <ProfileColumn>
+        <Card title="Persönliche Daten" description={`${member.isAdmin ? "Admin" : "Nutzer"} bei ${client.name}`}>
+          <PersonForm key={person.logoVersion} person={person} logoUrl={logoUrl(person)} />
+        </Card>
+        <Card title="Farbe" description="Färbt Avatar und Kommentare dieser Person.">
+          <ColorPicker userId={person.id} name={person.name} color={person.color} />
+        </Card>
+        {person.invited && (
+          <Card title="Persönliches Begrüßungsvideo" description="Wird beim Öffnen der Einladung gezeigt.">
+            <WelcomeVideoSection
+              userId={person.id}
+              hasVideo={!!person.welcomeVideo?.startsWith("frameio:")}
+              version={person.logoVersion}
+            />
+          </Card>
+        )}
+        <Card
+          title="Zugang"
+          description={person.invited ? "Eingeladen – Passwort noch nicht gesetzt." : "Aktiv – Passwort gesetzt."}
+        >
+          <RegenerateInvite userId={person.id} invited={person.invited} />
+        </Card>
+      </ProfileColumn>
     </>
   );
 }

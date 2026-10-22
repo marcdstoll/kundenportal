@@ -9,16 +9,16 @@ import {
   regenerateInvite,
   removeWelcomeVideo,
   setAssignment,
-  updateProfile,
   createCustomer,
   deleteCustomer,
   deleteCutter,
 } from "@/app/admin-actions";
 import { uploadWelcomeVideo } from "@/lib/upload";
-import { Avatar, buttonPrimary, buttonSecondary, inputField } from "./ui";
+import { buttonPrimary, buttonSecondary, inputField } from "./ui";
 import { MultiSelect } from "./multi-select";
 import { WelcomePlayer, WelcomeRecorder } from "./welcome-recorder";
 import { ConfirmDialog } from "./confirm-dialog";
+import { SlideOver } from "./slide-over";
 
 function ErrorText({ error }: { error: string | null }) {
   return error ? <p className="text-sm text-danger">{error}</p> : null;
@@ -54,8 +54,15 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
     setVideo(null);
   }
 
-  if (!open) {
-    return (
+  const close = () => {
+    dropVideo();
+    setRecording(false);
+    setError(null);
+    setOpen(false);
+  };
+
+  return (
+    <>
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -69,168 +76,161 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
         </button>
         {done && <p className={`text-sm ${done.ok ? "text-[var(--st-online)]" : "text-danger"}`}>{done.text}</p>}
       </div>
-    );
-  }
-
-  return (
-    <form
-      className="w-full max-w-xl space-y-3 rounded-xl border border-line bg-surface p-4"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        setBusy(true);
-        setError(null);
-        const res =
-          role === "kunde"
-            ? await createCustomer({ name: firm.trim() || name, userName: name, email, phone, deferMail: !!video })
-            : await createUserWithInvite({ name, email, phone, role, deferMail: !!video });
-        if (!res.ok) {
-          setBusy(false);
-          return setError(res.error);
-        }
-        let mailError = res.data.mailError;
-        let videoError: string | null = null;
-        if (video) {
-          // Erst das Video hochladen, dann die Einladung schicken – so ist es beim Klick auf den Link schon da
-          setProgress(0);
-          try {
-            await uploadWelcomeVideo(res.data.userId, video.blob, setProgress);
-          } catch (err) {
-            videoError = err instanceof Error ? err.message : "Upload fehlgeschlagen.";
-          }
-          setProgress(null);
-          const sent = await regenerateInvite(res.data.userId);
-          mailError = sent.ok ? null : sent.error;
-        }
-        setBusy(false);
-        setDone(
-          mailError
-            ? {
-                ok: false,
-                text: `${name} ist angelegt, aber die Einladung konnte nicht verschickt werden: ${mailError} In der Detailansicht kannst du sie erneut senden.`,
+      <SlideOver open={open} title={label} onClose={close} busy={busy}>
+        <form
+          className="space-y-4"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            setError(null);
+            const res =
+              role === "kunde"
+                ? await createCustomer({ name: firm.trim() || name, userName: name, email, phone, deferMail: !!video })
+                : await createUserWithInvite({ name, email, phone, role, deferMail: !!video });
+            if (!res.ok) {
+              setBusy(false);
+              return setError(res.error);
+            }
+            let mailError = res.data.mailError;
+            let videoError: string | null = null;
+            if (video) {
+              // Erst das Video hochladen, dann die Einladung schicken – so ist es beim Klick auf den Link schon da
+              setProgress(0);
+              try {
+                await uploadWelcomeVideo(res.data.userId, video.blob, setProgress);
+              } catch (err) {
+                videoError = err instanceof Error ? err.message : "Upload fehlgeschlagen.";
               }
-            : videoError
-              ? {
-                  ok: false,
-                  text: `Einladung an ${res.data.email} verschickt – aber ohne Video (${videoError}). Du kannst es in der Detailansicht nachholen.`,
-                }
-              : {
-                  ok: true,
-                  text: `✓ Einladung an ${res.data.email} verschickt${video ? " – mit persönlichem Video" : ""}.`,
-                },
-        );
-        dropVideo();
-        setName("");
-        setFirm("");
-        setEmail("");
-        setPhone("");
-        setOpen(false);
-        router.refresh();
-      }}
-    >
-      <p className="font-medium">{label}</p>
-      {role === "kunde" && (
-        <div className="space-y-1">
-          <input
-            className={inputField}
-            placeholder="Kunde / Firma (optional)"
-            value={firm}
-            onChange={(e) => setFirm(e.target.value)}
-            disabled={busy}
-          />
-          <p className="text-xs text-muted">Erster Nutzer – wird automatisch Admin des Kunden:</p>
-        </div>
-      )}
-      <div className="grid gap-2 sm:grid-cols-2">
-        <input
-          className={inputField}
-          placeholder="Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          disabled={busy}
-        />
-        <input
-          className={inputField}
-          type="email"
-          placeholder="E-Mail (Login)"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          disabled={busy}
-        />
-        <input
-          className={inputField}
-          placeholder="Telefon (optional)"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          disabled={busy}
-        />
-      </div>
-
-      {/* Persönliches Begrüßungsvideo (optional) */}
-      {recording ? (
-        <WelcomeRecorder
-          onAccept={(blob) => {
+              setProgress(null);
+              const sent = await regenerateInvite(res.data.userId);
+              mailError = sent.ok ? null : sent.error;
+            }
+            setBusy(false);
+            setDone(
+              mailError
+                ? {
+                    ok: false,
+                    text: `${name} ist angelegt, aber die Einladung konnte nicht verschickt werden: ${mailError} In der Detailansicht kannst du sie erneut senden.`,
+                  }
+                : videoError
+                  ? {
+                      ok: false,
+                      text: `Einladung an ${res.data.email} verschickt – aber ohne Video (${videoError}). Du kannst es in der Detailansicht nachholen.`,
+                    }
+                  : {
+                      ok: true,
+                      text: `✓ Einladung an ${res.data.email} verschickt${video ? " – mit persönlichem Video" : ""}.`,
+                    },
+            );
             dropVideo();
-            setVideo({ blob, url: URL.createObjectURL(blob) });
-            setRecording(false);
+            setName("");
+            setFirm("");
+            setEmail("");
+            setPhone("");
+            setOpen(false);
+            router.refresh();
           }}
-          onCancel={() => setRecording(false)}
-        />
-      ) : video ? (
-        <div className="space-y-2 rounded-lg border border-line p-3">
-          <p className="text-sm font-medium">Persönliches Begrüßungsvideo</p>
-          <video src={video.url} controls playsInline className="aspect-video w-full rounded-md bg-black" />
-          {!busy && (
-            <div className="flex gap-3 text-sm">
-              <button type="button" className="text-muted hover:text-text" onClick={() => setRecording(true)}>
-                Neu aufnehmen
-              </button>
-              <button type="button" className="text-muted hover:text-danger" onClick={dropVideo}>
-                Entfernen
-              </button>
+        >
+          {role === "kunde" && (
+            <div className="space-y-1">
+              <input
+                className={inputField}
+                placeholder="Kunde / Firma (optional)"
+                value={firm}
+                onChange={(e) => setFirm(e.target.value)}
+                disabled={busy}
+              />
+              <p className="text-xs text-muted">Erster Nutzer – wird automatisch Admin des Kunden:</p>
             </div>
           )}
-        </div>
-      ) : (
-        <button
-          type="button"
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-line px-3 py-2.5 text-sm text-muted transition-colors hover:bg-raised/50 hover:text-text"
-          onClick={() => setRecording(true)}
-          disabled={busy}
-        >
-          <span aria-hidden>🎥</span> Persönliches Begrüßungsvideo aufnehmen (optional)
-        </button>
-      )}
+          <div className="grid gap-2">
+            <input
+              className={inputField}
+              placeholder="Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={busy}
+            />
+            <input
+              className={inputField}
+              type="email"
+              placeholder="E-Mail (Login)"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={busy}
+            />
+            <input
+              className={inputField}
+              placeholder="Telefon (optional)"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              disabled={busy}
+            />
+          </div>
 
-      {progress !== null && (
-        <div className="space-y-1 text-xs">
-          <div className="flex justify-between">
-            <span>Video wird hochgeladen – Fenster bitte offen lassen</span>
-            <span className="text-muted">{progress} %</span>
+          {/* Persönliches Begrüßungsvideo (optional) */}
+          {recording ? (
+            <WelcomeRecorder
+              onAccept={(blob) => {
+                dropVideo();
+                setVideo({ blob, url: URL.createObjectURL(blob) });
+                setRecording(false);
+              }}
+              onCancel={() => setRecording(false)}
+            />
+          ) : video ? (
+            <div className="space-y-2 rounded-lg border border-line p-3">
+              <p className="text-sm font-medium">Persönliches Begrüßungsvideo</p>
+              <video src={video.url} controls playsInline className="aspect-video w-full rounded-md bg-black" />
+              {!busy && (
+                <div className="flex gap-3 text-sm">
+                  <button type="button" className="text-muted hover:text-text" onClick={() => setRecording(true)}>
+                    Neu aufnehmen
+                  </button>
+                  <button type="button" className="text-muted hover:text-danger" onClick={dropVideo}>
+                    Entfernen
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-line px-3 py-2.5 text-sm text-muted transition-colors hover:bg-raised/50 hover:text-text"
+              onClick={() => setRecording(true)}
+              disabled={busy}
+            >
+              <span aria-hidden>🎥</span> Persönliches Begrüßungsvideo aufnehmen (optional)
+            </button>
+          )}
+
+          {progress !== null && (
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span>Video wird hochgeladen – Fenster bitte offen lassen</span>
+                <span className="text-muted">{progress} %</span>
+              </div>
+              <div className="h-1 overflow-hidden rounded-full bg-raised">
+                <div className="h-full bg-accent transition-all" style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+          )}
+          <ErrorText error={error} />
+          <div className="flex justify-end gap-2">
+            <button type="button" className={buttonSecondary} onClick={close} disabled={busy}>
+              Abbrechen
+            </button>
+            <button className={buttonPrimary} disabled={busy || recording}>
+              {busy
+                ? progress !== null
+                  ? "Video wird hochgeladen …"
+                  : "Wird angelegt …"
+                : "Anlegen & Einladung senden"}
+            </button>
           </div>
-          <div className="h-1 overflow-hidden rounded-full bg-raised">
-            <div className="h-full bg-accent transition-all" style={{ width: `${progress}%` }} />
-          </div>
-        </div>
-      )}
-      <ErrorText error={error} />
-      <div className="flex justify-end gap-2">
-        <button
-          type="button"
-          className={buttonSecondary}
-          onClick={() => {
-            dropVideo();
-            setRecording(false);
-            setOpen(false);
-          }}
-          disabled={busy}
-        >
-          Abbrechen
-        </button>
-        <button className={buttonPrimary} disabled={busy || recording}>
-          {busy ? (progress !== null ? "Video wird hochgeladen …" : "Wird angelegt …") : "Anlegen & Einladung senden"}
-        </button>
-      </div>
-    </form>
+        </form>
+      </SlideOver>
+    </>
   );
 }
 
@@ -357,145 +357,6 @@ export function WelcomeVideoSection({
       )}
       {msg && <p className={`text-sm ${msg.ok ? "text-[var(--st-online)]" : "text-danger"}`}>{msg.text}</p>}
     </div>
-  );
-}
-
-// ---------- Profil ----------
-
-// Bild im Browser auf max. 256 px verkleinern und als WebP speichern (klein genug für die Datenbank)
-async function shrinkImage(file: File): Promise<string> {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, 256 / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  const webp = canvas.toDataURL("image/webp", 0.85);
-  return webp.startsWith("data:image/webp") ? webp : canvas.toDataURL("image/png");
-}
-
-export function ProfileForm({
-  person,
-  logoUrl,
-  showNotes,
-}: {
-  person: {
-    id: string;
-    name: string;
-    phone: string | null;
-    links: string | null;
-    notes: string | null;
-    birthday: string | null;
-  };
-  logoUrl: string | null;
-  showNotes: boolean;
-}) {
-  const [name, setName] = useState(person.name);
-  const [phone, setPhone] = useState(person.phone ?? "");
-  const [links, setLinks] = useState(person.links ?? "");
-  const [notes, setNotes] = useState(person.notes ?? "");
-  const [birthday, setBirthday] = useState(person.birthday ?? "");
-  // undefined = Logo nicht geändert, null = entfernen, string = neues Logo
-  const [logo, setLogo] = useState<string | null | undefined>(undefined);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const preview = logo === undefined ? logoUrl : logo;
-
-  return (
-    <form
-      className="space-y-4"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        setBusy(true);
-        setError(null);
-        const res = await updateProfile(person.id, { name, phone, links, notes, birthday, logo });
-        setBusy(false);
-        if (!res.ok) return setError(res.error);
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2500);
-      }}
-    >
-      <div className="flex items-center gap-4">
-        <Avatar name={name || "?"} id={person.id} size="lg" logoUrl={preview} />
-        <div className="space-y-1">
-          <label className={`${buttonSecondary} inline-block cursor-pointer`}>
-            Logo auswählen
-            <input
-              type="file"
-              accept="image/*"
-              className="sr-only"
-              onChange={async (e) => {
-                const f = e.target.files?.[0];
-                if (!f) return;
-                try {
-                  setLogo(await shrinkImage(f));
-                } catch {
-                  setError("Das Bild konnte nicht gelesen werden.");
-                }
-              }}
-            />
-          </label>
-          {preview && (
-            <button type="button" className="block text-xs text-muted hover:text-danger" onClick={() => setLogo(null)}>
-              Logo entfernen
-            </button>
-          )}
-        </div>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="space-y-1 text-sm">
-          <span className="text-muted">Name</span>
-          <input className={inputField} value={name} onChange={(e) => setName(e.target.value)} disabled={busy} />
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="text-muted">Telefon</span>
-          <input className={inputField} value={phone} onChange={(e) => setPhone(e.target.value)} disabled={busy} />
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="text-muted">Geburtstag</span>
-          <input
-            type="date"
-            className={inputField}
-            value={birthday}
-            max={new Date().toISOString().slice(0, 10)}
-            onChange={(e) => setBirthday(e.target.value)}
-            disabled={busy}
-          />
-        </label>
-      </div>
-      {showNotes && (
-        <>
-          <label className="block space-y-1 text-sm">
-            <span className="text-muted">Links (einer pro Zeile – z. B. Instagram, TikTok, Drive)</span>
-            <textarea
-              rows={3}
-              className={inputField}
-              value={links}
-              onChange={(e) => setLinks(e.target.value)}
-              disabled={busy}
-            />
-          </label>
-          <label className="block space-y-1 text-sm">
-            <span className="text-muted">Infos für die Cutter (Stil, Do&apos;s & Don&apos;ts, Ansprechpartner …)</span>
-            <textarea
-              rows={4}
-              className={inputField}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              disabled={busy}
-            />
-          </label>
-        </>
-      )}
-      <ErrorText error={error} />
-      <div className="flex items-center justify-end gap-3">
-        {saved && <span className="text-sm text-[var(--st-online)]">Gespeichert ✓</span>}
-        <button className={buttonPrimary} disabled={busy}>
-          Speichern
-        </button>
-      </div>
-    </form>
   );
 }
 

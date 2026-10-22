@@ -1,16 +1,15 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { profiles } from "@/db/schema";
 import { getCurrentUser } from "@/lib/session";
-import { clientLogos } from "@/lib/queries";
+import { loadCustomer, loadPerson, logoUrl } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
-import { Avatar } from "@/app/components/ui";
+import { Card, ProfileColumn } from "@/app/components/card";
 import { ColorPicker } from "@/app/components/color-picker";
+import { OwnPasswordButton, PersonForm } from "@/app/components/person-form";
 
 const ROLE_LABELS: Record<string, string> = { kunde: "Client", cutter: "Cutter", admin: "Admin" };
 
-// Mein Profil: für alle Nutzer. Hier stellt jeder seine Farbe ein.
+// Mein Profil – gleicher Aufbau wie die Profilseiten von Cuttern und Kunden-Nutzern
 export default function ProfilePage() {
   return <Content />;
 }
@@ -18,32 +17,49 @@ export default function ProfilePage() {
 async function Content() {
   const me = await getCurrentUser();
   if (!me) redirect("/login");
-  const [[prof], logos] = await Promise.all([
-    db.select({ color: profiles.color }).from(profiles).where(eq(profiles.userId, me.id)),
-    clientLogos(),
+  const [person, customer] = await Promise.all([
+    loadPerson(me.id),
+    me.customerId ? loadCustomer(me.customerId) : Promise.resolve(null),
   ]);
+  if (!person) redirect("/login");
+
   return (
     <>
       <PageHeader title="Mein Profil" />
-      <div className="max-w-2xl space-y-8 px-4 pb-10 sm:px-6 md:px-10">
-        <section className="flex items-center gap-4">
-          <Avatar name={me.name} id={me.id} size="lg" logoUrl={logos.get(me.id)} />
-          <div className="text-sm">
-            <p className="text-base font-medium">{me.name}</p>
-            <p className="text-muted">{me.email}</p>
-            <p className="text-muted">{ROLE_LABELS[me.role] ?? me.role}</p>
-          </div>
-        </section>
-        <section className="space-y-3">
-          <h2 className="font-medium">Meine Farbe</h2>
-          <p className="text-sm text-muted">
-            {me.role === "kunde"
+      <ProfileColumn>
+        <Card title="Persönliche Daten" description={ROLE_LABELS[me.role] ?? me.role}>
+          <PersonForm key={person.logoVersion} person={person} logoUrl={logoUrl(person)} />
+        </Card>
+        {customer && (
+          <Card title="Kunde">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+              <p>
+                <span className="font-medium">{customer.name}</span>
+                <span className="text-muted"> · {me.customerAdmin ? "Admin" : "Nutzer"}</span>
+              </p>
+              <Link href="/team" className="text-accent hover:underline">
+                Team ansehen
+              </Link>
+            </div>
+          </Card>
+        )}
+        <Card
+          title="Meine Farbe"
+          description={
+            me.role === "kunde"
               ? "In dieser Farbe erscheinst du im Portal, z. B. bei Kommentaren. Die Farbe eurer Projekte im Kalender und auf dem Board stellt ein Admin unter „Team“ ein."
-              : "In dieser Farbe erscheinst du im Portal, z. B. bei Kommentaren und Projekten."}
-          </p>
-          <ColorPicker userId={me.id} name={me.name} color={prof?.color ?? null} />
-        </section>
-      </div>
+              : "In dieser Farbe erscheinst du im Portal, z. B. bei Kommentaren und Projekten."
+          }
+        >
+          <ColorPicker userId={me.id} name={me.name} color={person.color} />
+        </Card>
+        <Card
+          title="Passwort"
+          description="Du bekommst einen Link per E-Mail, mit dem du ein neues Passwort festlegst."
+        >
+          <OwnPasswordButton />
+        </Card>
+      </ProfileColumn>
     </>
   );
 }

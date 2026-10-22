@@ -5,15 +5,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  inviteMember,
-  removeMember,
-  resendMemberInvite,
-  setMemberAdmin,
-  updateCustomer,
-  updateMember,
-} from "@/app/admin-actions";
+import { inviteMember, removeMember, resendMemberInvite, setMemberAdmin, updateCustomer } from "@/app/admin-actions";
 import { ConfirmDialog } from "./confirm-dialog";
+import { SlideOver } from "./slide-over";
 import { Avatar, buttonPrimary, buttonSecondary, inputField } from "./ui";
 
 type Links = { tiktok: string; youtube: string; instagram: string; extra: { label: string; url: string }[] };
@@ -377,124 +371,71 @@ function InviteMemberForm({ customerId }: { customerId: string }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  if (!open) {
-    return (
+  return (
+    <>
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" className={buttonSecondary} onClick={() => setOpen(true)}>
           + Nutzer einladen
         </button>
-        <Msg msg={msg} />
+        <Msg msg={open ? null : msg} />
       </div>
-    );
-  }
-  return (
-    <form
-      className="space-y-3 rounded-xl border border-line bg-surface p-4"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        setBusy(true);
-        setMsg(null);
-        const res = await inviteMember(customerId, { name, email, isAdmin });
-        setBusy(false);
-        if (!res.ok) return setMsg({ ok: false, text: res.error });
-        setMsg(
-          res.data.mailError
-            ? { ok: false, text: `${name} ist angelegt, aber die Mail kam nicht an: ${res.data.mailError}` }
-            : { ok: true, text: `✓ Einladung an ${res.data.email} verschickt.` },
-        );
-        setName("");
-        setEmail("");
-        setIsAdmin(false);
-        setOpen(false);
-        router.refresh();
-      }}
-    >
-      <p className="font-medium">Nutzer einladen</p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <input
-          className={inputField}
-          placeholder="Name"
-          aria-label="Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          disabled={busy}
-          autoFocus
-        />
-        <input
-          className={inputField}
-          type="email"
-          placeholder="E-Mail (Login)"
-          aria-label="E-Mail"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          disabled={busy}
-        />
-      </div>
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} disabled={busy} />
-        Admin (darf weitere Nutzer einladen und Admins ernennen)
-      </label>
-      <Msg msg={msg} />
-      <div className="flex justify-end gap-2">
-        <button type="button" className={buttonSecondary} onClick={() => setOpen(false)} disabled={busy}>
-          Abbrechen
-        </button>
-        <button className={buttonPrimary} disabled={busy}>
-          {busy ? "Wird eingeladen …" : "Einladung senden"}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-// Persönliche Daten eines Kunden-Nutzers
-export function MemberForm({
-  member,
-}: {
-  member: { id: string; name: string; phone: string | null; birthday: string | null };
-}) {
-  const router = useRouter();
-  const [name, setName] = useState(member.name);
-  const [phone, setPhone] = useState(member.phone ?? "");
-  const [birthday, setBirthday] = useState(member.birthday ?? "");
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  return (
-    <form
-      className="space-y-3"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        setBusy(true);
-        const res = await updateMember(member.id, { name, phone, birthday });
-        setBusy(false);
-        setMsg(res.ok ? { ok: true, text: "Gespeichert ✓" } : { ok: false, text: res.error });
-        if (res.ok) router.refresh();
-      }}
-    >
-      <label className="block space-y-1 text-sm">
-        <span className="text-muted">Name</span>
-        <input className={inputField} value={name} onChange={(e) => setName(e.target.value)} disabled={busy} />
-      </label>
-      <label className="block space-y-1 text-sm">
-        <span className="text-muted">Telefon</span>
-        <input className={inputField} value={phone} onChange={(e) => setPhone(e.target.value)} disabled={busy} />
-      </label>
-      <label className="block space-y-1 text-sm">
-        <span className="text-muted">Geburtstag</span>
-        <input
-          type="date"
-          className={inputField}
-          value={birthday}
-          onChange={(e) => setBirthday(e.target.value)}
-          disabled={busy}
-        />
-      </label>
-      <div className="flex items-center justify-end gap-3">
-        <Msg msg={msg} />
-        <button className={buttonPrimary} disabled={busy}>
-          Speichern
-        </button>
-      </div>
-    </form>
+      <SlideOver open={open} title="Nutzer einladen" onClose={() => setOpen(false)} busy={busy}>
+        <form
+          className="space-y-4"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            setMsg(null);
+            const res = await inviteMember(customerId, { name, email, isAdmin });
+            setBusy(false);
+            if (!res.ok) return setMsg({ ok: false, text: res.error });
+            setMsg(
+              res.data.mailError
+                ? { ok: false, text: `${name} ist angelegt, aber die Mail kam nicht an: ${res.data.mailError}` }
+                : { ok: true, text: `✓ Einladung an ${res.data.email} verschickt.` },
+            );
+            setName("");
+            setEmail("");
+            setIsAdmin(false);
+            setOpen(false);
+            router.refresh();
+          }}
+        >
+          <div className="grid gap-2">
+            <input
+              className={inputField}
+              placeholder="Name"
+              aria-label="Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={busy}
+              autoFocus
+            />
+            <input
+              className={inputField}
+              type="email"
+              placeholder="E-Mail (Login)"
+              aria-label="E-Mail"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={busy}
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} disabled={busy} />
+            Admin (darf weitere Nutzer einladen und Admins ernennen)
+          </label>
+          <Msg msg={msg} />
+          <div className="flex justify-end gap-2">
+            <button type="button" className={buttonSecondary} onClick={() => setOpen(false)} disabled={busy}>
+              Abbrechen
+            </button>
+            <button className={buttonPrimary} disabled={busy}>
+              {busy ? "Wird eingeladen …" : "Einladung senden"}
+            </button>
+          </div>
+        </form>
+      </SlideOver>
+    </>
   );
 }
