@@ -1,26 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { personColor } from "@/lib/colors";
 
 // Dropdown mit Mehrfachauswahl: einen, mehrere oder alle Kunden anzeigen.
 // Die Auswahl steht in der URL (?k=id1,id2), damit Links und Neuladen sie behalten.
+// Angezeigt wird immer die Auswahl aus der URL – nur während des Ladens die gerade angeklickte.
 export function ClientFilter({ clients, selected }: { clients: { id: string; name: string }[]; selected: string[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
   const [open, setOpen] = useState(false);
-  const [picked, setPicked] = useState<string[]>(selected);
+  const [, startTransition] = useTransition();
+  const [picked, setPicked] = useOptimistic(selected);
 
   function apply(next: string[]) {
-    setPicked(next);
     const p = new URLSearchParams(params.toString());
     p.delete("job");
     if (next.length === 0 || next.length === clients.length) p.delete("k");
     else p.set("k", next.join(","));
     const q = p.toString();
-    router.push(q ? `${pathname}?${q}` : pathname, { scroll: false });
+    startTransition(() => {
+      setPicked(next);
+      router.push(q ? `${pathname}?${q}` : pathname, { scroll: false });
+    });
   }
 
   function toggle(id: string) {
@@ -65,7 +69,9 @@ export function ClientFilter({ clients, selected }: { clients: { id: string; nam
               className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-raised"
             >
               Alle Kunden
-              {(picked.length === 0 || picked.length === clients.length) && <span className="text-xs text-muted">✓</span>}
+              {(picked.length === 0 || picked.length === clients.length) && (
+                <span className="text-xs text-muted">✓</span>
+              )}
             </button>
             <div className="my-1 border-t border-line" />
             {clients.map((c) => (
