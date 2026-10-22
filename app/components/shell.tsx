@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { SignOutButton } from "@/app/dashboard/sign-out-button";
-import { clientLogos, listUsers, loadColors, loadInbox, unreadByJob } from "@/lib/queries";
+import { clientLogos, listCustomers, loadColors, loadInbox, unreadByJob } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/session";
 import { Avatar } from "./ui";
 import { colorStyles, personColor } from "@/lib/colors";
@@ -30,6 +30,7 @@ function navFor(role: string): NavItem[] {
     return [
       { href: "/kunde", label: "Projekte" },
       { href: "/kalender", label: "Kalender" },
+      { href: "/team", label: "Team" },
     ];
   }
   if (role === "cutter") {
@@ -113,7 +114,7 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
 
   // Admins sehen links alle Kunden und können deren Ansicht öffnen
   const [clients, unread, logos, inboxItems, colors] = await Promise.all([
-    user.role === "admin" ? listUsers("kunde") : Promise.resolve([]),
+    user.role === "admin" ? listCustomers() : Promise.resolve([]),
     safeUnread(user.id),
     safeLogos(),
     safeInbox(user.id),

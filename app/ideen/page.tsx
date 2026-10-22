@@ -2,9 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { count, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { ideaAttachments, ideaComments, ideaVotes, projectIdeas, user } from "@/db/schema";
+import { ideaAttachments, ideaComments, ideaVotes, projectIdeas, user, customers } from "@/db/schema";
 import { getCurrentUser } from "@/lib/session";
-import { clientLogos, listUsers, unreadByJob } from "@/lib/queries";
+import { clientLogos, listCustomers, unreadByJob } from "@/lib/queries";
 import { clientIdsOfCutter } from "@/lib/access";
 import {
   IDEA_STATUSES,
@@ -40,9 +40,9 @@ async function Content({ searchParams }: { searchParams: Params }) {
   let clients: { id: string; name: string }[] = [];
   let scope: string[] | null = null; // null = alle
   if (isKunde) {
-    scope = [me.id];
+    scope = me.customerId ? [me.customerId] : [];
   } else {
-    const all = await listUsers("kunde");
+    const all = await listCustomers();
     const allowed = me.role === "cutter" ? await clientIdsOfCutter(me.id) : null;
     clients = (allowed ? all.filter((c) => allowed.includes(c.id)) : all).map((c) => ({ id: c.id, name: c.name }));
     const picked = one("k")
@@ -88,15 +88,21 @@ async function Content({ searchParams }: { searchParams: Params }) {
   const commentCount = new Map(comments.map((c) => [c.id, c.n]));
   const imageCount = new Map(images.map((c) => [c.id, c.n]));
 
-  const nameIds = [...new Set(ideas.flatMap((i) => [i.customerId, i.createdBy]).filter(Boolean))] as string[];
-  const names = new Map(
-    nameIds.length
-      ? (await db.select({ id: user.id, name: user.name }).from(user).where(inArray(user.id, nameIds))).map((u) => [
-          u.id,
-          u.name,
-        ])
-      : [],
-  );
+  // Namen: Ersteller (Personen) und Kunden (Firmen)
+  const nameIds = [...new Set(ideas.map((i) => i.createdBy).filter(Boolean))] as string[];
+  const firmIds = [...new Set(ideas.map((i) => i.customerId))];
+  const names = new Map([
+    ...(nameIds.length
+      ? (await db.select({ id: user.id, name: user.name }).from(user).where(inArray(user.id, nameIds))).map(
+          (u) => [u.id, u.name] as const,
+        )
+      : []),
+    ...(firmIds.length
+      ? (
+          await db.select({ id: customers.id, name: customers.name }).from(customers).where(inArray(customers.id, firmIds))
+        ).map((c) => [c.id, c.name] as const)
+      : []),
+  ]);
 
   // Zähler für Reiter (nach Priorität gefiltert) und Prioritäts-Chips (nach Status gefiltert)
   const inPrio = ideas.filter((i) => prios.includes(i.priority));
@@ -123,11 +129,14 @@ async function Content({ searchParams }: { searchParams: Params }) {
 
       <div className="space-y-4 px-4 pb-10 sm:px-6 md:px-10">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <p className="max-w-2xl text-sm text-muted">
-            {isKunde
-              ? "Halte hier deine Ideen für kommende Videos fest. Vote für das, was dir am wichtigsten ist – wir sehen es und melden uns."
-              : "Ideen der Kunden für kommende Videos. Status setzen Team und Cutter, Priorität und Stimmen alle Beteiligten."}
-          </p>
+          {isKunde ? (
+            <p className="max-w-2xl text-sm text-muted">
+              Halte hier deine Ideen für kommende Videos fest. Vote für das, was dir am wichtigsten ist – wir sehen es und
+              melden uns.
+            </p>
+          ) : (
+            <span />
+          )}
           <NewIdeaForm clients={isKunde ? null : clients} />
         </div>
 

@@ -6,7 +6,8 @@ import { cutterClients, jobCutters, jobs } from "@/db/schema";
 // - Admin: alles
 // - Cutter: Projekte der für ihn freigegebenen Kunden + Projekte, denen er direkt zugeordnet ist
 // - Kunde: nur die eigenen
-type Viewer = { id: string; role: string };
+// customerId: bei Kunden-Nutzern ihr Kunde (Firma)
+type Viewer = { id: string; role: string; customerId?: string | null };
 
 // Kunden, die ein Cutter betreut
 export async function clientIdsOfCutter(cutterId: string) {
@@ -17,7 +18,7 @@ export async function clientIdsOfCutter(cutterId: string) {
 // Filter für Projekt-Abfragen (undefined = keine Einschränkung)
 export async function jobScope(me: Viewer): Promise<SQL | undefined> {
   if (me.role === "admin") return undefined;
-  if (me.role === "kunde") return eq(jobs.customerId, me.id);
+  if (me.role === "kunde") return eq(jobs.customerId, me.customerId ?? "__kein_kunde__");
   const [clients, assigned] = await Promise.all([
     clientIdsOfCutter(me.id),
     db.select({ id: jobCutters.jobId }).from(jobCutters).where(eq(jobCutters.userId, me.id)),
@@ -43,7 +44,7 @@ export function both(a: SQL | undefined, b: SQL | undefined) {
 // Darf dieser Nutzer genau dieses Projekt sehen?
 export async function canSeeJob(me: Viewer, job: { id: string; customerId: string }) {
   if (me.role === "admin") return true;
-  if (me.role === "kunde") return job.customerId === me.id;
+  if (me.role === "kunde") return !!me.customerId && job.customerId === me.customerId;
   const [freigabe] = await db
     .select({ id: cutterClients.clientId })
     .from(cutterClients)
@@ -59,6 +60,6 @@ export async function canSeeJob(me: Viewer, job: { id: string; customerId: strin
 // Projekt-Ideen eines Kunden sehen: der Kunde selbst, für ihn freigegebene Cutter, Admins
 export async function canSeeIdea(me: Viewer, customerId: string) {
   if (me.role === "admin") return true;
-  if (me.role === "kunde") return customerId === me.id;
+  if (me.role === "kunde") return !!me.customerId && customerId === me.customerId;
   return (await clientIdsOfCutter(me.id)).includes(customerId);
 }

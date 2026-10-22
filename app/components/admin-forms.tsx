@@ -10,6 +10,7 @@ import {
   removeWelcomeVideo,
   setAssignment,
   updateProfile,
+  createCustomer,
   deleteCustomer,
   deleteCutter,
 } from "@/app/admin-actions";
@@ -36,6 +37,7 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [firm, setFirm] = useState(""); // nur Kunden: Name des Kunden (Firma/Marke), sonst wie die Person
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
@@ -77,7 +79,10 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
         e.preventDefault();
         setBusy(true);
         setError(null);
-        const res = await createUserWithInvite({ name, email, phone, role, deferMail: !!video });
+        const res =
+          role === "kunde"
+            ? await createCustomer({ name: firm.trim() || name, userName: name, email, phone, deferMail: !!video })
+            : await createUserWithInvite({ name, email, phone, role, deferMail: !!video });
         if (!res.ok) {
           setBusy(false);
           return setError(res.error);
@@ -115,6 +120,7 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
         );
         dropVideo();
         setName("");
+        setFirm("");
         setEmail("");
         setPhone("");
         setOpen(false);
@@ -122,6 +128,18 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
       }}
     >
       <p className="font-medium">{label}</p>
+      {role === "kunde" && (
+        <div className="space-y-1">
+          <input
+            className={inputField}
+            placeholder="Kunde / Firma (optional)"
+            value={firm}
+            onChange={(e) => setFirm(e.target.value)}
+            disabled={busy}
+          />
+          <p className="text-xs text-muted">Erster Nutzer – wird automatisch Admin des Kunden:</p>
+        </div>
+      )}
       <div className="grid gap-2 sm:grid-cols-2">
         <input
           className={inputField}

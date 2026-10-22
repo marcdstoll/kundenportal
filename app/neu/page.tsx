@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
-import { listUsers } from "@/lib/queries";
+import { listCustomers } from "@/lib/queries";
 import { clientIdsOfCutter } from "@/lib/access";
 import { PageHeader } from "@/app/components/shell";
 import { NewJobForm } from "./new-job-form";
@@ -17,7 +17,7 @@ async function Content() {
 
   // Admins und Cutter legen ein Projekt für einen Client an
   const isStaff = me.role !== "kunde";
-  const all = isStaff ? await listUsers("kunde") : [];
+  const all = isStaff ? await listCustomers() : [];
   // Cutter legen nur für ihre freigegebenen Kunden an
   const allowed = me.role === "cutter" ? await clientIdsOfCutter(me.id) : null;
   const clients = allowed ? all.filter((c) => allowed.includes(c.id)) : all;

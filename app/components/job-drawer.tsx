@@ -295,7 +295,15 @@ export async function JobDrawer({
 
       <section>
         <Row label="Client">
-          <Person name={job.customerName} id={job.customerId} logoUrl={logos.get(job.customerId)} />
+          {/* Klick öffnet die Detailansicht des Kunden (Links, Infos für die Cutter) */}
+          <Link
+            href={`/kundenprofil/${job.customerId}`}
+            className="rounded-md hover:underline"
+            title="Kundenprofil öffnen"
+            data-testid="client-link"
+          >
+            <Person name={job.customerName} id={job.customerId} logoUrl={logos.get(job.customerId)} />
+          </Link>
         </Row>
         <Row label="Cutter">
           {job.cutters.length === 0 ? (
@@ -409,11 +417,13 @@ export async function CustomerJobDrawer({
   closeHref,
   customerId,
   viewerId,
+  viewerRole,
 }: {
   jobId: string;
   closeHref: string;
   customerId: string;
   viewerId: string;
+  viewerRole: string; // "kunde" oder "admin" (Kundenansicht)
 }) {
   const [job, unread] = await Promise.all([loadJob(jobId), unreadByJob(viewerId)]);
   if (!job || job.customerId !== customerId) return null;
@@ -476,7 +486,7 @@ export async function CustomerJobDrawer({
 
       <Comments
         job={job}
-        viewer={{ id: viewerId, role: viewerId === customerId ? "kunde" : "admin" }}
+        viewer={{ id: viewerId, role: viewerRole }}
         canWrite={job.status !== "storniert"}
       />
 

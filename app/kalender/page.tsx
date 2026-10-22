@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { jobs as jobsTable } from "@/db/schema";
 import { getCurrentUser, resolveCustomerView } from "@/lib/session";
-import { listUsers, loadJobs } from "@/lib/queries";
+import { listCustomers, loadJobs } from "@/lib/queries";
 import { CUSTOMER_DATE_STATUSES } from "@/lib/status";
 import { ClientFilter } from "@/app/components/client-filter";
 import { both, clientIdsOfCutter, jobScope } from "@/lib/access";
@@ -28,7 +28,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
 
   // Staff: optionaler Kunden-Filter (?k=id1,id2), Kunden sehen ohnehin nur sich selbst
   // Cutter sehen im Filter nur ihre freigegebenen Kunden
-  const allClients = customerId ? [] : await listUsers("kunde");
+  const allClients = customerId ? [] : await listCustomers();
   const allowed = me.role === "cutter" ? await clientIdsOfCutter(me.id) : null;
   const clients = allowed ? allClients.filter((c) => allowed.includes(c.id)) : allClients;
   const pickedClients = typeof params.k === "string" ? params.k.split(",").filter((id) => clients.some((c) => c.id === id)) : [];
@@ -45,7 +45,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
   const lockReason = (job: { customerId: string; status: string }) => {
     if (me.role === "admin") return null;
     if (me.role === "cutter") return "Termine verschieben nur Admins und Kunden.";
-    if (job.customerId !== me.id) return "Nur eigene Projekte lassen sich verschieben.";
+    if (job.customerId !== me.customerId) return "Nur eigene Projekte lassen sich verschieben.";
     if (!CUSTOMER_DATE_STATUSES.includes(job.status)) return "Das Datum lässt sich ab „Ready to post“ ändern.";
     return null;
   };
@@ -80,7 +80,13 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
       </div>
       {openJob &&
         (customerId ? (
-          <CustomerJobDrawer jobId={openJob} closeHref={query({})} customerId={customerId} viewerId={me.id} />
+          <CustomerJobDrawer
+            jobId={openJob}
+            closeHref={query({})}
+            customerId={customerId}
+            viewerId={me.id}
+            viewerRole={me.role}
+          />
         ) : (
           <JobDrawer jobId={openJob} closeHref={query({})} me={me} />
         ))}

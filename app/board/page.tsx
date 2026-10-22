@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
-import { clientLogos, listUsers, loadJobs, unreadByJob } from "@/lib/queries";
+import { clientLogos, listCustomers, loadJobs, unreadByJob } from "@/lib/queries";
 import { isConnected } from "@/lib/frameio";
 import { clientIdsOfCutter, jobScope } from "@/lib/access";
 import { ClientFilter } from "@/app/components/client-filter";
@@ -31,7 +31,7 @@ async function Board({ searchParams }: { searchParams: PageProps<"/board">["sear
   );
 
   // Kunden-Filter (?k=id1,id2): Admins alle Kunden, Cutter ihre freigegebenen + die aus eigenen Projekten
-  const allClients = await listUsers("kunde");
+  const allClients = await listCustomers();
   const allowedIds =
     me.role === "admin" ? null : new Set([...(await clientIdsOfCutter(me.id)), ...visible.map((j) => j.customerId)]);
   const clients = allClients.filter((c) => !allowedIds || allowedIds.has(c.id));

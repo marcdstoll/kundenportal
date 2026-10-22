@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { account, cutterClients, featureRequests, projectIdeas, jobComments, jobCutters, jobFiles, jobs, notifications, profiles, user } from "@/db/schema";
+import { account, customerMembers, customers, cutterClients, featureRequests, projectIdeas, jobComments, jobCutters, jobFiles, jobs, notifications, profiles, user } from "@/db/schema";
 
 export type JobFileView = typeof jobFiles.$inferSelect & { uploaderName: string | null };
 
@@ -13,9 +13,9 @@ export type JobView = typeof jobs.$inferSelect & {
 // Projekte inkl. Client-Name, Cuttern und hochgeladenen Dateien laden
 export async function loadJobs(filter?: SQL): Promise<JobView[]> {
   const rows = await db
-    .select({ job: jobs, customerName: user.name })
+    .select({ job: jobs, customerName: customers.name })
     .from(jobs)
-    .innerJoin(user, eq(jobs.customerId, user.id))
+    .innerJoin(customers, eq(jobs.customerId, customers.id))
     .where(filter ? and(ne(jobs.status, "entwurf"), filter) : ne(jobs.status, "entwurf"))
     .orderBy(desc(jobs.updatedAt));
 
@@ -261,13 +261,14 @@ export async function loadAssignments() {
   return db.select().from(cutterClients);
 }
 
-// Kunden mit Logo-Info als Map (für Karten, Seitenleiste usw.)
+// Logos als Map (ID → URL): Kunden (Firmen) und Personen mit eigenem Logo (für Karten, Seitenleiste usw.)
 export async function clientLogos() {
-  const rows = await db
-    .select({ id: profiles.userId, updated: profiles.updatedAt })
-    .from(profiles)
-    .where(isNotNull(profiles.logo));
-  return new Map(rows.map((r) => [r.id, `/api/logo/${r.id}?v=${r.updated.getTime()}`]));
+  const [people, firms] = await Promise.all([
+    db.select({ id: profiles.userId, updated: profiles.updatedAt }).from(profiles).where(isNotNull(profiles.logo)),
+    db.select({ id: customers.id, updated: customers.updatedAt }).from(customers).where(isNotNull(customers.logo)),
+  ]);
+  // Kunden zuletzt: übernommene Altkunden haben dieselbe ID wie ihr erster Nutzer
+  return new Map([...people, ...firms].map((r) => [r.id, `/api/logo/${r.id}?v=${r.updated.getTime()}`]));
 }
 
 // Laufende Projekte (nicht Online/Storniert), in denen dieser Cutter der einzige zugeordnete Cutter ist
@@ -303,11 +304,9 @@ export async function mentionCandidates(
       : db.select({ id: cutterClients.cutterId }).from(cutterClients).where(eq(cutterClients.clientId, job.customerId)),
     listUsers("admin"),
   ]);
-  const ids = new Set([
-    ...assigned.map((r) => r.id),
-    ...freigabe.map((r) => r.id),
-    ...(viewer.role === "kunde" ? [] : [job.customerId]),
-  ]);
+  // Nutzer des Kunden (für Kunden: die Kolleginnen und Kollegen)
+  const members = await memberIds(job.customerId);
+  const ids = new Set([...assigned.map((r) => r.id), ...freigabe.map((r) => r.id), ...members]);
   const others = ids.size
     ? await db
         .select({ id: user.id, name: user.name, email: user.email, role: user.role, active: user.active })
@@ -322,10 +321,166 @@ export async function mentionCandidates(
     .map(({ id, name, email, role }) => ({ id, name, email, role }));
 }
 
-// Gewählte Personenfarben (nur Personen, die selbst eine Farbe gesetzt haben)
+// Gewählte Farben: Personen und Kunden (nur, wo eine Farbe gesetzt ist). Kunden zuletzt, sie haben Vorrang.
 export async function loadColors() {
-  return db
-    .select({ id: profiles.userId, color: profiles.color })
-    .from(profiles)
-    .where(isNotNull(profiles.color));
+  const [people, firms] = await Promise.all([
+    db.select({ id: profiles.userId, color: profiles.color }).from(profiles).where(isNotNull(profiles.color)),
+    db.select({ id: customers.id, color: customers.color }).from(customers).where(isNotNull(customers.color)),
+  ]);
+  return [...people, ...firms];
 }
+
+// ---------- Kunden (Firmen) ----------
+
+// Alle Kunden für Auswahllisten und Filter
+export async function listCustomers() {
+  return db.select({ id: customers.id, name: customers.name }).from(customers).orderBy(asc(customers.name));
+}
+
+// Nutzer-IDs eines Kunden (für Benachrichtigungen)
+export async function memberIds(customerId: string) {
+  const rows = await db
+    .select({ id: customerMembers.userId })
+    .from(customerMembers)
+    .where(eq(customerMembers.customerId, customerId));
+  return rows.map((r) => r.id);
+}
+
+export type LinkEntry = { label: string; url: string };
+export type CustomerLinks = { tiktok: string; youtube: string; instagram: string; extra: LinkEntry[] };
+
+// Links eines Kunden: neues JSON-Format, sonst aus der alten Liste (eine pro Zeile) ableiten
+export function parseLinks(linkList: string | null, legacy: string | null): CustomerLinks {
+  const empty: CustomerLinks = { tiktok: "", youtube: "", instagram: "", extra: [] };
+  if (linkList) {
+    try {
+      const j = JSON.parse(linkList);
+      return {
+        tiktok: typeof j.tiktok === "string" ? j.tiktok : "",
+        youtube: typeof j.youtube === "string" ? j.youtube : "",
+        instagram: typeof j.instagram === "string" ? j.instagram : "",
+        extra: Array.isArray(j.extra)
+          ? j.extra
+              .filter((e: unknown): e is LinkEntry => !!e && typeof (e as LinkEntry).url === "string")
+              .map((e: LinkEntry) => ({ label: String(e.label ?? ""), url: e.url }))
+          : [],
+      };
+    } catch {
+      // kaputtes JSON → wie leer behandeln und unten die alte Liste nehmen
+    }
+  }
+  const out = { ...empty, extra: [] as LinkEntry[] };
+  for (const raw of (legacy ?? "").split("\n").map((l) => l.trim()).filter(Boolean)) {
+    const host = raw.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0].toLowerCase();
+    if (host.endsWith("tiktok.com") && !out.tiktok) out.tiktok = raw;
+    else if ((host.endsWith("youtube.com") || host === "youtu.be") && !out.youtube) out.youtube = raw;
+    else if (host.endsWith("instagram.com") && !out.instagram) out.instagram = raw;
+    else out.extra.push({ label: host || "Link", url: raw });
+  }
+  return out;
+}
+
+export type CustomerMemberView = {
+  id: string;
+  name: string;
+  email: string;
+  isAdmin: boolean;
+  invited: boolean; // Passwort noch nicht gesetzt
+  welcomeVideo: string | null;
+  phone: string | null;
+  birthday: string | null;
+  color: string | null;
+  version: number;
+};
+
+export type CustomerView = {
+  id: string;
+  name: string;
+  notes: string | null;
+  color: string | null;
+  links: CustomerLinks;
+  hasLogo: boolean;
+  hasCover: boolean;
+  version: number; // für Bild-URLs (?v=…)
+  members: CustomerMemberView[];
+};
+
+// Kunden mit Profil und Nutzern (ohne Bilddaten – die kommen über /api/logo und /api/cover)
+export async function loadCustomers(ids?: string[]): Promise<CustomerView[]> {
+  if (ids && ids.length === 0) return [];
+  const rows = await db
+    .select({
+      id: customers.id,
+      name: customers.name,
+      notes: customers.notes,
+      color: customers.color,
+      links: customers.links,
+      linkList: customers.linkList,
+      hasLogo: sql<boolean>`${customers.logo} is not null`,
+      hasCover: sql<boolean>`${customers.cover} is not null`,
+      updatedAt: customers.updatedAt,
+    })
+    .from(customers)
+    .where(ids ? inArray(customers.id, ids) : undefined)
+    .orderBy(asc(customers.name));
+  if (rows.length === 0) return [];
+  const members = await db
+    .select({
+      customerId: customerMembers.customerId,
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      isAdmin: customerMembers.isAdmin,
+      accountId: account.id,
+      welcomeVideo: profiles.welcomeVideo,
+      phone: profiles.phone,
+      birthday: profiles.birthday,
+      color: profiles.color,
+      updated: profiles.updatedAt,
+    })
+    .from(customerMembers)
+    .innerJoin(user, eq(customerMembers.userId, user.id))
+    .leftJoin(profiles, eq(profiles.userId, user.id))
+    .leftJoin(account, and(eq(account.userId, user.id), eq(account.providerId, "credential")))
+    .where(
+      inArray(
+        customerMembers.customerId,
+        rows.map((r) => r.id),
+      ),
+    )
+    .orderBy(asc(customerMembers.createdAt), asc(user.name));
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    notes: r.notes,
+    color: r.color,
+    links: parseLinks(r.linkList, r.links),
+    hasLogo: !!r.hasLogo,
+    hasCover: !!r.hasCover,
+    version: r.updatedAt.getTime(),
+    members: members
+      .filter((m) => m.customerId === r.id)
+      .map((m) => ({
+        id: m.id,
+        name: m.name,
+        email: m.email,
+        isAdmin: m.isAdmin,
+        invited: !m.accountId,
+        welcomeVideo: m.welcomeVideo,
+        phone: m.phone,
+        birthday: m.birthday,
+        color: m.color,
+        version: m.updated?.getTime() ?? 0,
+      })),
+  }));
+}
+
+export async function loadCustomer(id: string) {
+  const [c] = await loadCustomers([id]);
+  return c ?? null;
+}
+
+export const customerLogoUrl = (c: { id: string; hasLogo: boolean; version: number }) =>
+  c.hasLogo ? `/api/logo/${c.id}?v=${c.version}` : null;
+export const customerCoverUrl = (c: { id: string; hasCover: boolean; version: number }) =>
+  c.hasCover ? `/api/cover/${c.id}?v=${c.version}` : null;

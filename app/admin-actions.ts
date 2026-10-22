@@ -4,7 +4,7 @@
 // Fast alles hier dürfen nur Admins – Ausnahme: acceptInvite (die eingeladene Person selbst).
 
 import { randomBytes, randomUUID } from "crypto";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull } from "drizzle-orm";
 import { headers } from "next/headers";
 import { refresh } from "next/cache";
 import { hashPassword } from "better-auth/crypto";
@@ -14,8 +14,8 @@ import { requireUser } from "@/lib/session";
 import { inviteMail, mailConfigured, testMail, trySendMail } from "@/lib/mail";
 import { SETTING_KEYS, getSetting, onboardingVideoFor, setSetting } from "@/lib/settings";
 
-import { account, cutterClients, invites, jobs, profiles, user } from "@/db/schema";
-import { activeJobsOnlyWith } from "@/lib/queries";
+import { account, customerMembers, customers, cutterClients, invites, jobs, profiles, user } from "@/db/schema";
+import { activeJobsOnlyWith, memberIds } from "@/lib/queries";
 import { FrameioError, createRootFolder, createUpload, deleteFile, deleteFolder } from "@/lib/frameio";
 
 export type Result<T = null> = { ok: true; data: T } | { ok: false; error: string };
@@ -84,7 +84,8 @@ export async function createUserWithInvite(input: {
     const email = input.email.trim().toLowerCase();
     if (!name) throw new Error("Bitte einen Namen eingeben.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Bitte eine gültige E-Mail-Adresse eingeben.");
-    if (!["kunde", "cutter"].includes(input.role)) throw new Error("Unbekannte Rolle.");
+    // Kunden-Nutzer entstehen über createCustomer/inviteMember (sie gehören immer zu einem Kunden)
+    if (input.role !== "cutter") throw new Error("Kunden bitte über „Neuer Kunde“ anlegen.");
 
     const [exists] = await db.select({ id: user.id }).from(user).where(eq(user.email, email));
     if (exists) throw new Error("Diese E-Mail-Adresse ist bereits registriert.");
@@ -226,7 +227,9 @@ export async function setAssignment(cutterId: string, clientId: string, on: bool
     if (on) {
       await db.insert(cutterClients).values({ cutterId, clientId }).onConflictDoNothing();
     } else {
-      await db.delete(cutterClients).where(and(eq(cutterClients.cutterId, cutterId), eq(cutterClients.clientId, clientId)));
+      await db
+        .delete(cutterClients)
+        .where(and(eq(cutterClients.cutterId, cutterId), eq(cutterClients.clientId, clientId)));
     }
     refresh();
     return null;
@@ -291,7 +294,10 @@ export async function startWelcomeUpload(userId: string, input: { size: number; 
 export async function finishWelcomeUpload(userId: string, fileId: string) {
   return run(async () => {
     await requireUser("admin");
-    const [prof] = await db.select({ welcome: profiles.welcomeVideo }).from(profiles).where(eq(profiles.userId, userId));
+    const [prof] = await db
+      .select({ welcome: profiles.welcomeVideo })
+      .from(profiles)
+      .where(eq(profiles.userId, userId));
     const value = `${WELCOME_PREFIX}${fileId}`;
     await db
       .insert(profiles)
@@ -310,7 +316,10 @@ export async function finishWelcomeUpload(userId: string, fileId: string) {
 export async function removeWelcomeVideo(userId: string) {
   return run(async () => {
     await requireUser("admin");
-    const [prof] = await db.select({ welcome: profiles.welcomeVideo }).from(profiles).where(eq(profiles.userId, userId));
+    const [prof] = await db
+      .select({ welcome: profiles.welcomeVideo })
+      .from(profiles)
+      .where(eq(profiles.userId, userId));
     await db.update(profiles).set({ welcomeVideo: null, updatedAt: new Date() }).where(eq(profiles.userId, userId));
     if (prof?.welcome?.startsWith(WELCOME_PREFIX)) {
       await deleteFile(prof.welcome.slice(WELCOME_PREFIX.length)).catch((e) =>
@@ -386,12 +395,12 @@ export async function removeOnboardingVideo(role: string) {
 }
 
 // Kunden komplett löschen: Projektordner in Frame.io (inkl. Raw, Review, Online und aller Dateien),
-// Begrüßungsvideo, alle Projekte und den Zugang.
+// Begrüßungsvideos, alle Projekte, alle Nutzer des Kunden und den Kunden selbst.
 export async function deleteCustomer(customerId: string) {
   return run(async () => {
     await requireUser("admin");
-    const [u] = await db.select().from(user).where(eq(user.id, customerId));
-    if (!u || u.role !== "kunde") throw new Error("Kunde nicht gefunden.");
+    const [c] = await db.select({ id: customers.id }).from(customers).where(eq(customers.id, customerId));
+    if (!c) throw new Error("Kunde nicht gefunden.");
 
     const customerJobs = await db.select().from(jobs).where(eq(jobs.customerId, customerId));
 
@@ -409,19 +418,264 @@ export async function deleteCustomer(customerId: string) {
       }
     }
 
-    // 2. Persönliches Begrüßungsvideo (falls vorhanden)
-    const [prof] = await db.select({ welcome: profiles.welcomeVideo }).from(profiles).where(eq(profiles.userId, customerId));
-    if (prof?.welcome?.startsWith("frameio:")) {
-      await deleteFile(prof.welcome.slice("frameio:".length)).catch((e) => console.error(e));
-    }
+    // 2. Persönliche Begrüßungsvideos der Nutzer
+    const members = await memberIds(customerId);
+    for (const userId of members) await deleteWelcomeFile(userId);
 
-    // 3. Datenbank: erst die Projekte (Dateien, Kommentare, Inbox, Cutter-Zuordnung gehen automatisch mit),
-    //    dann die Person (Profil, Logo, Login, Einladungen, Freigaben gehen automatisch mit)
+    // 3. Datenbank: Projekte (Dateien, Kommentare, Inbox, Cutter-Zuordnung gehen mit), Nutzer (Login, Profil,
+    //    Einladungen gehen mit), dann der Kunde (Freigaben, Ideen gehen mit)
     await db.delete(jobs).where(eq(jobs.customerId, customerId));
-    await db.delete(user).where(eq(user.id, customerId));
+    if (members.length) await db.delete(user).where(inArray(user.id, members));
+    await db.delete(customers).where(eq(customers.id, customerId));
 
     refresh();
     return { projects: customerJobs.length };
+  });
+}
+
+async function deleteWelcomeFile(userId: string) {
+  const [prof] = await db.select({ welcome: profiles.welcomeVideo }).from(profiles).where(eq(profiles.userId, userId));
+  if (prof?.welcome?.startsWith("frameio:")) {
+    await deleteFile(prof.welcome.slice("frameio:".length)).catch((e) => console.error(e));
+  }
+}
+
+// ---------- Kunden (Firmen) und ihre Nutzer ----------
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Wer darf die Nutzer dieses Kunden verwalten? Admins (Agentur) und die Admins des Kunden selbst
+async function requireCustomerManager(customerId: string) {
+  const me = await requireUser();
+  if (me.role === "admin") return me;
+  if (me.role === "kunde" && me.customerId === customerId && me.customerAdmin) return me;
+  throw new Error("Keine Berechtigung.");
+}
+
+async function memberOf(userId: string) {
+  const [m] = await db.select().from(customerMembers).where(eq(customerMembers.userId, userId));
+  if (!m) throw new Error("Nutzer nicht gefunden.");
+  return m;
+}
+
+// Neuen Kunden-Nutzer anlegen (Login + Profil + Zuordnung) und einladen
+async function addMember(
+  customerId: string,
+  input: { name: string; email: string; isAdmin: boolean; phone?: string; deferMail?: boolean },
+  by: string,
+) {
+  const name = input.name.trim();
+  const email = input.email.trim().toLowerCase();
+  if (!name) throw new Error("Bitte einen Namen eingeben.");
+  if (!EMAIL_RE.test(email)) throw new Error("Bitte eine gültige E-Mail-Adresse eingeben.");
+  const [exists] = await db.select({ id: user.id }).from(user).where(eq(user.email, email));
+  if (exists) throw new Error("Diese E-Mail-Adresse ist bereits registriert.");
+  const id = randomUUID();
+  await db.insert(user).values({ id, name, email, emailVerified: false, role: "kunde", active: true });
+  await db.insert(profiles).values({ userId: id, phone: input.phone?.trim() || null });
+  await db.insert(customerMembers).values({ userId: id, customerId, isAdmin: input.isAdmin });
+  const link = await issueInvite(id, by);
+  // deferMail: Einladung erst später senden (z. B. nach dem Hochladen eines Begrüßungsvideos)
+  if (input.deferMail) return { userId: id, email, mailError: null };
+  const mail = await mailInvite(id, link);
+  return { userId: id, email, mailError: mail.ok ? null : mail.error };
+}
+
+// Neuer Kunde (Firma) mit erstem Nutzer – der erste Nutzer ist immer Admin des Kunden
+export async function createCustomer(input: {
+  name: string;
+  userName: string;
+  email: string;
+  phone?: string;
+  deferMail?: boolean;
+}) {
+  return run(async () => {
+    const me = await requireUser("admin");
+    const name = input.name.trim();
+    if (!name) throw new Error("Bitte einen Namen für den Kunden eingeben.");
+    if (!EMAIL_RE.test(input.email.trim())) throw new Error("Bitte eine gültige E-Mail-Adresse eingeben.");
+    const [exists] = await db
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.email, input.email.trim().toLowerCase()));
+    if (exists) throw new Error("Diese E-Mail-Adresse ist bereits registriert.");
+    const customerId = randomUUID();
+    await db.insert(customers).values({ id: customerId, name });
+    try {
+      const res = await addMember(
+        customerId,
+        {
+          name: input.userName.trim() || name,
+          email: input.email,
+          isAdmin: true,
+          phone: input.phone,
+          deferMail: input.deferMail,
+        },
+        me.id,
+      );
+      refresh();
+      return { customerId, ...res };
+    } catch (e) {
+      await db.delete(customers).where(eq(customers.id, customerId));
+      throw e;
+    }
+  });
+}
+
+// Weiteren Nutzer zu einem Kunden einladen (Agentur-Admins und Admins des Kunden)
+export async function inviteMember(customerId: string, input: { name: string; email: string; isAdmin: boolean }) {
+  return run(async () => {
+    const me = await requireCustomerManager(customerId);
+    const res = await addMember(customerId, input, me.id);
+    refresh();
+    return res;
+  });
+}
+
+// Admin-Recht innerhalb des Kunden vergeben bzw. entziehen (mindestens ein Admin bleibt)
+export async function setMemberAdmin(userId: string, isAdmin: boolean) {
+  return run(async () => {
+    const m = await memberOf(userId);
+    await requireCustomerManager(m.customerId);
+    if (!isAdmin && m.isAdmin) {
+      const admins = await db
+        .select({ id: customerMembers.userId })
+        .from(customerMembers)
+        .where(and(eq(customerMembers.customerId, m.customerId), eq(customerMembers.isAdmin, true)));
+      if (admins.length <= 1) throw new Error("Es muss mindestens ein Admin übrig bleiben.");
+    }
+    await db.update(customerMembers).set({ isAdmin }).where(eq(customerMembers.userId, userId));
+    refresh();
+    return null;
+  });
+}
+
+// Nutzer aus einem Kunden entfernen (Zugang wird gelöscht; Projekte, Kommentare und Dateien bleiben)
+export async function removeMember(userId: string) {
+  return run(async () => {
+    const m = await memberOf(userId);
+    const me = await requireCustomerManager(m.customerId);
+    if (me.id === userId) throw new Error("Du kannst dich nicht selbst entfernen.");
+    const members = await db.select().from(customerMembers).where(eq(customerMembers.customerId, m.customerId));
+    if (members.length <= 1)
+      throw new Error("Der letzte Nutzer kann nicht entfernt werden – lösch stattdessen den Kunden.");
+    if (m.isAdmin && members.filter((x) => x.isAdmin).length <= 1) {
+      throw new Error("Es muss mindestens ein Admin übrig bleiben.");
+    }
+    await deleteWelcomeFile(userId);
+    await db.delete(user).where(eq(user.id, userId));
+    refresh();
+    return null;
+  });
+}
+
+// Einladung bzw. Passwort-Link erneut senden (Admins des Kunden für ihre Nutzer)
+export async function resendMemberInvite(userId: string) {
+  return run(async () => {
+    const m = await memberOf(userId);
+    const me = await requireCustomerManager(m.customerId);
+    if (!mailConfigured()) throw new Error("E-Mail-Versand ist nicht eingerichtet.");
+    const link = await issueInvite(userId, me.id);
+    const mail = await mailInvite(userId, link);
+    if (!mail.ok) throw new Error(mail.error);
+    return { to: mail.to };
+  });
+}
+
+// Persönliche Daten eines Kunden-Nutzers (Name, Telefon, Geburtstag)
+export async function updateMember(userId: string, input: { name: string; phone: string; birthday: string }) {
+  return run(async () => {
+    const m = await memberOf(userId);
+    // Admins (Agentur und Kunde) für alle Nutzer des Kunden, sonst jeder nur für sich selbst
+    const self = await requireUser();
+    if (self.id !== userId) await requireCustomerManager(m.customerId);
+    const name = input.name.trim();
+    if (!name) throw new Error("Der Name darf nicht leer sein.");
+    const birthday = input.birthday.trim() || null;
+    if (birthday && !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) throw new Error("Bitte ein gültiges Geburtsdatum eingeben.");
+    await db.update(user).set({ name, updatedAt: new Date() }).where(eq(user.id, userId));
+    const values = { phone: input.phone.trim() || null, birthday, updatedAt: new Date() };
+    await db
+      .insert(profiles)
+      .values({ userId, ...values })
+      .onConflictDoUpdate({ target: profiles.userId, set: values });
+    refresh();
+    return null;
+  });
+}
+
+// Link: leer erlaubt; ohne http(s) wird https:// ergänzt
+function cleanLink(value: string) {
+  const v = value.trim();
+  if (!v) return "";
+  if (v.length > 500) throw new Error("Ein Link ist zu lang.");
+  return /^https?:\/\//i.test(v) ? v : `https://${v}`;
+}
+
+function checkImage(value: string | null | undefined, max: number, label: string) {
+  if (value && (!value.startsWith("data:image/") || value.length > max)) {
+    throw new Error(`${label} ist zu groß oder kein Bild.`);
+  }
+}
+
+// Kundenprofil (nur Agentur-Admins): Name, Logo, Titelbild, Links, Infos für Cutter
+export async function updateCustomer(
+  customerId: string,
+  input: {
+    name: string;
+    notes: string;
+    links: { tiktok: string; youtube: string; instagram: string; extra: { label: string; url: string }[] };
+    logo?: string | null;
+    cover?: string | null;
+  },
+) {
+  return run(async () => {
+    await requireUser("admin");
+    const name = input.name.trim();
+    if (!name) throw new Error("Der Name darf nicht leer sein.");
+    checkImage(input.logo, 200_000, "Das Logo");
+    checkImage(input.cover, 2_000_000, "Das Titelbild");
+    if (input.notes.length > 10000) throw new Error("Die Infos sind zu lang.");
+    const extra = input.links.extra
+      .map((e) => ({ label: e.label.trim().slice(0, 60), url: cleanLink(e.url) }))
+      .filter((e) => e.url);
+    if (extra.length > 30) throw new Error("Zu viele Links.");
+    const linkList = JSON.stringify({
+      tiktok: cleanLink(input.links.tiktok),
+      youtube: cleanLink(input.links.youtube),
+      instagram: cleanLink(input.links.instagram),
+      extra: extra.map((e) => ({
+        label: e.label || e.url.replace(/^https?:\/\/(www\.)?/i, "").split("/")[0],
+        url: e.url,
+      })),
+    });
+    await db
+      .update(customers)
+      .set({
+        name,
+        notes: input.notes.trim() || null,
+        linkList,
+        ...(input.logo !== undefined ? { logo: input.logo } : {}),
+        ...(input.cover !== undefined ? { cover: input.cover } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(customers.id, customerId));
+    refresh();
+    return null;
+  });
+}
+
+// Farbe des Kunden (Board/Kalender): Agentur-Admins und Admins des Kunden
+export async function setCustomerColor(customerId: string, color: string | null) {
+  return run(async () => {
+    await requireCustomerManager(customerId);
+    if (color !== null && !/^#[0-9a-f]{6}$/i.test(color)) throw new Error("Ungültige Farbe.");
+    await db
+      .update(customers)
+      .set({ color: color?.toLowerCase() ?? null, updatedAt: new Date() })
+      .where(eq(customers.id, customerId));
+    refresh();
+    return null;
   });
 }
 
@@ -438,7 +692,10 @@ export async function deleteCutter(cutterId: string) {
     const orphaned = await activeJobsOnlyWith(cutterId);
 
     // Persönliches Begrüßungsvideo gehört nur ihm → in Frame.io löschen
-    const [prof] = await db.select({ welcome: profiles.welcomeVideo }).from(profiles).where(eq(profiles.userId, cutterId));
+    const [prof] = await db
+      .select({ welcome: profiles.welcomeVideo })
+      .from(profiles)
+      .where(eq(profiles.userId, cutterId));
     if (prof?.welcome?.startsWith("frameio:")) {
       await deleteFile(prof.welcome.slice("frameio:".length)).catch((e) => console.error(e));
     }

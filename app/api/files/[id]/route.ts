@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { getFileLinks } from "@/lib/frameio";
 import { CUSTOMER_VIDEO_STATUSES } from "@/lib/status";
 import { canSeeJob } from "@/lib/access";
+import { viewerOf } from "@/lib/session";
 
 // Leitet zu einem kurzlebigen Frame.io-Link weiter, nachdem die Berechtigung geprüft wurde.
 // ?mode=download → Datei herunterladen, ?mode=play → im Player abspielen
@@ -21,8 +22,8 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/files/[id]">
     .where(eq(jobFiles.id, id));
   if (!row) return new Response("Datei nicht gefunden", { status: 404 });
 
-  const role = session.user.role ?? "kunde";
-  const me = { id: session.user.id, role };
+  const me = await viewerOf(session);
+  const role = me.role;
   // Kunden: eigene Rohdateien immer, das fertige Video erst ab "Ready to post".
   // Cutter: nur Projekte freigegebener Kunden. Admins: alles.
   const customerMayView = row.file.kind === "roh" || CUSTOMER_VIDEO_STATUSES.includes(row.job.status);

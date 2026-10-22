@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { jobs as jobsTable } from "@/db/schema";
 import { getCurrentUser } from "@/lib/session";
-import { listUsers, loadJobs, clientLogos } from "@/lib/queries";
+import { listCustomers, loadJobs, clientLogos } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
 import { JobTable, PersonTabs, parseSort } from "@/app/components/job-table";
 import { JobDrawer } from "@/app/components/job-drawer";
@@ -19,7 +19,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/nach-client
 
   const params = await searchParams;
   const logos = await clientLogos();
-  const clients = await listUsers("kunde");
+  const clients = await listCustomers();
   const requested = typeof params.c === "string" ? params.c : null;
   const activeId = clients.find((c) => c.id === requested)?.id ?? clients[0]?.id ?? null;
   const openJob = typeof params.job === "string" ? params.job : null;

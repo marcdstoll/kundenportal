@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { ideaAttachments, projectIdeas } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { canSeeIdea } from "@/lib/access";
+import { viewerOf } from "@/lib/session";
 
 // Screenshot einer Projekt-Idee anzeigen – nur für Personen, die die Idee sehen dürfen
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -15,7 +16,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     .innerJoin(projectIdeas, eq(ideaAttachments.ideaId, projectIdeas.id))
     .where(eq(ideaAttachments.id, id));
   if (!row) return new Response(null, { status: 404 });
-  if (!(await canSeeIdea({ id: session.user.id, role: session.user.role ?? "kunde" }, row.customerId))) {
+  if (!(await canSeeIdea(await viewerOf(session), row.customerId))) {
     return new Response(null, { status: 403 });
   }
   const m = row.data.match(/^data:(image\/[a-z+]+);base64,(.+)$/);

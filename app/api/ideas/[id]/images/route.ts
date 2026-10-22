@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { ideaAttachments, projectIdeas } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { canSeeIdea } from "@/lib/access";
+import { viewerOf } from "@/lib/session";
 import { MAX_SCREENSHOT_TOTAL, SCREENSHOT_TYPES } from "@/lib/features";
 
 // Screenshot zu einer Projekt-Idee hochladen (alle, die die Idee sehen). Der Browser hat das Bild vorher verkleinert.
@@ -14,7 +15,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   const [idea] = await db.select().from(projectIdeas).where(eq(projectIdeas.id, id));
   if (!idea) return new Response("Idee nicht gefunden", { status: 404 });
-  const me = { id: session.user.id, role: session.user.role ?? "kunde" };
+  const me = await viewerOf(session);
   if (!(await canSeeIdea(me, idea.customerId))) return new Response("Keine Berechtigung", { status: 403 });
 
   const type = (req.headers.get("content-type") ?? "").split(";")[0];

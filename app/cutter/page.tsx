@@ -4,7 +4,7 @@ import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { jobCutters, jobs } from "@/db/schema";
 import { getCurrentUser } from "@/lib/session";
-import { loadAssignments, loadPeople, logoUrl } from "@/lib/queries";
+import { listCustomers, loadAssignments, loadPeople, logoUrl } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
 import { Avatar } from "@/app/components/ui";
 import { ActiveToggle } from "@/app/components/active-toggle";
@@ -21,7 +21,7 @@ export default async function CutterPage() {
 
   const [people, clients, assignments, open] = await Promise.all([
     loadPeople("cutter", "admin"),
-    loadPeople("kunde"),
+    listCustomers(),
     loadAssignments(),
     db
       .select({ userId: jobCutters.userId })

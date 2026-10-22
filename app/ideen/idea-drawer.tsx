@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { ideaAttachments, ideaComments, ideaVotes, projectIdeas, user } from "@/db/schema";
+import { customers, ideaAttachments, ideaComments, ideaVotes, projectIdeas, user } from "@/db/schema";
 import { canSeeIdea } from "@/lib/access";
 import { IDEA_STATUS_COLORS, IDEA_STATUS_LABELS, PRIORITY_COLORS, PRIORITY_LABELS } from "@/lib/ideas";
 import { Person, formatDateTime } from "@/app/components/ui";
@@ -48,7 +48,7 @@ export function PriorityBadge({ priority }: { priority: string }) {
 
 const ROLE_LABELS: Record<string, string> = { kunde: "Client", cutter: "Cutter", admin: "Admin" };
 
-type Me = { id: string; name: string; role: string };
+type Me = { id: string; name: string; role: string; customerId?: string | null };
 
 // Geöffnete Idee (Seitenpanel rechts, wie beim Featureboard)
 export async function IdeaDrawer({
@@ -78,7 +78,7 @@ export async function IdeaDrawer({
 
   const isAdmin = me.role === "admin";
   const isStaff = me.role !== "kunde";
-  const canManage = isAdmin || me.id === idea.customerId || me.id === idea.createdBy;
+  const canManage = isAdmin || me.customerId === idea.customerId || me.id === idea.createdBy;
 
   const [[{ n: votes }], myVote, images, comments] = await Promise.all([
     db.select({ n: count() }).from(ideaVotes).where(eq(ideaVotes.ideaId, idea.id)),
@@ -95,12 +95,13 @@ export async function IdeaDrawer({
   ]);
 
   const ids = [
-    ...new Set([idea.customerId, idea.createdBy, idea.doneBy, ...comments.map((c) => c.authorId)].filter(Boolean)),
+    ...new Set([idea.createdBy, idea.doneBy, ...comments.map((c) => c.authorId)].filter(Boolean)),
   ] as string[];
   const people = new Map(
-    (await db.select({ id: user.id, name: user.name, role: user.role }).from(user).where(inArray(user.id, ids))).map(
-      (u) => [u.id, u],
-    ),
+    (ids.length
+      ? await db.select({ id: user.id, name: user.name, role: user.role }).from(user).where(inArray(user.id, ids))
+      : []
+    ).map((u) => [u.id, u]),
   );
   const nameOf = (id: string | null) =>
     id === me.id ? "dir" : id ? (people.get(id)?.name ?? "Gelöschter Nutzer") : "–";
@@ -118,7 +119,10 @@ export async function IdeaDrawer({
       canDelete: c.authorId === me.id || isAdmin,
     };
   });
-  const customer = people.get(idea.customerId);
+  const [customer] = await db
+    .select({ id: customers.id, name: customers.name })
+    .from(customers)
+    .where(eq(customers.id, idea.customerId));
 
   return (
     <Frame closeHref={closeHref} color={IDEA_STATUS_COLORS[idea.status] ?? "var(--muted)"}>

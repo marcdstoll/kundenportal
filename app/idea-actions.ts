@@ -12,6 +12,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { db } from "@/db";
 import {
+  customers,
   cutterClients,
   ideaAttachments,
   ideaComments,
@@ -22,6 +23,7 @@ import {
 } from "@/db/schema";
 import { requireUser } from "@/lib/session";
 import { canSeeIdea } from "@/lib/access";
+import { memberIds } from "@/lib/queries";
 import { IDEA_STATUSES, IDEA_STATUS_LABELS, PRIORITIES } from "@/lib/ideas";
 
 type Result<T = null> = { ok: true; data: T } | { ok: false; error: string };
@@ -49,16 +51,18 @@ async function getVisibleIdea(me: Me, id: string) {
   return idea;
 }
 
+// Verwalten (löschen, Screenshots entfernen): Admins, Nutzer des Kunden, Ersteller
 const canManage = (me: Me, idea: { customerId: string; createdBy: string | null }) =>
-  me.role === "admin" || me.id === idea.customerId || me.id === idea.createdBy;
+  me.role === "admin" || me.customerId === idea.customerId || me.id === idea.createdBy;
 
 // Alle, die eine Idee dieses Kunden sehen: Kunde, freigegebene Cutter, Admins
 async function participants(customerId: string) {
-  const [cutters, admins] = await Promise.all([
+  const [members, cutters, admins] = await Promise.all([
+    memberIds(customerId),
     db.select({ id: cutterClients.cutterId }).from(cutterClients).where(eq(cutterClients.clientId, customerId)),
     db.select({ id: user.id }).from(user).where(eq(user.role, "admin")),
   ]);
-  return [customerId, ...cutters.map((c) => c.id), ...admins.map((a) => a.id)];
+  return [...members, ...cutters.map((c) => c.id), ...admins.map((a) => a.id)];
 }
 
 async function notifyIdea(ideaId: string, actorId: string, to: (string | null)[], type: string, text: string) {
@@ -76,10 +80,10 @@ const short = (s: string, n = 80) => (s.length > n ? `${s.slice(0, n)} …` : s)
 export async function createIdea(input: { title: string; description: string; priority: string; customerId?: string }) {
   return run(async () => {
     const me = await requireUser();
-    const customerId = me.role === "kunde" ? me.id : (input.customerId ?? "");
+    const customerId = me.role === "kunde" ? (me.customerId ?? "") : (input.customerId ?? "");
     if (!customerId) throw new Error("Bitte einen Kunden auswählen.");
-    const [customer] = await db.select({ role: user.role }).from(user).where(eq(user.id, customerId));
-    if (customer?.role !== "kunde") throw new Error("Kunde nicht gefunden.");
+    const [customer] = await db.select({ id: customers.id }).from(customers).where(eq(customers.id, customerId));
+    if (!customer) throw new Error("Kunde nicht gefunden.");
     if (!(await canSeeIdea(me, customerId))) throw new Error("Keine Berechtigung.");
     const title = input.title.trim();
     const description = input.description.trim();
@@ -143,7 +147,7 @@ export async function setIdeaStatus(ideaId: string, status: string) {
     await notifyIdea(
       ideaId,
       me.id,
-      [idea.customerId, idea.createdBy],
+      [...(await memberIds(idea.customerId)), idea.createdBy],
       "idea_status",
       `„${short(idea.title)}“ ist jetzt: ${IDEA_STATUS_LABELS[status]}`,
     );

@@ -38,7 +38,7 @@ async function Content() {
           <h2 className="font-medium">Meine Farbe</h2>
           <p className="text-sm text-muted">
             {me.role === "kunde"
-              ? "In dieser Farbe erscheinen deine Projekte im Kalender und auf dem Board."
+              ? "In dieser Farbe erscheinst du im Portal, z. B. bei Kommentaren. Die Farbe eurer Projekte im Kalender und auf dem Board stellt ein Admin unter „Team“ ein."
               : "In dieser Farbe erscheinst du im Portal, z. B. bei Kommentaren und Projekten."}
           </p>
           <ColorPicker userId={me.id} name={me.name} color={prof?.color ?? null} />

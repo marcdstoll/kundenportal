@@ -2,10 +2,22 @@
 
 import { useRef, useState } from "react";
 import { setPersonColor } from "@/app/profile-actions";
+import { setCustomerColor } from "@/app/admin-actions";
 import { PALETTE, defaultColorHex } from "@/lib/colors";
 
 // Farbwähler für die Personenfarbe: Vorschläge + freie Farbe + „Automatisch“
-export function ColorPicker({ userId, name, color }: { userId: string; name: string; color: string | null }) {
+// kind "customer": Farbe eines Kunden (Firma), sonst einer Person
+export function ColorPicker({
+  userId,
+  name,
+  color,
+  kind = "person",
+}: {
+  userId: string;
+  name: string;
+  color: string | null;
+  kind?: "person" | "customer";
+}) {
   const [value, setValue] = useState<string | null>(color);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +29,7 @@ export function ColorPicker({ userId, name, color }: { userId: string; name: str
     setValue(next);
     setBusy(true);
     setError(null);
-    const res = await setPersonColor(userId, next);
+    const res = kind === "customer" ? await setCustomerColor(userId, next) : await setPersonColor(userId, next);
     setBusy(false);
     if (!res.ok) {
       setValue(before);

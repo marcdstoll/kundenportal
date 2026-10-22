@@ -22,7 +22,14 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kunde">["se
   const params = await searchParams;
   const asParam = typeof params.as === "string" ? params.as : undefined;
   const view = await resolveCustomerView(me, asParam);
-  if (!view) redirect("/board");
+  if (!view) {
+    if (me.role !== "kunde") redirect("/board");
+    return (
+      <p className="m-10 rounded-xl border border-dashed border-line p-6 text-sm text-muted">
+        Dein Zugang ist noch keinem Kunden zugeordnet. Bitte melde dich bei uns.
+      </p>
+    );
+  }
 
   const { customer, viewAs } = view;
   const openJob = typeof params.job === "string" ? params.job : null;
@@ -84,7 +91,15 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kunde">["se
         )}
       </div>
 
-      {openJob && <CustomerJobDrawer jobId={openJob} closeHref={base} customerId={customer.id} viewerId={me.id} />}
+      {openJob && (
+        <CustomerJobDrawer
+          jobId={openJob}
+          closeHref={base}
+          customerId={customer.id}
+          viewerId={me.id}
+          viewerRole={me.role}
+        />
+      )}
     </>
   );
 }

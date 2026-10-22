@@ -4,10 +4,10 @@ import { randomUUID } from "crypto";
 import { and, desc, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { db } from "@/db";
-import { jobComments, jobCutters, jobFiles, jobs, notifications, user } from "@/db/schema";
+import { customers, jobComments, jobCutters, jobFiles, jobs, notifications, user } from "@/db/schema";
 import { FrameioError, createFolder, createJobFolder, createUpload, deleteFile, deleteFolder, renameFolder } from "@/lib/frameio";
 import { requireUser } from "@/lib/session";
-import { mentionCandidates, nextPartTitle } from "@/lib/queries";
+import { memberIds, mentionCandidates, nextPartTitle } from "@/lib/queries";
 import { keepAllowedMentions, mentionIds, toPlain } from "@/lib/mentions";
 import { canSeeJob, clientIdsOfCutter } from "@/lib/access";
 import { CUSTOMER_DATE_STATUSES, FORMATS, STATUSES, VIDEO_LENGTHS } from "@/lib/status";
@@ -109,13 +109,15 @@ async function notify(
   to?: string[],
 ) {
   const cutters = await cutterIdsOf(job.id);
+  // „Kunde“ = alle Nutzer des Kunden (Firma)
+  const customer = await memberIds(job.customerId);
   let recipients: string[];
-  if (to) recipients = to;
+  if (to) recipients = to.flatMap((id) => (id === job.customerId ? customer : [id]));
   else if (type === "storno_request") recipients = [...cutters, ...(await adminIds())];
-  else if (type === "storno_decision") recipients = [job.customerId, ...cutters];
+  else if (type === "storno_decision") recipients = [...customer, ...cutters];
   // Kommentare: nur Kunde und zuständige Cutter – Admins nie (auch nicht, solange kein Cutter zugeordnet ist)
-  else if (type === "comment") recipients = [job.customerId, ...cutters];
-  else recipients = [job.customerId, ...(cutters.length > 0 ? cutters : await adminIds())];
+  else if (type === "comment") recipients = [...customer, ...cutters];
+  else recipients = [...customer, ...(cutters.length > 0 ? cutters : await adminIds())];
 
   const unique = [...new Set(recipients)].filter((id) => id !== actor.id && !skip.has(id));
   unique.forEach((id) => skip.add(id));
@@ -203,19 +205,16 @@ export async function createJob(input: NewJobInput) {
     if (lengths.length > 0 && !lengths.includes(input.videoLength)) throw new Error("Bitte eine Videolänge auswählen.");
     if (lengths.length === 0) input.videoLength = "";
 
-    // Für wen ist das Projekt? Kunden immer für sich selbst, Admins und Cutter für einen Client
-    let customer = { id: me.id, name: me.name };
-    if (me.role !== "kunde") {
-      if (!input.customerId) throw new Error("Bitte einen Client auswählen.");
-      const [c] = await db
-        .select({ id: user.id, name: user.name })
-        .from(user)
-        .where(and(eq(user.id, input.customerId), eq(user.role, "kunde")));
-      if (!c) throw new Error("Client nicht gefunden.");
-      if (me.role === "cutter" && !(await clientIdsOfCutter(me.id)).includes(c.id)) {
-        throw new Error("Dieser Kunde ist für dich nicht freigegeben.");
-      }
-      customer = c;
+    // Für wen ist das Projekt? Kunden-Nutzer immer für ihren Kunden, Admins und Cutter für einen Client
+    const customerId = me.role === "kunde" ? me.customerId : input.customerId;
+    if (!customerId) throw new Error(me.role === "kunde" ? "Kein Kunde zugeordnet." : "Bitte einen Client auswählen.");
+    const [customer] = await db
+      .select({ id: customers.id, name: customers.name })
+      .from(customers)
+      .where(eq(customers.id, customerId));
+    if (!customer) throw new Error("Client nicht gefunden.");
+    if (me.role === "cutter" && !(await clientIdsOfCutter(me.id)).includes(customer.id)) {
+      throw new Error("Dieser Kunde ist für dich nicht freigegeben.");
     }
 
     const folder = await createJobFolder(`${customer.name} – ${input.title.trim()}`);
@@ -318,7 +317,7 @@ export async function submitJob(jobId: string) {
   return run(async () => {
     const me = await requireUser();
     const job = await getJob(jobId);
-    if (job.customerId !== me.id && me.role === "kunde") throw new Error("Keine Berechtigung.");
+    if (job.customerId !== me.customerId && me.role === "kunde") throw new Error("Keine Berechtigung.");
     const files = await db
       .select({ id: jobFiles.id })
       .from(jobFiles)
@@ -524,7 +523,7 @@ export async function clientApprove(jobId: string) {
     const me = await requireUser();
     const job = await getJob(jobId);
     if (me.role === "cutter") throw new Error("Keine Berechtigung.");
-    if (me.role === "kunde" && job.customerId !== me.id) throw new Error("Keine Berechtigung.");
+    if (me.role === "kunde" && job.customerId !== me.customerId) throw new Error("Keine Berechtigung.");
     await changeStatus(jobId, "feedback_client", "ready_to_post");
     const to = [...(await cutterIdsOf(jobId)), ...(await adminIds()), job.customerId];
     await notify(job, me, "status", `${me.name} hat „${job.title}“ freigegeben`, undefined, new Set(), to);
@@ -540,7 +539,7 @@ export async function clientRequestChanges(jobId: string, note: string) {
     const me = await requireUser();
     const job = await getJob(jobId);
     if (me.role === "cutter") throw new Error("Keine Berechtigung.");
-    if (me.role === "kunde" && job.customerId !== me.id) throw new Error("Keine Berechtigung.");
+    if (me.role === "kunde" && job.customerId !== me.customerId) throw new Error("Keine Berechtigung.");
     const text = note.trim();
     if (me.role === "kunde" && !text) throw new Error("Bitte beschreib kurz, was geändert werden soll.");
     if (text.length > 5000) throw new Error("Der Text ist zu lang (max. 5000 Zeichen).");
@@ -627,7 +626,7 @@ export async function setPublishDate(jobId: string, date: string) {
   return run(async () => {
     const me = await requireUser("kunde", "admin");
     const job = await getJob(jobId);
-    if (me.role !== "admin" && job.customerId !== me.id) throw new Error("Keine Berechtigung.");
+    if (me.role !== "admin" && job.customerId !== me.customerId) throw new Error("Keine Berechtigung.");
     // Admins planen frei; Kunden tragen ihr Datum ein, sobald das Video freigegeben ist
     if (me.role !== "admin" && !CUSTOMER_DATE_STATUSES.includes(job.status)) {
       throw new Error("Ein Datum kann erst ab „Ready to post“ eingetragen werden.");

@@ -15,11 +15,49 @@ export const frameioConnection = pgTable("frameio_connection", {
 // Ein Projekt eines Clients
 // status: entwurf → todo → in_arbeit → feedback → ready_to_post → online (oder storniert)
 // format: shortform | longform | clipping
+// ---------- Kunden ----------
+// Ein Kunde ist eine Firma/Marke mit einem oder mehreren Nutzern (customer_members).
+// Übernommene Altkunden haben dieselbe ID wie ihr erster Nutzer.
+export const customers = pgTable("customers", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  // Logo (klein, rund) und Titelbild (Galerie/Detailansicht) als data-URL, im Browser verkleinert
+  logo: text("logo"),
+  cover: text("cover"),
+  // Alte Link-Liste (eine pro Zeile) – wird nur noch gelesen, solange link_list leer ist
+  links: text("links"),
+  // Links als JSON: { tiktok, youtube, instagram, extra: [{ label, url }] }
+  linkList: text("link_list"),
+  // Infos für die Cutter (Stil, Do's & Don'ts, Ansprechpartner …)
+  notes: text("notes"),
+  // Farbe des Kunden ("#rrggbb") für Board und Kalender
+  color: text("color"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Nutzer eines Kunden; isAdmin = darf weitere Nutzer einladen und Admins ernennen
+export const customerMembers = pgTable(
+  "customer_members",
+  {
+    userId: text("user_id")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+    customerId: text("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    isAdmin: boolean("is_admin").notNull().default(false),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("customer_members_customer_idx").on(t.customerId)]
+);
+
 export const jobs = pgTable("jobs", {
   id: text("id").primaryKey(),
+  // Kunde (Firma) – siehe customers; bei übernommenen Altkunden gleich der ID ihres ersten Nutzers
   customerId: text("customer_id")
     .notNull()
-    .references(() => user.id),
+    .references(() => customers.id),
   title: text("title").notNull(),
   format: text("format").notNull(),
   platform: text("platform").notNull(),
@@ -135,7 +173,7 @@ export const cutterClients = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     clientId: text("client_id")
       .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+      .references(() => customers.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.cutterId, t.clientId] })]
@@ -188,7 +226,7 @@ export const projectIdeas = pgTable(
     id: text("id").primaryKey(),
     customerId: text("customer_id")
       .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+      .references(() => customers.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     // Beschreibung
     note: text("note"),

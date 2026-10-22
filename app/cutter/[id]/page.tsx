@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
-import { activeJobsOnlyWith, loadAssignments, loadPeople, loadPerson, logoUrl } from "@/lib/queries";
+import { listCustomers, activeJobsOnlyWith, loadAssignments, loadPeople, loadPerson, logoUrl } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
 import { ColorPicker } from "@/app/components/color-picker";
 import {
@@ -20,7 +20,7 @@ export default async function CutterDetailPage({ params }: { params: Promise<{ i
   const { id } = await params;
   const [cutter, clients, assignments, activeAlone] = await Promise.all([
     loadPerson(id),
-    loadPeople("kunde"),
+    listCustomers(),
     loadAssignments(),
     activeJobsOnlyWith(id),
   ]);
