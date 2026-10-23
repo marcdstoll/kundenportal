@@ -88,85 +88,89 @@ export function JobTable({ jobs, hrefFor, isAdmin, sort, view, logos }: Props) {
   }
   const sorted = sortJobs(jobs, sort);
   return (
-    <div className="overflow-x-auto rounded-xl border border-line">
-      <table className="w-full min-w-[1180px] text-left text-sm">
-        <thead className="bg-surface text-xs text-muted">
-          <tr>
-            {COLUMNS.map((c) => {
-              const active = sort?.key === c.key;
-              const nextDir = active && sort?.dir === "asc" ? "desc" : "asc";
-              return (
-                <th
-                  key={c.key}
-                  className="px-4 py-2.5 font-medium"
-                  aria-sort={active ? (sort?.dir === "asc" ? "ascending" : "descending") : undefined}
-                >
-                  <FilterButton
-                    view={view}
-                    patch={{ s: c.key, d: nextDir }}
-                    className={`inline-flex items-center gap-1 whitespace-nowrap font-medium hover:text-text ${active ? "text-text" : ""}`}
+    <div className="space-y-2">
+      <div className="overflow-x-auto rounded-xl border border-line">
+        <table className="w-full min-w-[1180px] text-left text-sm">
+          <thead className="bg-surface text-xs text-muted">
+            <tr>
+              {COLUMNS.map((c) => {
+                const active = sort?.key === c.key;
+                const nextDir = active && sort?.dir === "asc" ? "desc" : "asc";
+                return (
+                  <th
+                    key={c.key}
+                    className="px-4 py-2.5 font-medium"
+                    aria-sort={active ? (sort?.dir === "asc" ? "ascending" : "descending") : undefined}
                   >
-                    {c.label}
-                    <span aria-hidden className={active ? "" : "opacity-0"}>
-                      {active && sort?.dir === "desc" ? "↓" : "↑"}
-                    </span>
-                  </FilterButton>
-                </th>
-              );
-            })}
-            <th className="px-4 py-2.5 font-medium">Review</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line">
-          {sorted.map((job) => (
-            <tr key={job.id} className="transition-colors hover:bg-surface/60">
-              <td className="min-w-52 px-4 py-2.5">
-                <Link href={hrefFor(job.id)} scroll={false} className="font-medium hover:underline">
-                  {job.title}
-                </Link>
-              </td>
-              <td className="px-4 py-2.5">
-                <StatusBadge status={job.status} />
-              </td>
-              <td className="px-4 py-2.5">
-                <FormatTag format={job.format} />
-              </td>
-              <td className="px-4 py-2.5">
-                <Person name={job.customerName} id={job.customerId} logoUrl={logos?.get(job.customerId)} />
-              </td>
-              <td className="px-4 py-2.5">
-                <div className="flex flex-wrap gap-x-3 gap-y-1">
-                  {job.cutters.map((c) => (
-                    <Person key={c.id} name={c.name} id={c.id} logoUrl={logos?.get(c.id)} />
-                  ))}
-                </div>
-              </td>
-              <td className="whitespace-nowrap px-4 py-2.5 text-muted">{formatDate(job.publishDate)}</td>
-              <td className="px-4 py-2.5">
-                <BilledToggle
-                  key={`k-${job.billedCustomer}`}
-                  jobId={job.id}
-                  billed={job.billedCustomer}
-                  editable={isAdmin}
-                  which="kunde"
-                />
-              </td>
-              <td className="px-4 py-2.5">
-                <BilledToggle
-                  key={`c-${job.billed}`}
-                  jobId={job.id}
-                  billed={job.billed}
-                  editable={isAdmin}
-                  which="cutter"
-                />
-              </td>
-              <td className="max-w-40 px-4 py-2.5">
-                {job.reviewUrl && <ExternalLink href={job.reviewUrl}>{shortLink(job.reviewUrl)}</ExternalLink>}
-              </td>
+                    <FilterButton
+                      view={view}
+                      patch={{ s: c.key, d: nextDir }}
+                      className={`inline-flex items-center gap-1 whitespace-nowrap font-medium hover:text-text ${active ? "text-text" : ""}`}
+                    >
+                      {c.label}
+                      <span aria-hidden className={active ? "" : "opacity-0"}>
+                        {active && sort?.dir === "desc" ? "↓" : "↑"}
+                      </span>
+                    </FilterButton>
+                  </th>
+                );
+              })}
+              <th className="px-4 py-2.5 font-medium">Review</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {sorted.map((job) => (
+              <tr key={job.id} className="transition-colors hover:bg-surface/60">
+                <td className="min-w-52 px-4 py-2.5">
+                  <Link href={hrefFor(job.id)} scroll={false} className="font-medium hover:underline">
+                    {job.title}
+                  </Link>
+                </td>
+                <td className="px-4 py-2.5">
+                  <StatusBadge status={job.status} />
+                </td>
+                <td className="px-4 py-2.5">
+                  <FormatTag format={job.format} />
+                </td>
+                <td className="px-4 py-2.5">
+                  <Person name={job.customerName} id={job.customerId} logoUrl={logos?.get(job.customerId)} />
+                </td>
+                <td className="px-4 py-2.5">
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    {job.cutters.map((c) => (
+                      <Person key={c.id} name={c.name} id={c.id} logoUrl={logos?.get(c.id)} />
+                    ))}
+                  </div>
+                </td>
+                <td className="whitespace-nowrap px-4 py-2.5 text-muted">{formatDate(job.publishDate)}</td>
+                <td className="px-4 py-2.5">
+                  <BilledToggle
+                    key={`k-${job.billedCustomer}`}
+                    jobId={job.id}
+                    billed={job.billedCustomer}
+                    editable={isAdmin}
+                    which="kunde"
+                  />
+                </td>
+                <td className="px-4 py-2.5">
+                  <BilledToggle
+                    key={`c-${job.billed}`}
+                    jobId={job.id}
+                    billed={job.billed}
+                    editable={isAdmin}
+                    which="cutter"
+                  />
+                </td>
+                <td className="max-w-40 px-4 py-2.5">
+                  {job.reviewUrl && <ExternalLink href={job.reviewUrl}>{shortLink(job.reviewUrl)}</ExternalLink>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {/* Anzahl der angezeigten Projekte (je nach gewählter Person) */}
+      <p className="px-1 text-sm text-muted">Gesamt: {jobs.length}</p>
     </div>
   );
 }
