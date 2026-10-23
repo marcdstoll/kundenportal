@@ -1,4 +1,4 @@
-import { bigint, boolean, date, index, integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { bigint, boolean, date, index, integer, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 export * from "./auth-schema";
@@ -197,6 +197,8 @@ export const profiles = pgTable("profiles", {
   birthday: date("birthday"),
   // Persönliche Farbe ("#rrggbb"), sonst automatisch aus dem Namen – färbt Avatar, Board-Karten und Kalender
   color: text("color"),
+  // Gespeicherte Filter je Ansicht, z. B. { "board": { "k": "id1,id2", "f": "shortform" }, "kalender": { "k": "" } }
+  viewFilters: jsonb("view_filters").$type<Record<string, Record<string, string>>>().notNull().default({}),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

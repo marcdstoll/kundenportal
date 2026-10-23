@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { jobs as jobsTable } from "@/db/schema";
 import { getCurrentUser, resolveCustomerView } from "@/lib/session";
-import { listCustomers, loadJobs } from "@/lib/queries";
+import { listCustomers, loadJobs, loadViewFilters } from "@/lib/queries";
 import { CUSTOMER_DATE_STATUSES } from "@/lib/status";
 import { ClientFilter } from "@/app/components/client-filter";
 import { both, clientIdsOfCutter, jobScope } from "@/lib/access";
@@ -23,15 +23,17 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
   const openJob = typeof params.job === "string" ? params.job : null;
 
   // Kunden (und Admins in der Kundenansicht) sehen nur die eigenen Projekte
-  const customerView = me.role === "kunde" || (me.role === "admin" && asParam) ? await resolveCustomerView(me, asParam) : null;
+  const customerView =
+    me.role === "kunde" || (me.role === "admin" && asParam) ? await resolveCustomerView(me, asParam) : null;
   const customerId = customerView?.customer.id ?? null;
 
-  // Staff: optionaler Kunden-Filter (?k=id1,id2), Kunden sehen ohnehin nur sich selbst
+  // Staff: optionaler Kunden-Filter (gespeichert pro Nutzer, unabhängig vom Board), Kunden sehen ohnehin nur sich selbst
   // Cutter sehen im Filter nur ihre freigegebenen Kunden
   const allClients = customerId ? [] : await listCustomers();
   const allowed = me.role === "cutter" ? await clientIdsOfCutter(me.id) : null;
   const clients = allowed ? allClients.filter((c) => allowed.includes(c.id)) : allClients;
-  const pickedClients = typeof params.k === "string" ? params.k.split(",").filter((id) => clients.some((c) => c.id === id)) : [];
+  const saved = clients.length > 0 ? await loadViewFilters(me.id, "kalender") : {};
+  const pickedClients = (saved.k ?? "").split(",").filter((id) => clients.some((c) => c.id === id));
 
   const filter = customerId
     ? and(isNotNull(jobsTable.publishDate), eq(jobsTable.customerId, customerId))
@@ -53,7 +55,6 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
   const query = (extra: Record<string, string>) => {
     const p = new URLSearchParams();
     if (customerView?.viewAs) p.set("as", customerView.viewAs.id);
-    if (pickedClients.length > 0) p.set("k", pickedClients.join(","));
     p.set("m", monthKey(month));
     for (const [k, v] of Object.entries(extra)) p.set(k, v);
     return `/kalender?${p}`;
@@ -71,7 +72,11 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
           lockReason={lockReason}
           toolbar={
             clients.length > 0 ? (
-              <ClientFilter clients={clients.map((c) => ({ id: c.id, name: c.name }))} selected={pickedClients} />
+              <ClientFilter
+                view="kalender"
+                clients={clients.map((c) => ({ id: c.id, name: c.name }))}
+                selected={pickedClients}
+              />
             ) : null
           }
           hrefFor={(id) => query({ job: id })}

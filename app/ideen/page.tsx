@@ -4,7 +4,7 @@ import { count, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { ideaAttachments, ideaComments, ideaVotes, projectIdeas, user, customers } from "@/db/schema";
 import { getCurrentUser } from "@/lib/session";
-import { clientLogos, listCustomers, unreadByJob } from "@/lib/queries";
+import { clientLogos, listCustomers, loadViewFilters, unreadByJob } from "@/lib/queries";
 import { clientIdsOfCutter } from "@/lib/access";
 import {
   IDEA_STATUSES,
@@ -16,6 +16,7 @@ import {
 } from "@/lib/ideas";
 import { PageHeader } from "@/app/components/shell";
 import { ClientFilter } from "@/app/components/client-filter";
+import { FilterButton } from "@/app/components/filter-button";
 import { Person } from "@/app/components/ui";
 import { IdeaVoteButton, NewIdeaForm } from "./idea-forms";
 import { IdeaDrawer, IdeaStatusBadge, PriorityBadge, fmtDay } from "./idea-drawer";
@@ -28,43 +29,39 @@ export default function IdeasPage({ searchParams }: { searchParams: Params }) {
 
 // Projekt-Ideen je Kunde – aufgebaut wie das Featureboard.
 // Sehen: der Kunde selbst, für ihn freigegebene Cutter, Admins. Meiste Stimmen oben.
-// Oben rechts: Kunden-Filter (Team, ?k=) und Prioritäts-Filter (?p=). Darunter Status-Reiter (?s=).
+// Oben rechts: Kunden-Filter (Team) und Prioritäts-Filter. Darunter Status-Reiter.
+// Alle drei werden pro Nutzer gespeichert (eigene Werte, unabhängig von Board und Kalender).
 async function Content({ searchParams }: { searchParams: Params }) {
   const me = await getCurrentUser();
   if (!me) redirect("/login");
   const params = await searchParams;
   const isKunde = me.role === "kunde";
   const one = (k: string) => (typeof params[k] === "string" ? (params[k] as string) : "");
+  const saved = await loadViewFilters(me.id, "ideen");
 
   // Sichtbare Kunden (+ Filter)
   let clients: { id: string; name: string }[] = [];
   let scope: string[] | null = null; // null = alle
+  let pickedClients: string[] = [];
   if (isKunde) {
     scope = me.customerId ? [me.customerId] : [];
   } else {
     const all = await listCustomers();
     const allowed = me.role === "cutter" ? await clientIdsOfCutter(me.id) : null;
     clients = (allowed ? all.filter((c) => allowed.includes(c.id)) : all).map((c) => ({ id: c.id, name: c.name }));
-    const picked = one("k")
-      .split(",")
-      .filter((id) => clients.some((c) => c.id === id));
+    const picked = (saved.k ?? "").split(",").filter((id) => clients.some((c) => c.id === id));
     scope = picked.length > 0 ? picked : allowed;
+    pickedClients = picked;
   }
-  const pickedClients = one("k");
 
   const allPrios = PRIORITIES as readonly string[];
-  const prioPicked = one("p")
-    .split(",")
-    .filter((p) => allPrios.includes(p));
+  const prioPicked = (saved.p ?? "").split(",").filter((p) => allPrios.includes(p));
   const prios = prioPicked.length > 0 ? prioPicked : [...allPrios];
-  const status = (IDEA_STATUSES as readonly string[]).includes(one("s")) ? one("s") : "";
+  const status = (IDEA_STATUSES as readonly string[]).includes(saved.s ?? "") ? (saved.s ?? "") : "";
   const openId = one("i") || null;
 
   const query = (extra: Record<string, string> = {}) => {
     const p = new URLSearchParams();
-    if (pickedClients) p.set("k", pickedClients);
-    if (prioPicked.length > 0 && prioPicked.length < allPrios.length) p.set("p", prios.join(","));
-    if (status) p.set("s", status);
     for (const [k, v] of Object.entries(extra)) {
       if (v) p.set(k, v);
       else p.delete(k);
@@ -99,7 +96,10 @@ async function Content({ searchParams }: { searchParams: Params }) {
       : []),
     ...(firmIds.length
       ? (
-          await db.select({ id: customers.id, name: customers.name }).from(customers).where(inArray(customers.id, firmIds))
+          await db
+            .select({ id: customers.id, name: customers.name })
+            .from(customers)
+            .where(inArray(customers.id, firmIds))
         ).map((c) => [c.id, c.name] as const)
       : []),
   ]);
@@ -121,18 +121,16 @@ async function Content({ searchParams }: { searchParams: Params }) {
   return (
     <>
       <PageHeader title="Projekt-Ideen">
-        {clients.length > 0 && (
-          <ClientFilter clients={clients} selected={pickedClients ? pickedClients.split(",") : []} />
-        )}
-        <PriorityFilter active={prios} counts={prioCount} hrefFor={(p) => query({ p })} />
+        {clients.length > 0 && <ClientFilter view="ideen" clients={clients} selected={pickedClients} />}
+        <PriorityFilter active={prios} counts={prioCount} />
       </PageHeader>
 
       <div className="space-y-4 px-4 pb-10 sm:px-6 md:px-10">
         <div className="flex flex-wrap items-start justify-between gap-3">
           {isKunde ? (
             <p className="max-w-2xl text-sm text-muted">
-              Halte hier deine Ideen für kommende Videos fest. Vote für das, was dir am wichtigsten ist – wir sehen es und
-              melden uns.
+              Halte hier deine Ideen für kommende Videos fest. Vote für das, was dir am wichtigsten ist – wir sehen es
+              und melden uns.
             </p>
           ) : (
             <span />
@@ -147,17 +145,17 @@ async function Content({ searchParams }: { searchParams: Params }) {
           ].map((t) => {
             const active = t.value === status;
             return (
-              <Link
+              <FilterButton
                 key={t.label}
-                href={query({ s: t.value, i: "" })}
-                scroll={false}
+                view="ideen"
+                patch={{ s: t.value }}
                 aria-current={active ? "page" : undefined}
                 className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors ${
                   active ? "border-accent font-medium text-text" : "border-transparent text-muted hover:text-text"
                 }`}
               >
                 {t.label} <span className="text-xs text-muted">{statusCount(t.value)}</span>
-              </Link>
+              </FilterButton>
             );
           })}
         </nav>
@@ -235,15 +233,7 @@ async function Content({ searchParams }: { searchParams: Params }) {
 }
 
 // Filter-Chips wie beim Featureboard: Klick zeigt nur diese Priorität, weitere dazu- bzw. wegschalten
-function PriorityFilter({
-  active,
-  counts,
-  hrefFor,
-}: {
-  active: string[];
-  counts: (p: string) => number;
-  hrefFor: (p: string) => string;
-}) {
+function PriorityFilter({ active, counts }: { active: string[]; counts: (p: string) => number }) {
   const all = PRIORITIES as readonly string[];
   const allOn = active.length === all.length;
   const nextFor = (value: string) => {
@@ -258,10 +248,10 @@ function PriorityFilter({
         const on = active.includes(p) && !allOn;
         const color = PRIORITY_COLORS[p];
         return (
-          <Link
+          <FilterButton
             key={p}
-            href={hrefFor(nextFor(p))}
-            scroll={false}
+            view="ideen"
+            patch={{ p: nextFor(p) }}
             aria-pressed={active.includes(p)}
             className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors ${
               on
@@ -277,13 +267,13 @@ function PriorityFilter({
             <span className="size-2 rounded-full" style={{ background: color, opacity: allOn || on ? 1 : 0.4 }} />
             {PRIORITY_LABELS[p]}
             <span className="text-xs text-muted">{counts(p)}</span>
-          </Link>
+          </FilterButton>
         );
       })}
       {!allOn && (
-        <Link href={hrefFor("")} scroll={false} className="px-2 text-xs text-muted hover:text-text">
+        <FilterButton view="ideen" patch={{ p: "" }} className="px-2 text-xs text-muted hover:text-text">
           Alle
-        </Link>
+        </FilterButton>
       )}
     </div>
   );

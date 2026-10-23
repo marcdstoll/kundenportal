@@ -1,11 +1,13 @@
 import Link from "next/link";
 import type { JobView } from "@/lib/queries";
+import type { FilterView } from "@/lib/view-filters";
 import { BilledToggle } from "./billed-toggle";
+import { FilterButton } from "./filter-button";
 import { Avatar, ExternalLink, FormatTag, Person, StatusBadge, formatDate, shortLink } from "./ui";
 
 import { STATUSES } from "@/lib/status";
 
-// Sortierbare Spalten: Schlüssel in der URL (?s=title&d=asc)
+// Sortierbare Spalten (pro Nutzer und Ansicht gespeichert: s=title, d=asc)
 export const SORT_KEYS = [
   "title",
   "status",
@@ -62,8 +64,8 @@ type Props = {
   hrefFor: (jobId: string) => string;
   isAdmin: boolean;
   sort: Sort;
-  // Link für Klick auf eine Spaltenüberschrift
-  sortHref: (key: SortKey, dir: "asc" | "desc") => string;
+  // Ansicht, in der die Sortierung gespeichert wird (Klick auf eine Spaltenüberschrift)
+  view: FilterView;
   // Logo-URLs (Nutzer-ID → URL), damit statt Initialen das aktuelle Logo erscheint
   logos?: Map<string, string>;
 };
@@ -80,7 +82,7 @@ const COLUMNS: { key: SortKey; label: string }[] = [
 ];
 
 // Tabelle wie "Projekte nach Cutter/Clients sortiert" in Notion – Klick auf Überschrift sortiert
-export function JobTable({ jobs, hrefFor, isAdmin, sort, sortHref, logos }: Props) {
+export function JobTable({ jobs, hrefFor, isAdmin, sort, view, logos }: Props) {
   if (jobs.length === 0) {
     return <p className="px-1 py-6 text-sm text-muted">Hier gibt es noch keine Projekte.</p>;
   }
@@ -99,16 +101,16 @@ export function JobTable({ jobs, hrefFor, isAdmin, sort, sortHref, logos }: Prop
                   className="px-4 py-2.5 font-medium"
                   aria-sort={active ? (sort?.dir === "asc" ? "ascending" : "descending") : undefined}
                 >
-                  <Link
-                    href={sortHref(c.key, nextDir)}
-                    scroll={false}
-                    className={`inline-flex items-center gap-1 whitespace-nowrap hover:text-text ${active ? "text-text" : ""}`}
+                  <FilterButton
+                    view={view}
+                    patch={{ s: c.key, d: nextDir }}
+                    className={`inline-flex items-center gap-1 whitespace-nowrap font-medium hover:text-text ${active ? "text-text" : ""}`}
                   >
                     {c.label}
                     <span aria-hidden className={active ? "" : "opacity-0"}>
                       {active && sort?.dir === "desc" ? "↓" : "↑"}
                     </span>
-                  </Link>
+                  </FilterButton>
                 </th>
               );
             })}
@@ -173,28 +175,30 @@ export function JobTable({ jobs, hrefFor, isAdmin, sort, sortHref, logos }: Prop
 export function PersonTabs({
   people,
   activeId,
-  hrefFor,
+  view,
   logos,
 }: {
   people: { id: string; name: string }[];
   activeId: string | null;
-  hrefFor: (id: string) => string;
+  // Ansicht, in der die gewählte Person gespeichert wird
+  view: FilterView;
   logos?: Map<string, string>;
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {people.map((p) => (
-        <Link
+        <FilterButton
           key={p.id}
-          href={hrefFor(p.id)}
-          scroll={false}
+          view={view}
+          patch={{ c: p.id }}
+          aria-current={p.id === activeId ? "true" : undefined}
           className={`inline-flex items-center gap-2 rounded-full py-1 pl-1.5 pr-3 text-sm transition-colors ${
             p.id === activeId ? "bg-raised text-text" : "text-muted hover:bg-surface hover:text-text"
           }`}
         >
           <Avatar name={p.name} id={p.id} logoUrl={logos?.get(p.id)} />
           {p.name}
-        </Link>
+        </FilterButton>
       ))}
     </div>
   );

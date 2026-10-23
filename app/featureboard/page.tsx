@@ -4,9 +4,10 @@ import { count, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { featureAttachments, featureComments, featureRequests, featureVotes, user } from "@/db/schema";
 import { getCurrentUser } from "@/lib/session";
-import { unreadByJob } from "@/lib/queries";
+import { loadViewFilters, unreadByJob } from "@/lib/queries";
 import { FEATURE_STATUSES, FEATURE_STATUS_COLORS, FEATURE_STATUS_LABELS } from "@/lib/features";
 import { PageHeader } from "@/app/components/shell";
+import { FilterButton } from "@/app/components/filter-button";
 import { NewFeatureForm, VoteButton } from "./feature-forms";
 import { FeatureBadge, FeatureDrawer, fmtDay } from "./feature-drawer";
 
@@ -17,21 +18,18 @@ export default function FeatureboardPage({ searchParams }: { searchParams: Param
 }
 
 // Featureboard: alle sehen alle Vorschläge (anonym – Namen nur für Admins), sortiert nach Stimmen.
-// Filter oben rechts nach Status (?s=offen,in_arbeit), geöffneter Vorschlag über ?f=ID.
+// Filter oben rechts nach Status (pro Nutzer gespeichert), geöffneter Vorschlag über ?f=ID.
 async function Content({ searchParams }: { searchParams: Params }) {
   const me = await getCurrentUser();
   if (!me) redirect("/login");
   const isAdmin = me.role === "admin";
   const params = await searchParams;
   const all = FEATURE_STATUSES as readonly string[];
-  const picked = typeof params.s === "string" ? params.s.split(",").filter((s) => all.includes(s)) : [];
+  const saved = await loadViewFilters(me.id, "featureboard");
+  const picked = (saved.s ?? "").split(",").filter((s) => all.includes(s));
   const active = picked.length > 0 ? picked : [...all];
   const openId = typeof params.f === "string" ? params.f : null;
-  const statusQuery = picked.length > 0 && picked.length < all.length ? `s=${active.join(",")}` : "";
-  const href = (extra?: string) => {
-    const q = [statusQuery, extra].filter(Boolean).join("&");
-    return q ? `/featureboard?${q}` : "/featureboard";
-  };
+  const href = (extra?: string) => (extra ? `/featureboard?${extra}` : "/featureboard");
 
   const [features, votes, myVotes, comments, images, unread] = await Promise.all([
     db.select().from(featureRequests).orderBy(desc(featureRequests.createdAt)),
@@ -153,12 +151,11 @@ async function Content({ searchParams }: { searchParams: Params }) {
 function StatusFilter({ active, counts }: { active: string[]; counts: Map<string, number> }) {
   const all = FEATURE_STATUSES as readonly string[];
   const allOn = active.length === all.length;
-  const hrefFor = (value: string) => {
+  const nextFor = (value: string) => {
     const isOn = active.includes(value);
     let next = allOn ? [value] : isOn ? active.filter((s) => s !== value) : [...active, value];
     if (next.length === 0 || next.length === all.length) next = [];
-    const keep = all.filter((s) => next.includes(s));
-    return keep.length ? `/featureboard?s=${keep.join(",")}` : "/featureboard";
+    return all.filter((s) => next.includes(s)).join(",");
   };
   return (
     <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Status filtern">
@@ -166,10 +163,10 @@ function StatusFilter({ active, counts }: { active: string[]; counts: Map<string
         const on = active.includes(s) && !allOn;
         const color = FEATURE_STATUS_COLORS[s];
         return (
-          <Link
+          <FilterButton
             key={s}
-            href={hrefFor(s)}
-            scroll={false}
+            view="featureboard"
+            patch={{ s: nextFor(s) }}
             aria-pressed={active.includes(s)}
             className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors ${
               on
@@ -185,13 +182,13 @@ function StatusFilter({ active, counts }: { active: string[]; counts: Map<string
             <span className="size-2 rounded-full" style={{ background: color, opacity: allOn || on ? 1 : 0.4 }} />
             {FEATURE_STATUS_LABELS[s]}
             <span className="text-xs text-muted">{counts.get(s) ?? 0}</span>
-          </Link>
+          </FilterButton>
         );
       })}
       {!allOn && (
-        <Link href="/featureboard" scroll={false} className="px-2 text-xs text-muted hover:text-text">
+        <FilterButton view="featureboard" patch={{ s: "" }} className="px-2 text-xs text-muted hover:text-text">
           Alle
-        </Link>
+        </FilterButton>
       )}
     </div>
   );

@@ -13,7 +13,7 @@ export async function boardColumnOrder(): Promise<string[]> {
   return [...unique, ...BOARD_COLUMNS.filter((c) => !unique.includes(c))];
 }
 
-// Formatfilter aus der URL lesen: ?f=shortform,clipping  (leer = alle)
+// Formatfilter lesen: "shortform,clipping"  (leer = alle)
 export function parseFormatFilter(value: string | string[] | undefined): string[] {
   const all = FORMATS.map((f) => f.value as string);
   const raw = typeof value === "string" ? value.split(",") : [];

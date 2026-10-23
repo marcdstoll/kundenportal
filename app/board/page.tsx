@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
-import { clientLogos, listCustomers, loadJobs, unreadByJob } from "@/lib/queries";
+import { clientLogos, listCustomers, loadJobs, loadViewFilters, unreadByJob } from "@/lib/queries";
 import { isConnected } from "@/lib/frameio";
 import { clientIdsOfCutter, jobScope } from "@/lib/access";
 import { ClientFilter } from "@/app/components/client-filter";
-import { BOARD_COLUMNS, FORMATS } from "@/lib/status";
+import { BOARD_COLUMNS } from "@/lib/status";
 import { parseFormatFilter } from "@/lib/board-prefs";
 import { FormatFilter } from "@/app/components/format-filter";
 import { PageHeader } from "@/app/components/shell";
@@ -35,18 +35,11 @@ async function Board({ searchParams }: { searchParams: PageProps<"/board">["sear
   const allowedIds =
     me.role === "admin" ? null : new Set([...(await clientIdsOfCutter(me.id)), ...visible.map((j) => j.customerId)]);
   const clients = allClients.filter((c) => !allowedIds || allowedIds.has(c.id));
-  const pickedClients =
-    typeof params.k === "string" ? params.k.split(",").filter((id) => clients.some((c) => c.id === id)) : [];
-
-  // Formatfilter (?f=shortform,longform) – ohne Angabe alle. Beide Filter wirken gemeinsam.
-  const formats = parseFormatFilter(params.f);
-  const allFormats = formats.length === FORMATS.length;
-  const clientQuery = pickedClients.length > 0 ? `k=${pickedClients.join(",")}` : "";
-  const query = [clientQuery, allFormats ? "" : `f=${formats.join(",")}`].filter(Boolean).join("&");
-  const href = (extra?: string) => {
-    const q = [query, extra].filter(Boolean).join("&");
-    return q ? `/board?${q}` : "/board";
-  };
+  // Gespeicherte Filter des Nutzers für das Board: Kunden (k) und Formate (f) – beide wirken gemeinsam
+  const saved = await loadViewFilters(me.id, "board");
+  const pickedClients = (saved.k ?? "").split(",").filter((id) => clients.some((c) => c.id === id));
+  const formats = parseFormatFilter(saved.f);
+  const href = (extra?: string) => (extra ? `/board?${extra}` : "/board");
 
   const jobs = visible.filter(
     (j) => formats.includes(j.format) && (pickedClients.length === 0 || pickedClients.includes(j.customerId)),
@@ -58,9 +51,13 @@ async function Board({ searchParams }: { searchParams: PageProps<"/board">["sear
       <PageHeader title="Board">
         <div className="flex flex-wrap items-center gap-2">
           {clients.length > 0 && (
-            <ClientFilter clients={clients.map((c) => ({ id: c.id, name: c.name }))} selected={pickedClients} />
+            <ClientFilter
+              view="board"
+              clients={clients.map((c) => ({ id: c.id, name: c.name }))}
+              selected={pickedClients}
+            />
           )}
-          <FormatFilter active={formats} basePath="/board" extraQuery={clientQuery} />
+          <FormatFilter active={formats} />
         </div>
       </PageHeader>
 

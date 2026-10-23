@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { jobs as jobsTable } from "@/db/schema";
 import { getCurrentUser } from "@/lib/session";
-import { listCustomers, loadJobs, clientLogos } from "@/lib/queries";
+import { listCustomers, loadJobs, loadViewFilters, clientLogos } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
 import { JobTable, PersonTabs, parseSort } from "@/app/components/job-table";
 import { JobDrawer } from "@/app/components/job-drawer";
@@ -20,32 +20,28 @@ async function Content({ searchParams }: { searchParams: PageProps<"/nach-client
   const params = await searchParams;
   const logos = await clientLogos();
   const clients = await listCustomers();
-  const requested = typeof params.c === "string" ? params.c : null;
+  // Gewählte Person und Sortierung sind pro Nutzer gespeichert
+  const saved = await loadViewFilters(me.id, "nach-clients");
+  const requested = saved.c ?? null;
   const activeId = clients.find((c) => c.id === requested)?.id ?? clients[0]?.id ?? null;
   const openJob = typeof params.job === "string" ? params.job : null;
 
   const jobs = activeId ? await loadJobs(eq(jobsTable.customerId, activeId)) : [];
-  const sort = parseSort(params.s, params.d);
-  const sortQuery = sort ? `&s=${sort.key}&d=${sort.dir}` : "";
-  const base = activeId ? `/nach-clients?c=${activeId}${sortQuery}` : "/nach-clients";
+  const sort = parseSort(saved.s, saved.d);
+  const base = "/nach-clients";
 
   return (
     <>
       <PageHeader title="Projekte nach Clients" />
       <div className="space-y-4 px-4 pb-10 sm:px-6 md:px-10">
-        <PersonTabs
-          logos={logos}
-          people={clients}
-          activeId={activeId}
-          hrefFor={(id) => `/nach-clients?c=${id}${sortQuery}`}
-        />
+        <PersonTabs logos={logos} people={clients} activeId={activeId} view="nach-clients" />
         <JobTable
           logos={logos}
           jobs={jobs}
           isAdmin={me.role === "admin"}
           sort={sort}
-          sortHref={(key, dir) => `/nach-clients?c=${activeId ?? ""}&s=${key}&d=${dir}`}
-          hrefFor={(id) => `${base}&job=${id}`}
+          view="nach-clients"
+          hrefFor={(id) => `${base}?job=${id}`}
         />
       </div>
       {openJob && <JobDrawer jobId={openJob} closeHref={base} me={me} />}

@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { account, customerMembers, customers, cutterClients, featureRequests, projectIdeas, jobComments, jobCutters, jobFiles, jobs, notifications, profiles, user } from "@/db/schema";
+import { cleanFilters, type FilterView, type ViewFilters } from "@/lib/view-filters";
 
 export type JobFileView = typeof jobFiles.$inferSelect & { uploaderName: string | null };
 
@@ -484,3 +485,13 @@ export const customerLogoUrl = (c: { id: string; hasLogo: boolean; version: numb
   c.hasLogo ? `/api/logo/${c.id}?v=${c.version}` : null;
 export const customerCoverUrl = (c: { id: string; hasCover: boolean; version: number }) =>
   c.hasCover ? `/api/cover/${c.id}?v=${c.version}` : null;
+
+// Gespeicherte Filter einer Ansicht für einen Nutzer (leer = Standard: alles anzeigen)
+export async function loadViewFilters(userId: string, view: FilterView): Promise<ViewFilters> {
+  const [row] = await db
+    .select({ filters: profiles.viewFilters })
+    .from(profiles)
+    .where(eq(profiles.userId, userId));
+  const saved = row?.filters?.[view];
+  return saved && typeof saved === "object" ? cleanFilters(view, saved) : {};
+}

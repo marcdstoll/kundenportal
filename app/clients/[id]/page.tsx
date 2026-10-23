@@ -5,6 +5,7 @@ import { customerCoverUrl, customerLogoUrl, loadAssignments, loadCustomer, loadP
 import { PageHeader } from "@/app/components/shell";
 import { ColorPicker } from "@/app/components/color-picker";
 import { buttonSecondary } from "@/app/components/ui";
+import { FilterButton } from "@/app/components/filter-button";
 import { AssignmentSelect, DeleteCustomerButton } from "@/app/components/admin-forms";
 import { CustomerForm, MembersPanel } from "@/app/components/customer-forms";
 
@@ -25,9 +26,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         <Link href={`/kundenprofil/${id}`} className={buttonSecondary}>
           Detailansicht
         </Link>
-        <Link href={`/nach-clients?c=${id}`} className={buttonSecondary}>
+        <FilterButton view="nach-clients" patch={{ c: id }} href="/nach-clients" className={buttonSecondary}>
           Projekte
-        </Link>
+        </FilterButton>
         <Link href={`/kunde?as=${id}`} className={buttonSecondary}>
           Kundenansicht
         </Link>
@@ -36,11 +37,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         <section className="space-y-3">
           <h2 className="text-sm font-medium">Profil</h2>
           {/* kein key: Änderungen rechts (Farbe, Nutzer, Cutter) dürfen ungespeicherte Eingaben nicht verwerfen */}
-          <CustomerForm
-            customer={client}
-            logoUrl={customerLogoUrl(client)}
-            coverUrl={customerCoverUrl(client)}
-          />
+          <CustomerForm customer={client} logoUrl={customerLogoUrl(client)} coverUrl={customerCoverUrl(client)} />
         </section>
         <aside className="space-y-8">
           <section className="space-y-2">

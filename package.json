@@ -11,7 +11,7 @@
   "dependencies": {
     "better-auth": "^1.7.7",
     "drizzle-orm": "^0.45.4",
-    "next": "16.4.0",
+    "next": "16.4.2",
     "nodemailer": "^10.1.1",
     "postgres": "^3.4.9",
     "react": "19.3.0",
@@ -26,7 +26,7 @@
     "dotenv": "^18.0.6",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
-    "eslint-config-next": "16.4.0",
+    "eslint-config-next": "16.4.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

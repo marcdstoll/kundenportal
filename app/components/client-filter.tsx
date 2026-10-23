@@ -1,29 +1,31 @@
 "use client";
 
 import { useOptimistic, useState, useTransition } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { personColor } from "@/lib/colors";
+import { saveViewFilter } from "@/app/filter-actions";
+import type { FilterView } from "@/lib/view-filters";
 
 // Dropdown mit Mehrfachauswahl: einen, mehrere oder alle Kunden anzeigen.
-// Die Auswahl steht in der URL (?k=id1,id2), damit Links und Neuladen sie behalten.
-// Angezeigt wird immer die Auswahl aus der URL – nur während des Ladens die gerade angeklickte.
-export function ClientFilter({ clients, selected }: { clients: { id: string; name: string }[]; selected: string[] }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
+// Die Auswahl wird pro Nutzer und Ansicht gespeichert (Board, Kalender, Ideen jeweils eigene).
+// Angezeigt wird immer die gespeicherte Auswahl – nur während des Speicherns die gerade angeklickte.
+export function ClientFilter({
+  view,
+  clients,
+  selected,
+}: {
+  view: FilterView;
+  clients: { id: string; name: string }[];
+  selected: string[];
+}) {
   const [open, setOpen] = useState(false);
   const [, startTransition] = useTransition();
   const [picked, setPicked] = useOptimistic(selected);
 
   function apply(next: string[]) {
-    const p = new URLSearchParams(params.toString());
-    p.delete("job");
-    if (next.length === 0 || next.length === clients.length) p.delete("k");
-    else p.set("k", next.join(","));
-    const q = p.toString();
-    startTransition(() => {
-      setPicked(next);
-      router.push(q ? `${pathname}?${q}` : pathname, { scroll: false });
+    const all = next.length === 0 || next.length === clients.length;
+    startTransition(async () => {
+      setPicked(all ? [] : next);
+      await saveViewFilter(view, { k: all ? "" : next.join(",") });
     });
   }
 

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
-import { listUsers, loadJobsOfCutter, clientLogos } from "@/lib/queries";
+import { listUsers, loadJobsOfCutter, loadViewFilters, clientLogos } from "@/lib/queries";
 import { PageHeader } from "@/app/components/shell";
 import { JobTable, PersonTabs, parseSort } from "@/app/components/job-table";
 import { JobDrawer } from "@/app/components/job-drawer";
@@ -31,7 +31,9 @@ async function Content({ searchParams }: { searchParams: PageProps<"/nach-cutter
       ]
     : await listUsers("cutter", "admin");
   // Standard: man selbst (falls Cutter), sonst der erste Cutter
-  const requested = typeof params.c === "string" ? params.c : null;
+  // Gewählte Person und Sortierung sind pro Nutzer gespeichert
+  const saved = await loadViewFilters(me.id, "nach-cutter");
+  const requested = saved.c ?? null;
   const activeId =
     cutters.find((c) => c.id === requested)?.id ??
     (me.role === "cutter" ? me.id : null) ??
@@ -41,9 +43,8 @@ async function Content({ searchParams }: { searchParams: PageProps<"/nach-cutter
   const openJob = typeof params.job === "string" ? params.job : null;
 
   const jobs = activeId ? await loadJobsOfCutter(activeId) : [];
-  const sort = parseSort(params.s, params.d);
-  const sortQuery = sort ? `&s=${sort.key}&d=${sort.dir}` : "";
-  const base = activeId ? `/nach-cutter?c=${activeId}${sortQuery}` : "/nach-cutter";
+  const sort = parseSort(saved.s, saved.d);
+  const base = "/nach-cutter";
 
   return (
     <>
@@ -56,21 +57,14 @@ async function Content({ searchParams }: { searchParams: PageProps<"/nach-cutter
         )}
       </PageHeader>
       <div className="space-y-4 px-4 pb-10 sm:px-6 md:px-10">
-        {!isCutter && (
-          <PersonTabs
-            logos={logos}
-            people={cutters}
-            activeId={activeId}
-            hrefFor={(id) => `/nach-cutter?c=${id}${sortQuery}`}
-          />
-        )}
+        {!isCutter && <PersonTabs logos={logos} people={cutters} activeId={activeId} view="nach-cutter" />}
         <JobTable
           logos={logos}
           jobs={jobs}
           isAdmin={me.role === "admin"}
           sort={sort}
-          sortHref={(key, dir) => `/nach-cutter?c=${activeId ?? ""}&s=${key}&d=${dir}`}
-          hrefFor={(id) => `${base}&job=${id}`}
+          view="nach-cutter"
+          hrefFor={(id) => `${base}?job=${id}`}
         />
       </div>
       {openJob && <JobDrawer jobId={openJob} closeHref={base} me={me} />}
