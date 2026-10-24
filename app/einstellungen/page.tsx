@@ -42,8 +42,7 @@ export default async function SettingsPage() {
         <section className="space-y-3" aria-label="Hall of Fame">
           <h2 className="font-medium">Hall of Fame</h2>
           <p className="text-sm text-muted">
-            Die Views aller hinterlegten Veröffentlichungs-Links werden täglich um 00:00 Uhr ({VIEWS_TIMEZONE})
-            abgerufen. Hier kannst du den Abruf auch sofort starten.
+            Die Views aller hinterlegten Veröffentlichungs-Links werden täglich um 00:00 Uhr abgerufen.
           </p>
           <dl className="grid grid-cols-[9rem_1fr] gap-x-3 gap-y-1 text-sm">
             <dt className="text-muted">YouTube</dt>
@@ -51,7 +50,7 @@ export default async function SettingsPage() {
               {youtubeKey ? "✓ Schlüssel hinterlegt" : <span className="text-danger">YOUTUBE_API_KEY fehlt</span>}
             </dd>
             <dt className="text-muted">TikTok, Instagram</dt>
-            <dd className="text-muted">Links werden gespeichert, Abruf folgt (Apify)</dd>
+            <dd className="text-muted">-</dd>
             <dt className="text-muted">Letzter Abruf</dt>
             <dd data-testid="last-sync">
               {lastRun ? (

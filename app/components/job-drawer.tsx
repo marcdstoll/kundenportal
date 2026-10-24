@@ -385,9 +385,6 @@ export async function JobDrawer({
 
       {isAdmin && job.status !== "storniert" && (
         <Section title="Veröffentlichungen">
-          <p className="text-xs text-muted">
-            Links zum fertigen Post – daraus holt die Hall of Fame täglich die Views.
-          </p>
           <PublicationsForm key={pubs.map((p) => `${p.url}|${p.views}`).join(",")} jobId={job.id} publications={pubs} />
         </Section>
       )}

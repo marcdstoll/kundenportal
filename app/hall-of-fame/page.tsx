@@ -78,10 +78,6 @@ async function Content({ searchParams }: { searchParams: Params }) {
               <h2 className="text-lg font-semibold">
                 {client.name} <span className="font-normal text-muted">· {DISCIPLINES[discipline].label}</span>
               </h2>
-              <p className="text-xs text-muted">
-                {data.updatedAt ? `Stand: ${formatDateTime(data.updatedAt)}` : "Noch keine Views abgerufen"} · täglich
-                um 00:00 aktualisiert
-              </p>
             </div>
 
             <Ranking rows={data.ranking} logos={logos} />
@@ -97,11 +93,6 @@ async function Content({ searchParams }: { searchParams: Params }) {
 
             <VideoList videos={data.videos} canOpen={isAdmin} />
 
-            <p className="text-xs text-muted">
-              Views je Video = Summe der Plattform-Views (YouTube + TikTok + Instagram), keine eindeutigen Zuschauer.
-              Ein Video zählt, sobald mindestens ein Views-Stand vorliegt. Arbeiten mehrere Cutter an einem Video, zählt
-              es für jeden voll.
-            </p>
           </>
         )}
       </div>

@@ -51,7 +51,7 @@ export function CutterVisibilityToggle({ on }: { on: boolean }) {
           });
         }}
       />
-      Für Cutter sichtbar (sie sehen nur ihre freigegebenen Clients)
+      Für Cutter sichtbar
     </label>
   );
 }
