@@ -10,15 +10,18 @@
 // Anzeigen lesen den Stand über useUploads() (React-Hook, siehe unten).
 
 import { useSyncExternalStore } from "react";
-import { createJob, discardUpload, submitJob, uploadHeartbeat, type NewJobInput } from "@/app/actions";
+import { createJob, discardUpload, submitForReview, submitJob, uploadHeartbeat, type NewJobInput } from "@/app/actions";
 import { uploadFile } from "@/lib/upload";
 
 export type UploadFileState = { name: string; size: number; loaded: number; done: boolean };
 
 export type Vorgang = {
   id: string;
-  kind: "projekt" | "nachreichen";
+  // projekt = neues Projekt, nachreichen = Material zum Projekt, review = fertiges Video des Cutters
+  kind: "projekt" | "nachreichen" | "review";
   title: string;
+  // Beschreibung („Inhalt“) beim neuen Projekt – wird unter dem Titel angezeigt
+  description: string | null;
   jobId: string | null;
   files: UploadFileState[];
   status: "wartet" | "laeuft" | "fehler" | "fertig";
@@ -113,7 +116,7 @@ async function runVorgang(id: string) {
     for (let i = 0; i < files.length; i++) {
       if (vorgaenge.find((x) => x.id === id)?.files[i]?.done) continue;
       patchFile(id, i, { loaded: 0 });
-      await uploadFile(jobId, "roh", files[i], (p) =>
+      await uploadFile(jobId, v.kind === "review" ? "fertig" : "roh", files[i], (p) =>
         patchFile(id, i, { loaded: Math.round((p / 100) * files[i].size) }),
       );
       patchFile(id, i, { done: true, loaded: files[i].size });
@@ -122,6 +125,11 @@ async function runVorgang(id: string) {
     // 3. Neues Projekt abschicken → erscheint bei den Cuttern in „To Dos“
     if (v.kind === "projekt") {
       const submitted = await submitJob(jobId);
+      if (!submitted.ok) throw new Error(submitted.error);
+    }
+    // Review-Video fertig → Projekt geht auf „Wartet auf Feedback“
+    if (v.kind === "review") {
+      const submitted = await submitForReview(jobId);
       if (!submitted.ok) throw new Error(submitted.error);
     }
 
@@ -188,7 +196,16 @@ export function startProjektUpload(input: NewJobInput, files: File[]) {
   projectInput.set(id, input);
   vorgaenge = [
     ...vorgaenge,
-    { id, kind: "projekt", title: input.title, jobId: null, files: toState(files), status: "wartet", error: null },
+    {
+      id,
+      kind: "projekt",
+      title: input.title,
+      description: input.content.trim() || null,
+      jobId: null,
+      files: toState(files),
+      status: "wartet",
+      error: null,
+    },
   ];
   emit(true);
   pump();
@@ -201,7 +218,20 @@ export function startNachreichen(jobId: string, title: string, files: File[]) {
   fileObjects.set(id, files);
   vorgaenge = [
     ...vorgaenge,
-    { id, kind: "nachreichen", title, jobId, files: toState(files), status: "wartet", error: null },
+    { id, kind: "nachreichen", title, description: null, jobId, files: toState(files), status: "wartet", error: null },
+  ];
+  emit(true);
+  pump();
+  return id;
+}
+
+// Fertiges Video zur Review hochladen (läuft weiter, auch wenn das Projekt-Panel geschlossen wird)
+export function startReviewUpload(jobId: string, title: string, file: File) {
+  const id = newId();
+  fileObjects.set(id, [file]);
+  vorgaenge = [
+    ...vorgaenge,
+    { id, kind: "review", title, description: null, jobId, files: toState([file]), status: "wartet", error: null },
   ];
   emit(true);
   pump();

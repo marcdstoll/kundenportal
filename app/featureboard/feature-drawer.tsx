@@ -15,6 +15,7 @@ import {
   VoteButton,
   type CommentView,
 } from "./feature-forms";
+import { LinkedText } from "@/app/components/linked-text";
 
 export const fmtDay = (d: Date) =>
   d.toLocaleDateString("de-DE", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Berlin" });
@@ -153,7 +154,7 @@ export async function FeatureDrawer({
           <dd>{f.completedAt ? fmtDay(f.completedAt) : <span className="text-muted">–</span>}</dd>
         </dl>
 
-        {f.description && <p className="whitespace-pre-wrap text-sm">{f.description}</p>}
+        {f.description && <LinkedText text={f.description} className="text-sm" />}
 
         {(images.length > 0 || canManage) && (
           <section className="space-y-2">

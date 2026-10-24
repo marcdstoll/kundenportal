@@ -85,8 +85,10 @@ function PublicationStatus({ pub }: { pub: PublicationView }) {
       </p>
     );
   }
+  // Noch kein Stand: neutraler Hinweis (blau); rot nur bei echten Fehlern wie „Video nicht gefunden“
+  const info = !pub.lastError || pub.lastError.startsWith("Abruf noch nicht");
   return (
-    <p className={`text-xs ${pub.lastError?.startsWith("Abruf noch nicht") ? "text-muted" : "text-danger"}`}>
+    <p className={`text-xs ${info ? "text-accent" : "text-danger"}`}>
       {pub.lastError ?? "Views werden beim nächsten Abruf geholt."}
     </p>
   );

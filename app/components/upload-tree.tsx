@@ -88,11 +88,20 @@ export function UploadStatus({ vorgang: v, compact = false }: { vorgang: Vorgang
         <p className="min-w-0 truncate font-medium">
           {v.title}
           {v.kind === "nachreichen" && <span className="font-normal text-muted"> · Material</span>}
+          {v.kind === "review" && <span className="font-normal text-muted"> · Video zur Review</span>}
         </p>
         <span className="shrink-0 text-sm tabular-nums">
           {v.status === "wartet" ? "wartet" : v.status === "fertig" ? "✓ fertig" : `${percent} %`}
         </span>
       </div>
+      {v.description && (
+        <p
+          className={`whitespace-pre-wrap text-sm text-muted ${compact ? "line-clamp-2" : "line-clamp-6"}`}
+          data-testid="upload-description"
+        >
+          {v.description}
+        </p>
+      )}
       <Bar percent={v.status === "fertig" ? 100 : percent} error={v.status === "fehler"} />
 
       {v.status === "fehler" && (
@@ -138,9 +147,9 @@ export function UploadStatus({ vorgang: v, compact = false }: { vorgang: Vorgang
   );
 }
 
-// Alle laufenden Vorgänge kompakt (z. B. unter dem Formular „Projekt anlegen“)
-export function UploadOverview({ jobId }: { jobId?: string }) {
-  const uploads = useUploads().filter((v) => !jobId || v.jobId === jobId);
+// Alle laufenden Vorgänge kompakt (z. B. unter dem Formular „Projekt anlegen“); mit jobId/kind nur die passenden
+export function UploadOverview({ jobId, kind }: { jobId?: string; kind?: Vorgang["kind"] }) {
+  const uploads = useUploads().filter((v) => (!jobId || v.jobId === jobId) && (!kind || v.kind === kind));
   if (uploads.length === 0) return null;
   return (
     <div className="space-y-2">

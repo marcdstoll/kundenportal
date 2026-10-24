@@ -80,7 +80,7 @@ export function AddFiles({
         />
       </label>
       <p className="text-xs text-muted">Erlaubt: {ALLOWED_LABEL}</p>
-      <UploadOverview jobId={jobId} />
+      <UploadOverview jobId={jobId} kind="nachreichen" />
       <ErrorText error={error} />
     </div>
   );

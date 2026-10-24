@@ -17,7 +17,8 @@ import {
   updateReviewUrl,
   type Result,
 } from "@/app/actions";
-import { uploadFile } from "@/lib/upload";
+import { startReviewUpload, useUploads } from "@/lib/upload-manager";
+import { UploadOverview } from "./upload-tree";
 import { BilledToggle } from "./billed-toggle";
 import { MultiSelect } from "./multi-select";
 import { buttonPrimary, buttonSecondary, inputField } from "./ui";
@@ -25,6 +26,7 @@ import { buttonPrimary, buttonSecondary, inputField } from "./ui";
 type Props = {
   job: {
     id: string;
+    title: string;
     status: string;
     format: string;
     billed: boolean;
@@ -56,7 +58,6 @@ export function JobControls({ job, isAdmin, isAssigned, staff, beforeBilling }: 
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState<number | null>(null);
   const [link, setLink] = useState("");
   const [editLink, setEditLink] = useState(job.reviewUrl ?? "");
 
@@ -72,21 +73,11 @@ export function JobControls({ job, isAdmin, isAssigned, staff, beforeBilling }: 
     return res.ok;
   }
 
-  // Video hochladen → landet in "ToBeReviewed", danach automatisch "Wartet auf Feedback"
-  async function uploadVideo(file: File) {
-    setBusy(true);
-    setError(null);
-    try {
-      await uploadFile(job.id, "fertig", file, setProgress);
-      const res = await submitForReview(job.id);
-      if (!res.ok) throw new Error(res.error);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload fehlgeschlagen.");
-    }
-    setBusy(false);
-    setProgress(null);
-    router.refresh();
-  }
+  // Video hochladen → läuft über den Upload-Manager weiter, auch wenn das Panel geschlossen wird
+  // (Fortschritt in der Seitenleiste). Danach automatisch "Wartet auf Feedback".
+  const reviewRunning = useUploads().some(
+    (v) => v.jobId === job.id && v.kind === "review" && (v.status === "laeuft" || v.status === "wartet"),
+  );
 
   return (
     <div className="space-y-6 border-t border-line pt-5">
@@ -136,19 +127,21 @@ export function JobControls({ job, isAdmin, isAssigned, staff, beforeBilling }: 
             <input
               type="file"
               accept="video/*"
-              disabled={busy}
+              disabled={busy || reviewRunning}
               className="block w-full text-xs file:mr-3 file:rounded-md file:border-0 file:bg-raised file:px-3 file:py-1.5 file:text-text"
               onChange={(e) => {
                 const file = e.target.files?.[0];
-                if (file) uploadVideo(file);
+                if (file) startReviewUpload(job.id, job.title, file);
+                e.target.value = "";
               }}
             />
-            {progress !== null && (
-              <div className="h-1.5 overflow-hidden rounded-full bg-raised">
-                <div className="h-full bg-accent transition-all" style={{ width: `${progress}%` }} />
-              </div>
-            )}
           </label>
+          <UploadOverview jobId={job.id} kind="review" />
+          {reviewRunning && (
+            <p className="text-xs text-muted">
+              Du kannst das Fenster schließen – der Upload läuft im Hintergrund weiter.
+            </p>
+          )}
           <p className="text-center text-xs text-muted">oder vorhandenen Review-Link einfügen</p>
           <div className="flex gap-2">
             <input
@@ -159,7 +152,7 @@ export function JobControls({ job, isAdmin, isAssigned, staff, beforeBilling }: 
               disabled={busy}
             />
             <button
-              disabled={busy || link.trim() === ""}
+              disabled={busy || reviewRunning || link.trim() === ""}
               onClick={() => run(() => submitForReview(job.id, link))}
               className={buttonSecondary}
             >

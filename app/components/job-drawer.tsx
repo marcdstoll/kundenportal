@@ -165,31 +165,45 @@ function FileList({
   canDelete: boolean;
 }) {
   if (files.length === 0) return <p className="text-sm text-muted">Noch keine Dateien.</p>;
+  const total = files.reduce((sum, f) => sum + f.size, 0);
+  // Standardmäßig zugeklappt – bei vielen Dateien (z. B. 30 Clips) bleibt das Panel übersichtlich
   return (
-    <ul className="divide-y divide-line rounded-lg border border-line text-sm">
-      {files.map((f) => (
-        <li key={f.id} className="flex items-center gap-3 px-3 py-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="truncate">{f.name}</span>
-              <NewMarker show={unread.has(f.id)} />
+    <details className="group rounded-lg border border-line text-sm" data-testid="file-list">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 select-none [&::-webkit-details-marker]:hidden">
+        <span aria-hidden className="text-xs text-muted transition-transform group-open:rotate-90">
+          ▶
+        </span>
+        <span className="flex-1">
+          {files.length} {files.length === 1 ? "Datei" : "Dateien"}
+          <span className="text-muted"> · {formatSize(total)}</span>
+        </span>
+        <NewMarker show={files.some((f) => unread.has(f.id))} />
+      </summary>
+      <ul className="divide-y divide-line border-t border-line">
+        {files.map((f) => (
+          <li key={f.id} className="flex items-center gap-3 px-3 py-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="truncate">{f.name}</span>
+                <NewMarker show={unread.has(f.id)} />
+              </div>
+              <p className="text-xs text-muted">
+                {formatDateTime(f.createdAt)}
+                {f.uploaderName ? ` · ${f.uploaderName}` : ""}
+                {f.late ? " · nachgereicht" : ""}
+              </p>
             </div>
-            <p className="text-xs text-muted">
-              {formatDateTime(f.createdAt)}
-              {f.uploaderName ? ` · ${f.uploaderName}` : ""}
-              {f.late ? " · nachgereicht" : ""}
-            </p>
-          </div>
-          <span className="shrink-0 text-xs text-muted">{formatSize(f.size)}</span>
-          {canDownload && (
-            <a href={`/api/files/${f.id}?mode=download`} className="shrink-0 text-xs text-accent hover:underline">
-              Laden
-            </a>
-          )}
-          {canDelete && <DeleteFileButton fileId={f.id} name={f.name} />}
-        </li>
-      ))}
-    </ul>
+            <span className="shrink-0 text-xs text-muted">{formatSize(f.size)}</span>
+            {canDownload && (
+              <a href={`/api/files/${f.id}?mode=download`} className="shrink-0 text-xs text-accent hover:underline">
+                Laden
+              </a>
+            )}
+            {canDelete && <DeleteFileButton fileId={f.id} name={f.name} />}
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 
@@ -401,6 +415,7 @@ export async function JobDrawer({
         key={`${job.id}-${job.status}-${job.format}-${job.billed}-${job.billedCustomer}-${job.cutters.length}-${paused}`}
         job={{
           id: job.id,
+          title: job.title,
           status: job.status,
           format: job.format,
           billed: job.billed,

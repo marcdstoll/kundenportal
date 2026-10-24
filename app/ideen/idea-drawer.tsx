@@ -17,6 +17,7 @@ import {
   MarkIdeaRead,
   type IdeaCommentView,
 } from "./idea-forms";
+import { LinkedText } from "@/app/components/linked-text";
 
 export const fmtDay = (d: Date) =>
   d.toLocaleDateString("de-DE", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Berlin" });
@@ -175,7 +176,7 @@ export async function IdeaDrawer({
           </dd>
         </dl>
 
-        {idea.note && <p className="whitespace-pre-wrap text-sm">{idea.note}</p>}
+        {idea.note && <LinkedText text={idea.note} className="text-sm" />}
 
         <section className="space-y-2">
           <h3 className="text-sm font-medium">Screenshots</h3>
