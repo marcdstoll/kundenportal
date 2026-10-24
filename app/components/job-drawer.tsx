@@ -12,20 +12,16 @@ import {
 } from "@/lib/queries";
 import { CUSTOMER_DATE_STATUSES, CUSTOMER_VIDEO_STATUSES, statusColor } from "@/lib/status";
 import { canSeeJob } from "@/lib/access";
-import {
-  ExternalLink,
-  FormatTag,
-  Person,
-  StatusBadge,
-  formatDate,
-  formatDateTime,
-  formatSize,
-  shortLink,
-} from "./ui";
+import { ExternalLink, FormatTag, Person, StatusBadge, formatDate, formatDateTime, formatSize, shortLink } from "./ui";
 import { JobControls } from "./job-controls";
 import { VideoBlock } from "./video-block";
 import { DownloadAll } from "./download-all";
 import { PublishDateField } from "./publish-date-field";
+import { PublicationsForm, type PublicationView } from "./publications-form";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { publications } from "@/db/schema";
+import type { PublicationPlatform } from "@/lib/publications";
 import { InlinePicker } from "./inline-picker";
 import {
   AddFiles,
@@ -288,6 +284,15 @@ export async function JobDrawer({
   const versions = job.files.filter((f) => f.kind === "fertig").length;
   const paused = !!job.cancelRequestedAt;
   const suggestion = job.status !== "entwurf" ? await nextPartTitle(job) : "";
+  const pubs: PublicationView[] = isAdmin
+    ? (await db.select().from(publications).where(eq(publications.jobId, job.id))).map((p) => ({
+        platform: p.platform as PublicationPlatform,
+        url: p.url,
+        views: p.views,
+        viewsAt: p.viewsAt?.toISOString() ?? null,
+        lastError: p.lastError,
+      }))
+    : [];
 
   return (
     <DrawerFrame job={job} closeHref={closeHref} editable={isAdmin}>
@@ -375,6 +380,15 @@ export async function JobDrawer({
       {isAdmin && (
         <Section title="Veröffentlichungsdatum">
           <PublishDateField jobId={job.id} value={job.publishDate} />
+        </Section>
+      )}
+
+      {isAdmin && job.status !== "storniert" && (
+        <Section title="Veröffentlichungen">
+          <p className="text-xs text-muted">
+            Links zum fertigen Post – daraus holt die Hall of Fame täglich die Views.
+          </p>
+          <PublicationsForm key={pubs.map((p) => `${p.url}|${p.views}`).join(",")} jobId={job.id} publications={pubs} />
         </Section>
       )}
 
@@ -481,14 +495,12 @@ export async function CustomerJobDrawer({
 
       <Section title="Deine Dateien">
         <FileList files={rawFiles} unread={unread.files} canDownload canDelete={canDelete} />
-        {job.status !== "storniert" && <AddFiles jobId={job.id} title={job.title} label="Weiteres Material hochladen" />}
+        {job.status !== "storniert" && (
+          <AddFiles jobId={job.id} title={job.title} label="Weiteres Material hochladen" />
+        )}
       </Section>
 
-      <Comments
-        job={job}
-        viewer={{ id: viewerId, role: viewerRole }}
-        canWrite={job.status !== "storniert"}
-      />
+      <Comments job={job} viewer={{ id: viewerId, role: viewerRole }} canWrite={job.status !== "storniert"} />
 
       {canDelete && (
         <Section title="Projekt löschen">

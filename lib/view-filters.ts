@@ -1,7 +1,7 @@
 // Filter, die sich jede Ansicht pro Nutzer merkt (gespeichert in profiles.view_filters).
 // Jede Ansicht hat ihre eigenen Werte – der Kalender ist z. B. unabhängig vom Board.
 //   k = Kunden (IDs, kommagetrennt), f = Formate, p = Prioritäten, s = Status bzw. Sortierspalte,
-//   d = Sortierrichtung, c = gewählte Person (Reiter)
+//   d = Sortierrichtung bzw. Disziplin (Hall of Fame), c = gewählte Person bzw. Client (Reiter)
 export const VIEW_FILTER_KEYS = {
   board: ["k", "f"],
   kalender: ["k"],
@@ -9,6 +9,7 @@ export const VIEW_FILTER_KEYS = {
   featureboard: ["s"],
   "nach-clients": ["c", "s", "d"],
   "nach-cutter": ["c", "s", "d"],
+  "hall-of-fame": ["c", "d"],
 } as const;
 
 export type FilterView = keyof typeof VIEW_FILTER_KEYS;

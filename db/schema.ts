@@ -1,4 +1,16 @@
-import { bigint, boolean, date, index, integer, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  bigint,
+  boolean,
+  date,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  unique,
+} from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 export * from "./auth-schema";
@@ -49,7 +61,7 @@ export const customerMembers = pgTable(
     isAdmin: boolean("is_admin").notNull().default(false),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (t) => [index("customer_members_customer_idx").on(t.customerId)]
+  (t) => [index("customer_members_customer_idx").on(t.customerId)],
 );
 
 export const jobs = pgTable("jobs", {
@@ -103,7 +115,46 @@ export const jobCutters = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.jobId, t.userId] })]
+  (t) => [primaryKey({ columns: [t.jobId, t.userId] })],
+);
+
+// Veröffentlichungen eines fertigen Videos (Hall of Fame): je Plattform ein Link mit dem letzten Views-Stand.
+// Ein Video zählt einmal – seine Views sind die Summe aller Plattformen.
+export const publications = pgTable(
+  "publications",
+  {
+    id: text("id").primaryKey(),
+    jobId: text("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    // "youtube" | "tiktok" | "instagram"
+    platform: text("platform").notNull(),
+    url: text("url").notNull(),
+    // YouTube-Video-ID, TikTok-Video-ID bzw. Instagram-Kurzcode (aus dem Link gelesen)
+    externalId: text("external_id"),
+    // Letzter bekannter Stand – wird bei Fehlern nie überschrieben oder auf 0 gesetzt
+    views: bigint("views", { mode: "number" }),
+    viewsAt: timestamp("views_at"),
+    // Letzter Abrufversuch und ggf. dessen Fehler (z. B. „Video nicht gefunden“)
+    checkedAt: timestamp("checked_at"),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [unique("publications_job_platform").on(t.jobId, t.platform)],
+);
+
+// Tagesstände je Veröffentlichung (Verlauf; ein Eintrag pro Tag, Wiener Zeit)
+export const publicationViews = pgTable(
+  "publication_views",
+  {
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
+    day: date("day").notNull(),
+    views: bigint("views", { mode: "number" }).notNull(),
+    fetchedAt: timestamp("fetched_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.publicationId, t.day] })],
 );
 
 // Dateien eines Projekts: "roh" vom Client, "fertig" vom Cutter
@@ -139,7 +190,7 @@ export const jobComments = pgTable(
     // Zuletzt bearbeitet (nur der Verfasser kann bearbeiten)
     editedAt: timestamp("edited_at"),
   },
-  (t) => [index("job_comments_job_idx").on(t.jobId)]
+  (t) => [index("job_comments_job_idx").on(t.jobId)],
 );
 
 // Inbox: eine Benachrichtigung pro Empfänger – gehört zu einem Projekt (jobId), einem Feature (featureId) oder einer Projekt-Idee (ideaId)
@@ -161,7 +212,7 @@ export const notifications = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
     readAt: timestamp("read_at"),
   },
-  (t) => [index("notifications_user_idx").on(t.userId, t.readAt)]
+  (t) => [index("notifications_user_idx").on(t.userId, t.readAt)],
 );
 
 // Freigaben: welcher Cutter betreut welche Kunden (sieht nur deren Projekte)
@@ -176,7 +227,7 @@ export const cutterClients = pgTable(
       .references(() => customers.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.cutterId, t.clientId] })]
+  (t) => [primaryKey({ columns: [t.cutterId, t.clientId] })],
 );
 
 // Zusatzangaben zu Kunden und Cuttern (Logo, Telefon, Links, Infos für Cutter)
@@ -242,7 +293,7 @@ export const projectIdeas = pgTable(
     doneBy: text("done_by").references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (t) => [index("project_ideas_customer_idx").on(t.customerId)]
+  (t) => [index("project_ideas_customer_idx").on(t.customerId)],
 );
 
 // Stimmen, Kommentare und Screenshots zu Projekt-Ideen (wie beim Featureboard)
@@ -257,7 +308,7 @@ export const ideaVotes = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.ideaId, t.userId] })]
+  (t) => [primaryKey({ columns: [t.ideaId, t.userId] })],
 );
 
 export const ideaComments = pgTable(
@@ -272,7 +323,7 @@ export const ideaComments = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
     editedAt: timestamp("edited_at"),
   },
-  (t) => [index("idea_comments_idea_idx").on(t.ideaId)]
+  (t) => [index("idea_comments_idea_idx").on(t.ideaId)],
 );
 
 export const ideaAttachments = pgTable(
@@ -287,7 +338,7 @@ export const ideaAttachments = pgTable(
     size: integer("size").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (t) => [index("idea_attachments_idea_idx").on(t.ideaId)]
+  (t) => [index("idea_attachments_idea_idx").on(t.ideaId)],
 );
 
 // ---------- Featureboard ----------
@@ -314,7 +365,7 @@ export const featureVotes = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.featureId, t.userId] })]
+  (t) => [primaryKey({ columns: [t.featureId, t.userId] })],
 );
 
 // Kommentare: schreiben dürfen nur der Ersteller des Features und Admins
@@ -330,7 +381,7 @@ export const featureComments = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
     editedAt: timestamp("edited_at"),
   },
-  (t) => [index("feature_comments_feature_idx").on(t.featureId)]
+  (t) => [index("feature_comments_feature_idx").on(t.featureId)],
 );
 
 // Screenshots (im Browser verkleinert, als data-URL gespeichert, max. 5 pro Feature)
@@ -345,5 +396,5 @@ export const featureAttachments = pgTable(
     size: integer("size").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (t) => [index("feature_attachments_feature_idx").on(t.featureId)]
+  (t) => [index("feature_attachments_feature_idx").on(t.featureId)],
 );

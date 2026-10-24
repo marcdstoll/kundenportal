@@ -8,7 +8,13 @@ export const SETTING_KEYS = {
   onboardingCutter: "onboarding_video_cutter",
   // Frame.io-Ordner für persönliche Begrüßungsvideos (wird beim ersten Video angelegt)
   welcomeFolder: "frameio_welcome_folder",
+  // Hall of Fame auch für Cutter sichtbar ("1" = ja); zum Start nur Admins
+  hallOfFameCutter: "hall_of_fame_cutter",
 } as const;
+
+export async function hallOfFameForCutters() {
+  return (await getSetting(SETTING_KEYS.hallOfFameCutter)) === "1";
+}
 
 export async function getSetting(key: string) {
   const [row] = await db.select({ value: settings.value }).from(settings).where(eq(settings.key, key));

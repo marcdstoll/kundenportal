@@ -2,6 +2,7 @@ import Link from "next/link";
 import { SignOutButton } from "@/app/dashboard/sign-out-button";
 import { clientLogos, listCustomers, loadColors, loadInbox, unreadByJob } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/session";
+import { hallOfFameForCutters } from "@/lib/settings";
 import { Avatar } from "./ui";
 import { colorStyles, personColor } from "@/lib/colors";
 import { NavLinks, type NavItem } from "./nav-links";
@@ -25,7 +26,7 @@ function projectNav(featureUnread: number, ideaUnread: number): NavItem[] {
   ];
 }
 
-function navFor(role: string): NavItem[] {
+function navFor(role: string, hallOfFame: boolean): NavItem[] {
   if (role === "kunde") {
     return [
       { href: "/kunde", label: "Projekte" },
@@ -40,6 +41,7 @@ function navFor(role: string): NavItem[] {
       { href: "/kalender", label: "Kalender" },
       { href: "/nach-cutter", label: "Meine Projekte" },
       { href: "/meine-clients", label: "Meine Clients" },
+      ...(hallOfFame ? [{ href: "/hall-of-fame", label: "Hall of Fame" }] : []),
     ];
   }
   return [
@@ -49,6 +51,7 @@ function navFor(role: string): NavItem[] {
     { href: "/nach-clients", label: "Nach Clients" },
     { href: "/cutter", label: "Cutter" },
     { href: "/clients", label: "Clients" },
+    { href: "/hall-of-fame", label: "Hall of Fame" },
   ];
 }
 
@@ -133,14 +136,19 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
       <div className="hidden items-center justify-between gap-2 pl-2.5 pt-1 md:flex">
         <Link href="/dashboard" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
           {/*<span className="rec-dot size-2.5 rounded-full bg-rec" aria-hidden /> */}
-          <img src="/lightLogo.png" alt="Great Influence" className="logo-on-light h-6 w-auto"/>
-          <img src="/darkLogo.png" alt="Great Influence" className="logo-on-dark h-6 w-auto"/>
+          <img src="/lightLogo.png" alt="Great Influence" className="logo-on-light h-6 w-auto" />
+          <img src="/darkLogo.png" alt="Great Influence" className="logo-on-dark h-6 w-auto" />
         </Link>
         {inbox}
       </div>
 
       <div className="space-y-0.5">
-        <NavLinks items={[...navFor(user.role), ...projectNav(unread.features, unread.ideas)]} />
+        <NavLinks
+          items={[
+            ...navFor(user.role, user.role === "cutter" && (await hallOfFameForCutters())),
+            ...projectNav(unread.features, unread.ideas),
+          ]}
+        />
         <UploadTree />
       </div>
 
