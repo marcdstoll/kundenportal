@@ -1,7 +1,7 @@
 import { and, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { jobCutters, jobs, publications, user } from "@/db/schema";
-import { DISCIPLINES, type Discipline, type PublicationPlatform } from "@/lib/publications";
+import { DISCIPLINES, PUBLICATION_PLATFORMS, type Discipline, type PublicationPlatform } from "@/lib/publications";
 
 // Hall of Fame je Client und Disziplin (siehe Briefing 04, Punkt 2):
 //   Gesamtviews je Cutter = Summe der Views seiner Videos (Video = Summe aller Plattform-Views)
@@ -25,6 +25,7 @@ export type HofVideo = {
   cutters: { id: string; name: string }[];
   publications: HofPublication[];
   views: number; // Summe der bekannten Plattform-Views
+  platformViews: Record<PublicationPlatform, number>;
   counted: boolean; // mindestens ein Views-Stand vorhanden
 };
 
@@ -34,7 +35,11 @@ export type HofRow = {
   videos: number;
   totalViews: number;
   avgViews: number;
+  // Aufteilung der Gesamtviews nach Plattform
+  platformViews: Record<PublicationPlatform, number>;
 };
+
+const zero = (): Record<PublicationPlatform, number> => ({ youtube: 0, tiktok: 0, instagram: 0 });
 
 export async function hallOfFame(customerId: string, discipline: Discipline) {
   const formats = [...DISCIPLINES[discipline].formats] as string[];
@@ -74,18 +79,33 @@ export async function hallOfFame(customerId: string, discipline: Discipline) {
           lastError: p.lastError,
         })),
         views: known.reduce((sum, p) => sum + (p.views ?? 0), 0),
+        platformViews: Object.fromEntries(
+          PUBLICATION_PLATFORMS.map((pl) => [
+            pl,
+            known.filter((p) => p.platform === pl).reduce((s, p) => s + (p.views ?? 0), 0),
+          ]),
+        ) as Record<PublicationPlatform, number>,
         counted: known.length > 0,
       };
     })
     .filter((v) => v.status === "online" || v.publications.length > 0)
     .sort((a, b) => b.views - a.views || a.title.localeCompare(b.title));
 
-  const byCutter = new Map<string, { cutter: { id: string; name: string }; videos: number; totalViews: number }>();
+  const byCutter = new Map<
+    string,
+    {
+      cutter: { id: string; name: string };
+      videos: number;
+      totalViews: number;
+      platformViews: Record<PublicationPlatform, number>;
+    }
+  >();
   for (const v of videos.filter((v) => v.counted)) {
     for (const c of v.cutters) {
-      const row = byCutter.get(c.id) ?? { cutter: c, videos: 0, totalViews: 0 };
+      const row = byCutter.get(c.id) ?? { cutter: c, videos: 0, totalViews: 0, platformViews: zero() };
       row.videos++;
       row.totalViews += v.views;
+      for (const pl of PUBLICATION_PLATFORMS) row.platformViews[pl] += v.platformViews[pl];
       byCutter.set(c.id, row);
     }
   }
@@ -96,12 +116,5 @@ export async function hallOfFame(customerId: string, discipline: Discipline) {
     )
     .map((r, i) => ({ ...r, rank: i + 1 }));
 
-  const stamps = pubs.map((p) => p.viewsAt?.getTime() ?? 0).filter(Boolean);
-  return {
-    videos,
-    ranking,
-    updatedAt: stamps.length ? new Date(Math.max(...stamps)) : null,
-    withoutLink: videos.filter((v) => v.publications.length === 0).length,
-    withoutCutter: videos.filter((v) => v.counted && v.cutters.length === 0).length,
-  };
+  return { videos, ranking };
 }

@@ -1,15 +1,13 @@
 "use client";
 
-import { useOptimistic, useState, useTransition } from "react";
-import { runViewSyncNow, setHallOfFameForCutters } from "@/app/hall-of-fame-actions";
-import type { SyncResult } from "@/lib/view-sync";
-import { buttonSecondary } from "@/app/components/ui";
-import { runSummary } from "@/lib/sync-summary";
+import { useState, useTransition } from "react";
+import { runViewSyncNow } from "@/app/hall-of-fame-actions";
+import { buttonSecondary, formatDateTime } from "@/app/components/ui";
 
-// Views-Abruf von Hand starten – gleiches Vorgehen wie der nächtliche Lauf
+// Views-Abruf von Hand starten – gleiches Vorgehen wie der nächtliche Lauf; danach kurze Rückmeldung mit Zeitpunkt
 export function ViewSyncButton() {
   const [pending, startTransition] = useTransition();
-  const [result, setResult] = useState<SyncResult | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   return (
     <div className="space-y-2">
       <button
@@ -17,41 +15,23 @@ export function ViewSyncButton() {
         disabled={pending}
         onClick={() =>
           startTransition(async () => {
-            setResult(await runViewSyncNow());
+            setMsg(null);
+            const r = await runViewSyncNow();
+            setMsg(
+              r.error
+                ? { ok: false, text: r.error }
+                : { ok: true, text: `Views abgerufen ✓ (${formatDateTime(r.finishedAt)})` },
+            );
           })
         }
       >
         {pending ? "Views werden abgerufen …" : "Views jetzt abrufen"}
       </button>
-      {result && (
-        <p className={`text-sm ${result.error ? "text-danger" : "text-[var(--st-online)]"}`} role="status">
-          {result.error ? `⚠ ${result.error}` : `✓ ${runSummary(result)}`}
+      {msg && (
+        <p className={`text-sm ${msg.ok ? "text-[var(--st-online)]" : "text-danger"}`} role="status">
+          {msg.text}
         </p>
       )}
     </div>
-  );
-}
-
-// Hall of Fame für Cutter freigeben (zum Start nur Admins)
-export function CutterVisibilityToggle({ on }: { on: boolean }) {
-  const [pending, startTransition] = useTransition();
-  const [checked, setChecked] = useOptimistic(on);
-  return (
-    <label className="flex items-center gap-2 text-sm">
-      <input
-        type="checkbox"
-        className="size-4 accent-[var(--accent)]"
-        checked={checked}
-        disabled={pending}
-        onChange={(e) => {
-          const next = e.target.checked;
-          startTransition(async () => {
-            setChecked(next);
-            await setHallOfFameForCutters(next);
-          });
-        }}
-      />
-      Für Cutter sichtbar
-    </label>
   );
 }

@@ -2,7 +2,6 @@ import Link from "next/link";
 import { SignOutButton } from "@/app/dashboard/sign-out-button";
 import { clientLogos, listCustomers, loadColors, loadInbox, unreadByJob } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/session";
-import { hallOfFameForCutters } from "@/lib/settings";
 import { Avatar } from "./ui";
 import { colorStyles, personColor } from "@/lib/colors";
 import { NavLinks, type NavItem } from "./nav-links";
@@ -26,7 +25,7 @@ function projectNav(featureUnread: number, ideaUnread: number): NavItem[] {
   ];
 }
 
-function navFor(role: string, hallOfFame: boolean): NavItem[] {
+function navFor(role: string): NavItem[] {
   if (role === "kunde") {
     return [
       { href: "/kunde", label: "Projekte" },
@@ -41,7 +40,6 @@ function navFor(role: string, hallOfFame: boolean): NavItem[] {
       { href: "/kalender", label: "Kalender" },
       { href: "/nach-cutter", label: "Meine Projekte" },
       { href: "/meine-clients", label: "Meine Clients" },
-      ...(hallOfFame ? [{ href: "/hall-of-fame", label: "Hall of Fame" }] : []),
     ];
   }
   return [
@@ -143,12 +141,7 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
       </div>
 
       <div className="space-y-0.5">
-        <NavLinks
-          items={[
-            ...navFor(user.role, user.role === "cutter" && (await hallOfFameForCutters())),
-            ...projectNav(unread.features, unread.ideas),
-          ]}
-        />
+        <NavLinks items={[...navFor(user.role), ...projectNav(unread.features, unread.ideas)]} />
         <UploadTree />
       </div>
 

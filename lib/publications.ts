@@ -16,6 +16,9 @@ export const PLATFORM_PLACEHOLDERS: Record<PublicationPlatform, string> = {
   instagram: "instagram.com/reel/…",
 };
 
+// Links lassen sich erst eintragen, wenn das Video fertig ist
+export const PUBLICATION_STATUSES = ["ready_to_post", "online"];
+
 // Disziplinen der Rangliste: Shortform + Clipping gemeinsam, Longform getrennt
 export const DISCIPLINES = {
   short: { label: "Shortform + Clipping", formats: ["shortform", "clipping"] },

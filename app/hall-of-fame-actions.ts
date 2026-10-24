@@ -5,10 +5,10 @@ import { refresh } from "next/cache";
 import { db } from "@/db";
 import { jobs, publications } from "@/db/schema";
 import { requireUser } from "@/lib/session";
-import { SETTING_KEYS, setSetting } from "@/lib/settings";
 import {
   PLATFORM_LABELS,
   PUBLICATION_PLATFORMS,
+  PUBLICATION_STATUSES,
   parsePublicationUrl,
   type PublicationPlatform,
 } from "@/lib/publications";
@@ -16,15 +16,18 @@ import { newPublicationId, runViewSync, type SyncResult } from "@/lib/view-sync"
 
 type Result<T = null> = { ok: true; data: T } | { ok: false; error: string };
 
-// Veröffentlichungs-Links eines Projekts speichern (nur Admins). Leeres Feld = Link entfernen.
+// Veröffentlichungs-Links eines Projekts speichern (nur Admins, ab „Ready to post“). Leeres Feld = Link entfernen.
 // Neue YouTube-Links werden direkt abgerufen, damit die Views gleich sichtbar sind.
 export async function savePublications(
   jobId: string,
   links: Partial<Record<PublicationPlatform, string>>,
 ): Promise<Result<{ updated: number; failed: number }>> {
   await requireUser("admin");
-  const [job] = await db.select({ id: jobs.id }).from(jobs).where(eq(jobs.id, jobId));
+  const [job] = await db.select({ id: jobs.id, status: jobs.status }).from(jobs).where(eq(jobs.id, jobId));
   if (!job) return { ok: false, error: "Projekt nicht gefunden." };
+  if (!PUBLICATION_STATUSES.includes(job.status)) {
+    return { ok: false, error: "Links lassen sich erst bei „Ready to post“ oder „Online“ eintragen." };
+  }
 
   // Erst alles prüfen, dann speichern
   const parsed = new Map<PublicationPlatform, { url: string; externalId: string } | null>();
@@ -74,11 +77,4 @@ export async function runViewSyncNow(): Promise<SyncResult> {
   const result = await runViewSync("manual");
   refresh();
   return result;
-}
-
-// Hall of Fame für Cutter freigeben oder wieder verbergen
-export async function setHallOfFameForCutters(on: boolean) {
-  await requireUser("admin");
-  await setSetting(SETTING_KEYS.hallOfFameCutter, on ? "1" : null);
-  refresh();
 }

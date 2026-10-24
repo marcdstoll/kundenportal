@@ -21,7 +21,7 @@ import { PublicationsForm, type PublicationView } from "./publications-form";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { publications } from "@/db/schema";
-import type { PublicationPlatform } from "@/lib/publications";
+import { PUBLICATION_STATUSES, type PublicationPlatform } from "@/lib/publications";
 import { InlinePicker } from "./inline-picker";
 import {
   AddFiles,
@@ -284,7 +284,9 @@ export async function JobDrawer({
   const versions = job.files.filter((f) => f.kind === "fertig").length;
   const paused = !!job.cancelRequestedAt;
   const suggestion = job.status !== "entwurf" ? await nextPartTitle(job) : "";
-  const pubs: PublicationView[] = isAdmin
+  // Veröffentlichungs-Links (Hall of Fame): nur Admins, erst ab „Ready to post“
+  const canPublish = isAdmin && PUBLICATION_STATUSES.includes(job.status);
+  const pubs: PublicationView[] = canPublish
     ? (await db.select().from(publications).where(eq(publications.jobId, job.id))).map((p) => ({
         platform: p.platform as PublicationPlatform,
         url: p.url,
@@ -383,7 +385,7 @@ export async function JobDrawer({
         </Section>
       )}
 
-      {isAdmin && job.status !== "storniert" && (
+      {canPublish && (
         <Section title="Veröffentlichungen">
           <PublicationsForm key={pubs.map((p) => `${p.url}|${p.views}`).join(",")} jobId={job.id} publications={pubs} />
         </Section>
