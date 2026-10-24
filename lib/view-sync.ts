@@ -72,12 +72,94 @@ async function fetchYouTube(ids: string[]): Promise<FetchResult> {
   return { views, error: null };
 }
 
-// TikTok und Instagram folgen (Apify) – bis dahin werden die Links gespeichert, aber nicht abgerufen
-const NOT_CONNECTED = "Abruf noch nicht angebunden (folgt über Apify).";
+// TikTok und Instagram über Apify (öffentliche Zahlen, ohne Login). Ohne APIFY_TOKEN werden die Links nur gespeichert.
+const NOT_CONNECTED = "Abruf noch nicht angebunden (APIFY_TOKEN fehlt).";
 
-async function fetchPlatform(platform: PublicationPlatform, ids: string[]): Promise<FetchResult | null> {
-  if (platform === "youtube") return fetchYouTube(ids);
-  return null;
+// Welche Apify-Scraper genutzt werden – über Umgebungsvariablen austauschbar, ohne Code zu ändern
+const APIFY_ACTORS: Record<"tiktok" | "instagram", string> = {
+  tiktok: process.env.APIFY_TIKTOK_ACTOR || "clockworks~tiktok-video-scraper",
+  instagram: process.env.APIFY_INSTAGRAM_ACTOR || "apify~instagram-scraper",
+};
+
+// Kosten begrenzen: TikTok/Instagram nur so viele Tage nach dem Eintragen des Links aktualisieren (0 = unbegrenzt).
+// Danach bleibt der letzte Stand stehen – er wird nicht gelöscht und zählt weiter.
+export const APIFY_MAX_AGE_DAYS = Number(process.env.APIFY_MAX_AGE_DAYS ?? 30);
+
+export function apifyConnected() {
+  return !!process.env.APIFY_TOKEN;
+}
+
+type ApifyItem = {
+  id?: string | number;
+  webVideoUrl?: string;
+  playCount?: number | string;
+  shortCode?: string;
+  url?: string;
+  videoPlayCount?: number | string | null;
+  videoViewCount?: number | string | null;
+};
+
+// Aus einem Ergebnis die ID (TikTok-Video-ID bzw. Instagram-Kurzcode) und die Views lesen
+function readApifyItem(platform: "tiktok" | "instagram", item: ApifyItem): [string, number] | null {
+  if (platform === "tiktok") {
+    const id = item.id ? String(item.id) : item.webVideoUrl?.match(/\/video\/(\d+)/)?.[1];
+    const n = Number(item.playCount);
+    return id && Number.isFinite(n) ? [id, n] : null;
+  }
+  const code = item.shortCode ?? item.url?.match(/\/(?:p|reels?|tv)\/([A-Za-z0-9_-]+)/)?.[1];
+  // Instagram zeigt öffentlich die Wiedergaben („Plays“); ältere Felder heißen videoViewCount.
+  // Bild-Beiträge haben keine Views – dann kein Treffer.
+  const raw = item.videoPlayCount ?? item.videoViewCount;
+  if (!code || raw == null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? [code, n] : null;
+}
+
+async function fetchApify(platform: "tiktok" | "instagram", urls: string[]): Promise<FetchResult> {
+  const views = new Map<string, number>();
+  const token = process.env.APIFY_TOKEN!;
+  const base = process.env.APIFY_API_URL || "https://api.apify.com/v2";
+  // Ein Lauf pro 100 Links; Apify wartet höchstens 300 Sekunden auf das Ergebnis
+  for (let i = 0; i < urls.length; i += 100) {
+    const chunk = urls.slice(i, i + 100);
+    const input =
+      platform === "tiktok"
+        ? { postURLs: chunk }
+        : { directUrls: chunk, resultsType: "posts", resultsLimit: 1, addParentData: false };
+    try {
+      const res = await fetch(`${base}/acts/${APIFY_ACTORS[platform]}/run-sync-get-dataset-items?timeout=290`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify(input),
+        cache: "no-store",
+        signal: AbortSignal.timeout(300_000),
+      });
+      const body = (await res.json().catch(() => null)) as ApifyItem[] | { error?: { message?: string } } | null;
+      if (!res.ok || !Array.isArray(body)) {
+        const msg = body && !Array.isArray(body) ? body.error?.message : null;
+        return {
+          views,
+          error: res.status === 408 ? "Apify hat zu lange gebraucht (Zeitlimit)." : msg || `HTTP ${res.status}`,
+        };
+      }
+      for (const item of body) {
+        const hit = readApifyItem(platform, item);
+        if (hit) views.set(hit[0], hit[1]);
+      }
+    } catch (e) {
+      return { views, error: e instanceof Error ? e.message : "Verbindung fehlgeschlagen" };
+    }
+  }
+  return { views, error: null };
+}
+
+async function fetchPlatform(
+  platform: PublicationPlatform,
+  pubs: { externalId: string; url: string }[],
+): Promise<FetchResult | null> {
+  if (platform === "youtube") return fetchYouTube([...new Set(pubs.map((p) => p.externalId))]);
+  if (!apifyConnected()) return null;
+  return fetchApify(platform, [...new Set(pubs.map((p) => p.url))]);
 }
 
 // ---------- Sperre gegen doppelte Läufe ----------
@@ -124,7 +206,13 @@ export async function runViewSync(trigger: SyncTrigger, onlyJobId?: string): Pro
 
   try {
     const rows = await db
-      .select({ id: publications.id, platform: publications.platform, externalId: publications.externalId })
+      .select({
+        id: publications.id,
+        platform: publications.platform,
+        externalId: publications.externalId,
+        url: publications.url,
+        createdAt: publications.createdAt,
+      })
       .from(publications)
       .innerJoin(jobs, eq(jobs.id, publications.jobId))
       .where(and(ne(jobs.status, "storniert"), onlyJobId ? eq(publications.jobId, onlyJobId) : undefined));
@@ -133,9 +221,15 @@ export async function runViewSync(trigger: SyncTrigger, onlyJobId?: string): Pro
     const errors: string[] = [];
 
     for (const platform of ["youtube", "tiktok", "instagram"] as PublicationPlatform[]) {
-      const pubs = rows.filter((r) => r.platform === platform && r.externalId);
+      const viaApify = platform !== "youtube";
+      // Direkt nach dem Speichern eines Links nur YouTube abrufen (schnell, kostenlos) – TikTok/Instagram im nächsten Lauf
+      if (viaApify && trigger === "link" && apifyConnected()) continue;
+      const maxAge = APIFY_MAX_AGE_DAYS > 0 ? Date.now() - APIFY_MAX_AGE_DAYS * 86_400_000 : 0;
+      const pubs = rows.filter(
+        (r) => r.platform === platform && r.externalId && (!viaApify || r.createdAt.getTime() >= maxAge),
+      ) as { id: string; externalId: string; url: string }[];
       if (pubs.length === 0) continue;
-      const fetched = await fetchPlatform(platform, [...new Set(pubs.map((p) => p.externalId!))]);
+      const fetched = await fetchPlatform(platform, pubs);
 
       if (!fetched) {
         result.skipped += pubs.length;
@@ -153,7 +247,7 @@ export async function runViewSync(trigger: SyncTrigger, onlyJobId?: string): Pro
 
       const now = new Date();
       for (const p of pubs) {
-        const views = fetched.views.get(p.externalId!);
+        const views = fetched.views.get(p.externalId);
         if (views !== undefined) {
           result.updated++;
           await db
