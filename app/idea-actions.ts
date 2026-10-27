@@ -5,7 +5,7 @@
 // - anlegen: Kunde (für sich) und Team (für einen Kunden)
 // - upvoten, Priorität setzen, kommentieren, Screenshots hinzufügen: alle, die die Idee sehen
 // - Status setzen: Admins und Cutter
-// - Idee/Screenshots löschen: Kunde, Ersteller, Admins · Kommentar bearbeiten: Verfasser · löschen: Verfasser, Admins
+// - Idee bearbeiten (Titel, Beschreibung), Idee/Screenshots löschen: Kunde, Ersteller, Admins · Kommentar bearbeiten: Verfasser · löschen: Verfasser, Admins
 
 import { randomUUID } from "crypto";
 import { and, eq, isNull } from "drizzle-orm";
@@ -104,6 +104,26 @@ export async function createIdea(input: { title: string; description: string; pr
     );
     refresh();
     return { id };
+  });
+}
+
+// Titel und Beschreibung nachträglich ändern (Kunde, Ersteller, Admins)
+export async function updateIdea(id: string, input: { title: string; description: string }) {
+  return run(async () => {
+    const me = await requireUser();
+    const idea = await getVisibleIdea(me, id);
+    if (!canManage(me, idea)) throw new Error("Keine Berechtigung.");
+    const title = input.title.trim();
+    const description = input.description.trim();
+    if (!title) throw new Error("Bitte einen Titel eingeben.");
+    if (title.length > 200) throw new Error("Der Titel ist zu lang (max. 200 Zeichen).");
+    if (description.length > 5000) throw new Error("Die Beschreibung ist zu lang (max. 5000 Zeichen).");
+    await db
+      .update(projectIdeas)
+      .set({ title, note: description || null })
+      .where(eq(projectIdeas.id, id));
+    refresh();
+    return null;
   });
 }
 

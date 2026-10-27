@@ -18,6 +18,8 @@ import {
   type IdeaCommentView,
 } from "./idea-forms";
 import { LinkedText } from "@/app/components/linked-text";
+import { EditDetails } from "@/app/components/edit-details";
+import { updateIdea } from "@/app/idea-actions";
 
 export const fmtDay = (d: Date) =>
   d.toLocaleDateString("de-DE", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Berlin" });
@@ -176,7 +178,13 @@ export async function IdeaDrawer({
           </dd>
         </dl>
 
-        {idea.note && <LinkedText text={idea.note} className="text-sm" />}
+        {canManage ? (
+          <EditDetails title={idea.title} description={idea.note ?? ""} save={updateIdea.bind(null, idea.id)}>
+            {idea.note && <LinkedText text={idea.note} className="text-sm" />}
+          </EditDetails>
+        ) : (
+          idea.note && <LinkedText text={idea.note} className="text-sm" />
+        )}
 
         <section className="space-y-2">
           <h3 className="text-sm font-medium">Screenshots</h3>

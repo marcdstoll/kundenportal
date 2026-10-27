@@ -184,6 +184,7 @@ export type NewJobInput = {
   content: string;
   specialNotes: string;
   customerId?: string; // nur Admins/Cutter: Projekt für einen Client anlegen
+  cutterIds?: string[]; // nur Admins: Cutter direkt zuordnen → Projekt landet in der Warteschlange
 };
 
 // Schritt 1: Projekt als Entwurf anlegen, inkl. Ordner in Frame.io
@@ -217,6 +218,14 @@ export async function createJob(input: NewJobInput) {
       throw new Error("Dieser Kunde ist für dich nicht freigegeben.");
     }
 
+    // Admins können schon beim Anlegen Cutter zuordnen (nur echte Cutter/Admins)
+    const wanted = me.role === "admin" ? [...new Set(input.cutterIds ?? [])].slice(0, 10) : [];
+    const cutterIds = wanted.length
+      ? (await db.select({ id: user.id, role: user.role }).from(user).where(inArray(user.id, wanted)))
+          .filter((u) => u.role === "cutter" || u.role === "admin")
+          .map((u) => u.id)
+      : [];
+
     const folder = await createJobFolder(`${customer.name} – ${input.title.trim()}`);
     const id = randomUUID();
     await db.insert(jobs).values({
@@ -233,6 +242,7 @@ export async function createJob(input: NewJobInput) {
       frameioFolderUrl: folder.url,
       rawFolderId: folder.rawId,
     });
+    for (const c of cutterIds) await addCutterRow(id, c);
     return { jobId: id };
   });
 }
@@ -313,6 +323,7 @@ export async function confirmUpload(fileRowId: string) {
 }
 
 // Schritt 3: Projekt abschicken → erscheint bei den Cuttern in "To Dos"
+// (bzw. direkt in der "Warteschlange", wenn ein Admin schon Cutter zugeordnet hat)
 export async function submitJob(jobId: string) {
   return run(async () => {
     const me = await requireUser();
@@ -324,7 +335,8 @@ export async function submitJob(jobId: string) {
       .where(and(eq(jobFiles.jobId, jobId), eq(jobFiles.kind, "roh"), eq(jobFiles.uploaded, true)));
     // Kunden müssen Material mitschicken; Staff darf ohne Dateien anlegen (z. B. Material liegt schon in Frame.io)
     if (files.length === 0 && me.role === "kunde") throw new Error("Bitte mindestens eine Datei hochladen.");
-    await changeStatus(jobId, "entwurf", "todo", { submittedAt: new Date() });
+    const assigned = (await cutterIdsOf(jobId)).length > 0;
+    await changeStatus(jobId, "entwurf", assigned ? "warteschlange" : "todo", { submittedAt: new Date() });
     refresh();
     return null;
   });
@@ -441,13 +453,17 @@ export async function submitForReview(jobId: string, reviewUrl?: string) {
   });
 }
 
-// Weiteren Cutter zum Projekt hinzufügen (Admin oder bereits zugeordneter Cutter)
+// Weiteren Cutter zum Projekt hinzufügen (Admin oder bereits zugeordneter Cutter).
+// Ein To-do mit zugeordnetem Cutter wandert direkt in die Warteschlange.
 export async function addCutter(jobId: string, cutterId: string) {
   return run(async () => {
     await requireCutterOf(jobId);
     const [c] = await db.select({ role: user.role }).from(user).where(eq(user.id, cutterId));
     if (!c || (c.role !== "cutter" && c.role !== "admin")) throw new Error("Kein Cutter.");
+    const job = await getJob(jobId);
+    if (job.status === "todo") assertNotPaused(job);
     await addCutterRow(jobId, cutterId);
+    if (job.status === "todo") await changeStatus(jobId, "todo", "warteschlange");
     refresh();
     return null;
   });

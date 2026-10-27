@@ -2,7 +2,7 @@
 
 // Featureboard: vorschlagen (alle), upvoten (alle), Status setzen (Admins),
 // kommentieren (Ersteller + Admins), Kommentar bearbeiten (Verfasser), Kommentar löschen (Verfasser + Admins),
-// Feature löschen (Ersteller + Admins). Inbox-Meldungen gehen an Admins bzw. an den Ersteller.
+// Feature bearbeiten/löschen (Ersteller + Admins). Inbox-Meldungen gehen an Admins bzw. an den Ersteller.
 
 import { randomUUID } from "crypto";
 import { and, eq, isNull } from "drizzle-orm";
@@ -58,6 +58,26 @@ export async function createFeature(input: { title: string; description: string 
     await notifyFeature(id, me.id, await adminIds(), "feature", `Neuer Vorschlag: „${short(title)}“`);
     refresh();
     return { id };
+  });
+}
+
+// Titel und Beschreibung nachträglich ändern (Ersteller + Admins)
+export async function updateFeature(id: string, input: { title: string; description: string }) {
+  return run(async () => {
+    const me = await requireUser();
+    const f = await getFeature(id);
+    if (me.role !== "admin" && f.createdBy !== me.id) throw new Error("Keine Berechtigung.");
+    const title = input.title.trim();
+    const description = input.description.trim();
+    if (!title) throw new Error("Bitte die Idee in einem Satz beschreiben.");
+    if (title.length > 200) throw new Error("Die Idee ist zu lang (max. 200 Zeichen).");
+    if (description.length > 5000) throw new Error("Die Beschreibung ist zu lang (max. 5000 Zeichen).");
+    await db
+      .update(featureRequests)
+      .set({ title, description: description || null })
+      .where(eq(featureRequests.id, id));
+    refresh();
+    return null;
   });
 }
 

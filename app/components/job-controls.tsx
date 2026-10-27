@@ -205,9 +205,13 @@ export function JobControls({ job, isAdmin, isAssigned, staff, beforeBilling }: 
         </button>
       )}
 
-      {/* ---------- Cutter verwalten (Mehrfachauswahl) ---------- */}
-      {canWork && job.status !== "todo" && (
-        <Section title="Cutter">
+      {/* ---------- Cutter verwalten (Mehrfachauswahl) ----------
+          Bei To-dos nur für Admins: Zuordnen schiebt das Projekt direkt in die Warteschlange */}
+      {canWork && (job.status !== "todo" || isAdmin) && (
+        <Section title={job.status === "todo" ? "Cutter zuweisen" : "Cutter"}>
+          {job.status === "todo" && (
+            <p className="text-xs text-muted">Mit Cutter wandert das Projekt direkt in dessen Warteschlange.</p>
+          )}
           <MultiSelect
             label="Cutter"
             options={staff.map((s) => ({ value: s.id, label: s.name }))}

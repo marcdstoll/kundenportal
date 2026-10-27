@@ -13,6 +13,8 @@ type Props = {
   clients: { id: string; name: string }[];
   // Admins und Cutter legen Projekte für einen Client an (Dateien optional)
   isStaff: boolean;
+  // Nur für Admins: Cutter direkt zuordnen (leer = Feld wird nicht angezeigt)
+  cutters: { value: string; label: string }[];
 };
 
 type FieldName = "customerId" | "title" | "platforms" | "videoLength" | "content" | "specialNotes" | "files";
@@ -37,8 +39,9 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 
 const EMPTY = { customerId: "", title: "", videoLength: "", content: "", specialNotes: "" };
 
-export function NewJobForm({ clients, isStaff }: Props) {
+export function NewJobForm({ clients, isStaff, cutters }: Props) {
   const [values, setValues] = useState(EMPTY);
+  const [cutterIds, setCutterIds] = useState<string[]>([]);
   const [format, setFormat] = useState<string>(FORMATS[0].value);
   const [platforms, setPlatforms] = useState<string[]>([]);
   const [files, setFiles] = useState<FileState[]>([]);
@@ -85,6 +88,7 @@ export function NewJobForm({ clients, isStaff }: Props) {
         content: values.content,
         specialNotes: values.specialNotes,
         customerId: isStaff ? values.customerId : undefined,
+        cutterIds: cutters.length ? cutterIds : undefined,
       },
       files.map((f) => f.file),
     );
@@ -93,6 +97,7 @@ export function NewJobForm({ clients, isStaff }: Props) {
     setValues(EMPTY);
     setFormat(FORMATS[0].value);
     setPlatforms([]);
+    setCutterIds([]);
     setFiles([]);
     setFileInputKey((k) => k + 1);
     setSuccess(
@@ -118,6 +123,25 @@ export function NewJobForm({ clients, isStaff }: Props) {
             ))}
           </select>
         </Field>
+      )}
+
+      {cutters.length > 0 && (
+        <div className="space-y-1.5">
+          <span className="text-sm text-muted">Cutter (optional)</span>
+          <MultiSelect
+            label="Cutter"
+            options={cutters}
+            value={cutterIds}
+            onChange={setCutterIds}
+            placeholder="Cutter wählen …"
+            disabled={busy}
+          />
+          <span className="block text-xs text-muted">
+            {cutterIds.length
+              ? "Das Projekt landet direkt in der Warteschlange der gewählten Cutter."
+              : "Ohne Cutter landet das Projekt wie gewohnt bei den To-dos."}
+          </span>
+        </div>
       )}
 
       <Field label="Titel" error={errors.title}>

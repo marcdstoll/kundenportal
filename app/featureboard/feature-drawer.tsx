@@ -16,6 +16,8 @@ import {
   type CommentView,
 } from "./feature-forms";
 import { LinkedText } from "@/app/components/linked-text";
+import { EditDetails } from "@/app/components/edit-details";
+import { updateFeature } from "@/app/feature-actions";
 
 export const fmtDay = (d: Date) =>
   d.toLocaleDateString("de-DE", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Berlin" });
@@ -154,7 +156,13 @@ export async function FeatureDrawer({
           <dd>{f.completedAt ? fmtDay(f.completedAt) : <span className="text-muted">–</span>}</dd>
         </dl>
 
-        {f.description && <LinkedText text={f.description} className="text-sm" />}
+        {canManage ? (
+          <EditDetails title={f.title} description={f.description ?? ""} save={updateFeature.bind(null, f.id)}>
+            {f.description && <LinkedText text={f.description} className="text-sm" />}
+          </EditDetails>
+        ) : (
+          f.description && <LinkedText text={f.description} className="text-sm" />
+        )}
 
         {(images.length > 0 || canManage) && (
           <section className="space-y-2">
