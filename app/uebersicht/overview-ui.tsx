@@ -91,7 +91,6 @@ export function Banner({
           className="flex h-28 w-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-line text-sm text-muted transition-colors hover:border-accent hover:text-text"
         >
           <span>{pending ? "Lädt hoch …" : "＋ Banner hinzufügen"}</span>
-          <span className="text-xs">Breites Bild, z. B. 2400 × 600 px · nur Admins können es setzen</span>
         </button>
         {fileInput}
         {error && <p className="mt-2 text-sm text-danger">{error}</p>}
