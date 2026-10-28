@@ -3,6 +3,8 @@ import type { JobView } from "@/lib/queries";
 import type { FilterView } from "@/lib/view-filters";
 import { BilledToggle } from "./billed-toggle";
 import { FilterButton } from "./filter-button";
+import { DeadlineBadge } from "./deadline-badge";
+import { jobDeadlineWarning, todayVienna } from "@/lib/deadline";
 import { Avatar, ExternalLink, FormatTag, Person, StatusBadge, formatDate, shortLink } from "./ui";
 
 import { STATUSES } from "@/lib/status";
@@ -87,6 +89,7 @@ export function JobTable({ jobs, hrefFor, isAdmin, sort, view, logos }: Props) {
     return <p className="px-1 py-6 text-sm text-muted">Hier gibt es noch keine Projekte.</p>;
   }
   const sorted = sortJobs(jobs, sort);
+  const today = todayVienna();
   return (
     <div className="space-y-2">
       <div className="overflow-x-auto rounded-xl border border-line">
@@ -125,6 +128,11 @@ export function JobTable({ jobs, hrefFor, isAdmin, sort, view, logos }: Props) {
                   <Link href={hrefFor(job.id)} scroll={false} className="font-medium hover:underline">
                     {job.title}
                   </Link>
+                  {jobDeadlineWarning(job.publishDate, job.status, today) && (
+                    <div className="mt-1">
+                      <DeadlineBadge label={jobDeadlineWarning(job.publishDate, job.status, today)} date={job.publishDate} />
+                    </div>
+                  )}
                 </td>
                 <td className="px-4 py-2.5">
                   <StatusBadge status={job.status} />

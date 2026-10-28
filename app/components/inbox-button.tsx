@@ -9,7 +9,8 @@ export type InboxItem = {
   id: string;
   jobId: string | null; // Projekt-Meldung …
   featureId: string | null; // … oder Featureboard-Meldung …
-  ideaId: string | null; // … oder Projekt-Idee
+  ideaId: string | null; // … oder Projekt-Idee …
+  todoId: string | null; // … oder ToDo
   type: string;
   text: string;
   createdAt: Date;
@@ -31,6 +32,9 @@ const TYPE_ICON: Record<string, string> = {
   idea: "💡",
   idea_comment: "💬",
   idea_status: "🏷",
+  todo: "✅",
+  todo_status: "✅",
+  deadline: "⏰",
 };
 
 function Bell() {
@@ -103,7 +107,9 @@ export function InboxButton({ items, unread, jobHref }: { items: InboxItem[]; un
                         ? `/featureboard?f=${n.featureId}`
                         : n.ideaId
                           ? `/ideen?i=${n.ideaId}`
-                          : jobHref.replace("JOBID", n.jobId ?? "")
+                          : n.todoId
+                            ? `/todos?t=${n.todoId}`
+                            : jobHref.replace("JOBID", n.jobId ?? "")
                     }
                     scroll={false}
                     onClick={() => setOpen(false)}
@@ -119,7 +125,7 @@ export function InboxButton({ items, unread, jobHref }: { items: InboxItem[]; un
                           <StatusBadge status={n.jobStatus} />
                         ) : (
                           <span className="shrink-0 rounded bg-raised px-1.5 py-px text-[11px] text-muted">
-                            {n.ideaId ? "Projekt-Idee" : "Featureboard"}
+                            {n.ideaId ? "Projekt-Idee" : n.todoId ? "ToDo" : "Featureboard"}
                           </span>
                         )}
                       </div>

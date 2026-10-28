@@ -17,6 +17,8 @@ import { JobControls } from "./job-controls";
 import { VideoBlock } from "./video-block";
 import { DownloadAll } from "./download-all";
 import { PublishDateField } from "./publish-date-field";
+import { DeadlineBadge } from "./deadline-badge";
+import { jobDeadlineWarning } from "@/lib/deadline";
 import { PublicationsForm, type PublicationView } from "./publications-form";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -104,6 +106,7 @@ function DrawerFrame({
                   <FormatTag format={job.format} />
                 </>
               )}
+              <DeadlineBadge label={jobDeadlineWarning(job.publishDate, job.status)} date={job.publishDate} />
             </div>
           </div>
           <Link

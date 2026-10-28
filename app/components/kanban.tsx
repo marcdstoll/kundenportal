@@ -6,6 +6,8 @@ import { FormatTag, Person, formatDate } from "./ui";
 import { LinkPending } from "./nav-links";
 import { ColumnRow } from "./column-row";
 import { boardColumnOrder } from "@/lib/board-prefs";
+import { jobDeadlineWarning, todayVienna } from "@/lib/deadline";
+import { DeadlineBadge } from "./deadline-badge";
 import {getCurrentUser} from "@/lib/session";
 
 type Props = {
@@ -26,6 +28,7 @@ export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread
   const me = await getCurrentUser();
   const canReorder = me?.role === "admin";
   const order = canReorder ? await boardColumnOrder() : [...BOARD_COLUMNS];
+  const today = todayVienna();
   const columns = BOARD_COLUMNS.map((status) => {
     const items = jobs.filter((j) => j.status === status);
     const color = statusColor(status);
@@ -64,6 +67,7 @@ export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread
                   borderLeft: `3px solid ${base}`,
                 }}
               >
+                <DeadlineBadge label={jobDeadlineWarning(job.publishDate, job.status, today)} date={job.publishDate} />
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-medium leading-snug">{job.title}</p>
                   <span className="flex shrink-0 items-center gap-1.5">

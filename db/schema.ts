@@ -99,6 +99,8 @@ export const jobs = pgTable("jobs", {
   cancelRequestedAt: timestamp("cancel_requested_at"),
   cancelRequestedBy: text("cancel_requested_by"),
   cancelReason: text("cancel_reason"),
+  // Für welchen Termin/Status schon an die Deadline erinnert wurde ("2026-11-02|in_arbeit")
+  deadlineNotice: text("deadline_notice"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -195,6 +197,33 @@ export const jobComments = pgTable(
 
 // Inbox: eine Benachrichtigung pro Empfänger – gehört zu einem Projekt (jobId), einem Feature (featureId) oder einer Projekt-Idee (ideaId)
 // type: file | comment | mention | storno_request | storno_decision | status | feature | feature_comment | feature_status | idea | idea_comment | idea_status
+// ToDos: Aufgaben für eine Person (Cutter, Admin oder Kunde), mit Priorität, Status und optionaler Deadline.
+// Sichtbar für die zuständige Person, den Ersteller und Admins.
+export const todos = pgTable(
+  "todos",
+  {
+    id: text("id").primaryKey(),
+    title: text("title").notNull(),
+    description: text("description"),
+    assigneeId: text("assignee_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    // hoch | mittel | niedrig
+    priority: text("priority").notNull().default("mittel"),
+    // offen | abgeschlossen
+    status: text("status").notNull().default("offen"),
+    deadline: date("deadline"),
+    doneAt: timestamp("done_at"),
+    doneBy: text("done_by").references(() => user.id, { onDelete: "set null" }),
+    // Für welche Deadline schon erinnert wurde
+    deadlineNotice: text("deadline_notice"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("todos_assignee_idx").on(t.assigneeId), index("todos_created_by_idx").on(t.createdBy)],
+);
+
 export const notifications = pgTable(
   "notifications",
   {
@@ -205,6 +234,7 @@ export const notifications = pgTable(
     jobId: text("job_id").references(() => jobs.id, { onDelete: "cascade" }),
     featureId: text("feature_id").references(() => featureRequests.id, { onDelete: "cascade" }),
     ideaId: text("idea_id").references(() => projectIdeas.id, { onDelete: "cascade" }),
+    todoId: text("todo_id").references(() => todos.id, { onDelete: "cascade" }),
     type: text("type").notNull(),
     text: text("text").notNull(),
     actorId: text("actor_id"),

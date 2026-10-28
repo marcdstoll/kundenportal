@@ -17,8 +17,9 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 // Für alle Rollen gleich, unter der Hauptnavigation: Featureboard, Projekt-Ideen, Projekt anlegen (darunter der Upload-Baum)
-function projectNav(featureUnread: number, ideaUnread: number): NavItem[] {
+function projectNav(featureUnread: number, ideaUnread: number, todoUnread: number): NavItem[] {
   return [
+    { href: "/todos", label: "ToDos", badge: todoUnread },
     { href: "/featureboard", label: "Featureboard", badge: featureUnread },
     { href: "/ideen", label: "Projekt-Ideen", badge: ideaUnread },
     { href: "/neu", label: "Projekt-Upload" },
@@ -57,10 +58,10 @@ function navFor(role: string): NavItem[] {
 async function safeUnread(userId: string) {
   try {
     const u = await unreadByJob(userId);
-    return { total: u.total, features: u.featureTotal, ideas: u.ideaTotal };
+    return { total: u.total, features: u.featureTotal, ideas: u.ideaTotal, todos: u.todoTotal };
   } catch (e) {
     console.error("Inbox-Zähler nicht verfügbar:", e);
-    return { total: 0, features: 0, ideas: 0 };
+    return { total: 0, features: 0, ideas: 0, todos: 0 };
   }
 }
 
@@ -83,11 +84,12 @@ async function safeInbox(userId: string): Promise<InboxItem[]> {
       jobId: r.jobId,
       featureId: r.featureId,
       ideaId: r.ideaId,
+      todoId: r.todoId,
       type: r.type,
       text: r.text,
       createdAt: r.createdAt,
       read: !!r.readAt,
-      title: r.jobTitle ?? r.featureTitle ?? r.ideaTitle ?? "",
+      title: r.jobTitle ?? r.featureTitle ?? r.ideaTitle ?? r.todoTitle ?? "",
       jobStatus: r.jobStatus,
     }));
   } catch (e) {
@@ -141,7 +143,7 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
       </div>
 
       <div className="space-y-0.5">
-        <NavLinks items={[...navFor(user.role), ...projectNav(unread.features, unread.ideas)]} />
+        <NavLinks items={[...navFor(user.role), ...projectNav(unread.features, unread.ideas, unread.todos)]} />
         <UploadTree />
       </div>
 
