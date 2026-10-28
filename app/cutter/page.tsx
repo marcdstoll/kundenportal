@@ -16,7 +16,7 @@ const OPEN = ["warteschlange", "in_arbeit", "feedback", "feedback_client"];
 export default async function CutterPage() {
   const me = await getCurrentUser();
   if (!me) redirect("/login");
-  if (me.role === "kunde") redirect("/kunde");
+  if (me.role === "kunde") redirect("/uebersicht");
   if (me.role !== "admin") redirect("/meine-clients"); // Verwaltung nur für Admins
 
   const [people, clients, assignments, open] = await Promise.all([

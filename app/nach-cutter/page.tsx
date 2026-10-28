@@ -13,7 +13,7 @@ export default function NachCutterPage({ searchParams }: PageProps<"/nach-cutter
 async function Content({ searchParams }: { searchParams: PageProps<"/nach-cutter">["searchParams"] }) {
   const me = await getCurrentUser();
   if (!me) redirect("/login");
-  if (me.role === "kunde") redirect("/kunde");
+  if (me.role === "kunde") redirect("/uebersicht");
 
   const params = await searchParams;
   const logos = await clientLogos();

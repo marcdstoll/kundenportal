@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 
-// Leitet je nach Rolle weiter: Kunden zu ihren Aufträgen, Cutter und Admins zum Board
+// Leitet je nach Rolle weiter: Kunden zu ihrer Übersicht, Cutter und Admins zum Board
 export default function DashboardPage() {
   return (
     <RoleRedirect />
@@ -11,6 +11,6 @@ export default function DashboardPage() {
 async function RoleRedirect() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  redirect(user.role === "kunde" ? "/kunde" : "/board");
+  redirect(user.role === "kunde" ? "/uebersicht" : "/board");
   return null;
 }

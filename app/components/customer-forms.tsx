@@ -13,7 +13,7 @@ import { Avatar, buttonPrimary, buttonSecondary, inputField } from "./ui";
 type Links = { tiktok: string; youtube: string; instagram: string; extra: { label: string; url: string }[] };
 
 // Bild im Browser verkleinern (WebP, sonst JPEG) und als data-URL liefern
-async function shrink(file: File, maxEdge: number, quality = 0.82): Promise<string> {
+export async function shrink(file: File, maxEdge: number, quality = 0.82): Promise<string> {
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");

@@ -29,6 +29,7 @@ function projectNav(featureUnread: number, ideaUnread: number, todoUnread: numbe
 function navFor(role: string): NavItem[] {
   if (role === "kunde") {
     return [
+      { href: "/uebersicht", label: "Übersicht" },
       { href: "/kunde", label: "Projekte" },
       { href: "/kalender", label: "Kalender" },
       { href: "/team", label: "Team" },
@@ -152,7 +153,7 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
           <p className="px-2.5 text-xs text-muted">Kundenansicht</p>
           <NavLinks
             items={clients.map((c) => ({
-              href: `/kunde?as=${c.id}`,
+              href: `/uebersicht?as=${c.id}`,
               label: c.name,
               color: logos.has(c.id) ? undefined : personColor(c.id, c.name),
               logo: logos.get(c.id),
@@ -205,9 +206,20 @@ export function ViewAsBanner({ viewAs }: { viewAs?: { id: string; name: string }
       <span>
         Du siehst gerade die Ansicht von <b>{viewAs.name}</b>.
       </span>
-      <Link href="/board" className="text-accent hover:underline">
-        Zurück zum Board
-      </Link>
+      <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <Link href={`/uebersicht?as=${viewAs.id}`} className="text-accent hover:underline">
+          Übersicht
+        </Link>
+        <Link href={`/kunde?as=${viewAs.id}`} className="text-accent hover:underline">
+          Projekte
+        </Link>
+        <Link href={`/kalender?as=${viewAs.id}`} className="text-accent hover:underline">
+          Kalender
+        </Link>
+        <Link href="/board" className="text-accent hover:underline">
+          Zurück zum Board
+        </Link>
+      </span>
     </div>
   );
 }

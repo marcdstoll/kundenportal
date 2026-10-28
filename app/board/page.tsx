@@ -19,7 +19,7 @@ export default function BoardPage({ searchParams }: PageProps<"/board">) {
 async function Board({ searchParams }: { searchParams: PageProps<"/board">["searchParams"] }) {
   const me = await getCurrentUser();
   if (!me) redirect("/login");
-  if (me.role === "kunde") redirect("/kunde");
+  if (me.role === "kunde") redirect("/uebersicht");
 
   const params = await searchParams;
   const openJob = typeof params.job === "string" ? params.job : null;

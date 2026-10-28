@@ -642,6 +642,28 @@ export async function updateCustomer(
   });
 }
 
+// Banner der Kunden-Übersicht (nur Agentur-Admins, gesetzt in der Kundenansicht).
+// image: data-URL, null = entfernen, undefined = unverändert · pos: senkrechte Bildposition 0–100 %
+export async function setCustomerBanner(customerId: string, input: { image?: string | null; pos?: number }) {
+  return run(async () => {
+    await requireUser("admin");
+    checkImage(input.image, 2_500_000, "Das Banner");
+    const pos = input.pos === undefined ? undefined : Math.round(Math.min(100, Math.max(0, Number(input.pos) || 0)));
+    const [c] = await db.select({ id: customers.id }).from(customers).where(eq(customers.id, customerId));
+    if (!c) throw new Error("Kunde nicht gefunden.");
+    if (input.image === undefined && pos === undefined) return null;
+    await db
+      .update(customers)
+      .set({
+        ...(input.image !== undefined ? { banner: input.image, updatedAt: new Date() } : {}),
+        ...(pos !== undefined ? { bannerPos: pos } : {}),
+      })
+      .where(eq(customers.id, customerId));
+    refresh();
+    return null;
+  });
+}
+
 // Farbe des Kunden (Board/Kalender): Agentur-Admins und Admins des Kunden
 export async function setCustomerColor(customerId: string, color: string | null) {
   return run(async () => {

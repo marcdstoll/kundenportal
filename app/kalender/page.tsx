@@ -3,7 +3,7 @@ import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { jobs as jobsTable } from "@/db/schema";
 import { getCurrentUser, resolveCustomerView } from "@/lib/session";
 import { listCustomers, loadJobs, loadViewFilters } from "@/lib/queries";
-import { CUSTOMER_DATE_STATUSES } from "@/lib/status";
+import { calendarLockReason } from "@/lib/calendar-lock";
 import { ClientFilter } from "@/app/components/client-filter";
 import { both, clientIdsOfCutter, jobScope } from "@/lib/access";
 import { PageHeader, ViewAsBanner } from "@/app/components/shell";
@@ -42,15 +42,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
       : isNotNull(jobsTable.publishDate);
   const jobs = await loadJobs(me.role === "cutter" ? both(await jobScope(me), filter) : filter);
 
-  // Verschieben: Admins immer, Kunden ihre eigenen Projekte ab "Ready to post", Cutter nie.
-  // Rückgabe: null = darf verschieben, sonst der Grund, warum nicht (erscheint als Hinweis am Termin)
-  const lockReason = (job: { customerId: string; status: string }) => {
-    if (me.role === "admin") return null;
-    if (me.role === "cutter") return "Termine verschieben nur Admins und Kunden.";
-    if (job.customerId !== me.customerId) return "Nur eigene Projekte lassen sich verschieben.";
-    if (!CUSTOMER_DATE_STATUSES.includes(job.status)) return "Das Datum lässt sich ab „Ready to post“ ändern.";
-    return null;
-  };
+  const lockReason = calendarLockReason(me);
 
   const query = (extra: Record<string, string>) => {
     const p = new URLSearchParams();

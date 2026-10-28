@@ -14,7 +14,7 @@ export default function NachClientsPage({ searchParams }: PageProps<"/nach-clien
 async function Content({ searchParams }: { searchParams: PageProps<"/nach-clients">["searchParams"] }) {
   const me = await getCurrentUser();
   if (!me) redirect("/login");
-  if (me.role === "kunde") redirect("/kunde");
+  if (me.role === "kunde") redirect("/uebersicht");
   if (me.role !== "admin") redirect("/meine-clients"); // Verwaltung nur für Admins
 
   const params = await searchParams;

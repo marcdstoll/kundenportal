@@ -36,6 +36,9 @@ export const customers = pgTable("customers", {
   // Logo (klein, rund) und Titelbild (Galerie/Detailansicht) als data-URL, im Browser verkleinert
   logo: text("logo"),
   cover: text("cover"),
+  // Banner der Kunden-Übersicht (breit, data-URL) und senkrechte Bildposition in Prozent (0 = oben, 100 = unten)
+  banner: text("banner"),
+  bannerPos: integer("banner_pos").notNull().default(50),
   // Alte Link-Liste (eine pro Zeile) – wird nur noch gelesen, solange link_list leer ist
   links: text("links"),
   // Links als JSON: { tiktok, youtube, instagram, extra: [{ label, url }] }

@@ -29,7 +29,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         <FilterButton view="nach-clients" patch={{ c: id }} href="/nach-clients" className={buttonSecondary}>
           Projekte
         </FilterButton>
-        <Link href={`/kunde?as=${id}`} className={buttonSecondary}>
+        <Link href={`/uebersicht?as=${id}`} className={buttonSecondary}>
           Kundenansicht
         </Link>
       </PageHeader>

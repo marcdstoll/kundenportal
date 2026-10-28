@@ -2,7 +2,8 @@
 // Jede Ansicht hat ihre eigenen Werte – der Kalender ist z. B. unabhängig vom Board.
 //   k = Kunden (IDs, kommagetrennt), f = Formate, p = Prioritäten, s = Status bzw. Sortierspalte,
 //   d = Sortierrichtung bzw. Disziplin (Hall of Fame), c = gewählte Person bzw. Client (Reiter),
-//   m = Zuordnung (ToDos: alle / mir zugewiesen / von mir erstellt)
+//   m = Zuordnung (ToDos: alle / mir zugewiesen / von mir erstellt),
+//   o = aufgeklappte Bereiche (Kunden-Übersicht: kalender, projekte)
 export const VIEW_FILTER_KEYS = {
   board: ["k", "f"],
   kalender: ["k"],
@@ -12,6 +13,7 @@ export const VIEW_FILTER_KEYS = {
   "nach-cutter": ["c", "s", "d"],
   "hall-of-fame": ["c", "d"],
   todos: ["s", "m"],
+  uebersicht: ["o"],
 } as const;
 
 export type FilterView = keyof typeof VIEW_FILTER_KEYS;

@@ -13,7 +13,7 @@ const DONE = ["online", "storniert"];
 export default async function MeineClientsPage() {
   const me = await getCurrentUser();
   if (!me) redirect("/login");
-  if (me.role === "kunde") redirect("/kunde");
+  if (me.role === "kunde") redirect("/uebersicht");
   if (me.role === "admin") redirect("/clients");
 
   const ids = await clientIdsOfCutter(me.id);
