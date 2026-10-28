@@ -100,7 +100,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/uebersicht"
         </header>
 
         <section className="space-y-3" aria-labelledby="aufgaben">
-          <p className="text-sm font-semibold italic">Infos</p>
+   
           <div className="max-w-3xl overflow-hidden rounded-xl border border-line bg-surface">
             <h2 id="aufgaben" className="flex items-center gap-2 border-b border-line px-4 py-3 text-sm font-medium">
               {viewAs ? `Wartet auf Abnahme durch ${customer.name}` : "Wartet auf deine Abnahme"}
