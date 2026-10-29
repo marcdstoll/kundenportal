@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { customers, jobs as jobsTable } from "@/db/schema";
+import { customers, jobs as jobsTable, todos, user } from "@/db/schema";
 import { getCurrentUser, resolveCustomerView } from "@/lib/session";
-import { loadJobs, loadViewFilters, unreadByJob } from "@/lib/queries";
+import { loadJobs, loadViewFilters, memberIds, unreadByJob } from "@/lib/queries";
 import { calendarLockReason } from "@/lib/calendar-lock";
-import { jobDeadlineWarning, todayVienna } from "@/lib/deadline";
+import { jobDeadlineWarning, todayVienna, todoDeadlineWarning } from "@/lib/deadline";
+import { PRIORITY_COLORS } from "@/lib/ideas";
 import { ViewAsBanner } from "@/app/components/shell";
 import { AutoRefresh } from "@/app/components/auto-refresh";
 import { Calendar, parseMonth } from "@/app/components/calendar";
@@ -14,11 +15,12 @@ import { CustomerProjects } from "@/app/components/customer-projects";
 import { CustomerJobDrawer } from "@/app/components/job-drawer";
 import { DeadlineBadge } from "@/app/components/deadline-badge";
 import { Avatar, FormatTag, buttonPrimary, formatDate } from "@/app/components/ui";
+import { PriorityChip } from "@/app/todos/todo-ui";
 import { Banner, Sections } from "./overview-ui";
 
 // Übersicht für Kunden – hier landen sie nach dem Login.
-// Oben das Banner (setzen nur Admins, in der Kundenansicht), darunter die Projekte, die auf die Abnahme
-// des Kunden warten (seine Aufgaben), und aufklappbar Kalender und Projektübersicht (wie die eigenen Seiten).
+// Oben das Banner (setzen nur Admins, in der Kundenansicht), darunter „Aufgaben“: Projekte in Kundenabnahme
+// und offene ToDos für den Kunden. Aufklappbar Kalender und Projektübersicht (wie die eigenen Seiten).
 export default function UebersichtPage({ searchParams }: PageProps<"/uebersicht">) {
   return <Content searchParams={searchParams} />;
 }
@@ -67,16 +69,34 @@ async function Content({ searchParams }: { searchParams: PageProps<"/uebersicht"
     unreadByJob(me.id),
     loadViewFilters(me.id, "uebersicht"),
   ]);
+
+  // Offene ToDos für den Kunden: der Kunde sieht seine eigenen, Admins in der Kundenansicht die aller Nutzer des Kunden
+  const assignees = viewAs ? await memberIds(customer.id) : [me.id];
+  const openTodos = assignees.length
+    ? await db
+        .select({
+          id: todos.id,
+          title: todos.title,
+          priority: todos.priority,
+          status: todos.status,
+          deadline: todos.deadline,
+          assigneeName: user.name,
+        })
+        .from(todos)
+        .innerJoin(user, eq(user.id, todos.assigneeId))
+        .where(and(eq(todos.status, "offen"), inArray(todos.assigneeId, assignees)))
+    : [];
   const v = info?.version.getTime() ?? 0;
   const bannerUrl = info?.hasBanner ? `/api/banner/${customer.id}?v=${v}` : null;
   const logoUrl = info?.hasLogo ? `/api/logo/${customer.id}?v=${v}` : null;
   const initialOpen = (saved.o ?? "").split(",").filter((s) => SECTION_IDS.includes(s));
 
-  // Aufgaben des Kunden: alles in „Kundenabnahme“, nächstes Veröffentlichungsdatum zuerst
+  // Aufgaben: Projekte in „Kundenabnahme“ und offene ToDos, nächster Termin zuerst (ohne Termin ans Ende)
   const today = todayVienna();
-  const tasks = jobs
-    .filter((j) => j.status === "feedback_client")
-    .sort((a, b) => (a.publishDate ?? "9999").localeCompare(b.publishDate ?? "9999"));
+  const tasks = [
+    ...jobs.filter((j) => j.status === "feedback_client").map((job) => ({ kind: "job" as const, date: job.publishDate, job })),
+    ...openTodos.map((todo) => ({ kind: "todo" as const, date: todo.deadline, todo })),
+  ].sort((a, b) => (a.date ?? "9999").localeCompare(b.date ?? "9999"));
 
   return (
     <>
@@ -103,53 +123,55 @@ async function Content({ searchParams }: { searchParams: PageProps<"/uebersicht"
    
           <div className="max-w-3xl overflow-hidden rounded-xl border border-line bg-surface">
             <h2 id="aufgaben" className="flex items-center gap-2 border-b border-line px-4 py-3 text-sm font-medium">
-              {viewAs ? `Wartet auf Abnahme durch ${customer.name}` : "Wartet auf deine Abnahme"}
+              Aufgaben
               <span className="rounded-full bg-raised px-2 py-px text-xs text-muted">{tasks.length}</span>
             </h2>
             {tasks.length === 0 ? (
               <p className="px-4 py-5 text-sm text-muted">
-                {viewAs ? "Gerade wartet nichts auf die Abnahme." : "Gerade wartet nichts auf dich – alles erledigt. 🎉"}
+                {viewAs ? "Gerade gibt es keine offenen Aufgaben." : "Gerade gibt es nichts zu tun – alles erledigt. 🎉"}
               </p>
             ) : (
-              <ul className="divide-y divide-line" aria-label="Wartet auf Abnahme">
-                {tasks.map((j) => {
-                  const warning = jobDeadlineWarning(j.publishDate, j.status, today);
-                  const isNew = !!unread.jobs.get(j.id);
-                  return (
-                    <li key={j.id} data-testid="task-row">
-                      <Link
-                        href={query({ job: j.id })}
-                        scroll={false}
-                        className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-raised/50"
-                      >
-                        <span
-                          aria-hidden
-                          className="size-2 shrink-0 rounded-full"
-                          style={{ background: "var(--st-feedback_client)" }}
-                        />
-                        <span className="min-w-0 flex-1 space-y-1">
-                          <span className="flex flex-wrap items-center gap-2">
-                            <span className="font-medium group-hover:underline">{j.title}</span>
-                            {isNew && (
-                              <span
-                                className="rounded px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-white"
-                                style={{ background: "var(--rec)" }}
-                              >
-                                Neu
-                              </span>
-                            )}
-                            <DeadlineBadge label={warning} date={j.publishDate} />
-                          </span>
-                          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                            <FormatTag format={j.format} />
-                            {j.publishDate && <span>Veröffentlichung {formatDate(j.publishDate)}</span>}
-                          </span>
-                        </span>
-                        <span className="shrink-0 text-sm text-accent">Ansehen →</span>
-                      </Link>
-                    </li>
-                  );
-                })}
+              <ul className="divide-y divide-line" aria-label="Aufgaben">
+                {tasks.map((t) =>
+                  t.kind === "job" ? (
+                    <TaskRow
+                      key={t.job.id}
+                      kind="job"
+                      href={query({ job: t.job.id })}
+                      title={t.job.title}
+                      color="var(--st-feedback_client)"
+                      isNew={!!unread.jobs.get(t.job.id)}
+                      warning={jobDeadlineWarning(t.job.publishDate, t.job.status, today)}
+                      date={t.job.publishDate}
+                      meta={
+                        <>
+                          <span className="font-medium text-[var(--st-feedback_client)]">Abnahme</span>
+                          <FormatTag format={t.job.format} />
+                          {t.job.publishDate && <span>Veröffentlichung {formatDate(t.job.publishDate)}</span>}
+                        </>
+                      }
+                    />
+                  ) : (
+                    <TaskRow
+                      key={t.todo.id}
+                      kind="todo"
+                      href={`/todos?t=${t.todo.id}`}
+                      title={t.todo.title}
+                      color={PRIORITY_COLORS[t.todo.priority] ?? "var(--muted)"}
+                      isNew={!!unread.todos.get(t.todo.id)}
+                      warning={todoDeadlineWarning(t.todo.deadline, t.todo.status, today)}
+                      date={t.todo.deadline}
+                      meta={
+                        <>
+                          <span className="font-medium text-text">ToDo</span>
+                          <PriorityChip priority={t.todo.priority} />
+                          {t.todo.deadline && <span>Deadline {formatDate(t.todo.deadline)}</span>}
+                          {viewAs && <span>für {t.todo.assigneeName}</span>}
+                        </>
+                      }
+                    />
+                  ),
+                )}
               </ul>
             )}
           </div>
@@ -199,5 +221,54 @@ async function Content({ searchParams }: { searchParams: PageProps<"/uebersicht"
         />
       )}
     </>
+  );
+}
+
+// Eine Zeile in „Aufgaben“ (Projekt in Kundenabnahme oder ToDo)
+function TaskRow({
+  kind,
+  href,
+  title,
+  color,
+  isNew,
+  warning,
+  date,
+  meta,
+}: {
+  kind: "job" | "todo";
+  href: string;
+  title: string;
+  color: string;
+  isNew: boolean;
+  warning: string | null;
+  date: string | null;
+  meta: React.ReactNode;
+}) {
+  return (
+    <li data-testid="task-row" data-kind={kind}>
+      <Link
+        href={href}
+        scroll={false}
+        className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-raised/50"
+      >
+        <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: color }} />
+        <span className="min-w-0 flex-1 space-y-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="font-medium group-hover:underline">{title}</span>
+            {isNew && (
+              <span
+                className="rounded px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-white"
+                style={{ background: "var(--rec)" }}
+              >
+                Neu
+              </span>
+            )}
+            <DeadlineBadge label={warning} date={date} />
+          </span>
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">{meta}</span>
+        </span>
+        <span className="shrink-0 text-sm text-accent">{kind === "job" ? "Ansehen" : "Öffnen"} →</span>
+      </Link>
+    </li>
   );
 }

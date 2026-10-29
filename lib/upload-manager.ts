@@ -5,13 +5,15 @@
 //
 // - Vorgänge werden NACHEINANDER abgearbeitet (Projekt 1, dann Projekt 2 …) – das erste ist so am schnellsten fertig.
 // - Solange etwas läuft: Lebenszeichen an den Server (sonst räumt er nach 30 Min. auf) und Nachfrage beim Schließen.
-// - Bei einem Fehler bleiben die ausgewählten Dateien im Speicher → „Erneut versuchen“ lädt nur, was noch fehlt.
+// - Wackelige Verbindung: bis zu 15 Min. automatisch weiterversuchen (Hinweis in „notice“), offline wird gewartet.
+// - Bei einem Fehler bleiben die ausgewählten Dateien im Speicher → „Erneut versuchen“ lädt nur, was noch fehlt –
+//   auch innerhalb einer Datei: schon hochgeladene Teile werden nicht noch einmal geschickt.
 //
 // Anzeigen lesen den Stand über useUploads() (React-Hook, siehe unten).
 
 import { useSyncExternalStore } from "react";
 import { createJob, discardUpload, submitForReview, submitJob, uploadHeartbeat, type NewJobInput } from "@/app/actions";
-import { uploadFile } from "@/lib/upload";
+import { uploadFile, type ResumeState } from "@/lib/upload";
 
 export type UploadFileState = { name: string; size: number; loaded: number; done: boolean };
 
@@ -26,6 +28,8 @@ export type Vorgang = {
   files: UploadFileState[];
   status: "wartet" | "laeuft" | "fehler" | "fertig";
   error: string | null;
+  // Hinweis während eines Verbindungsproblems (Upload läuft weiter bzw. wartet aufs Netz)
+  notice?: string | null;
 };
 
 // Prozent über alle Dateien eines Vorgangs (nach Bytes)
@@ -45,6 +49,7 @@ let vorgaenge: Vorgang[] = [];
 let snapshot: Vorgang[] = [];
 const fileObjects = new Map<string, File[]>(); // Vorgang-ID → ausgewählte Dateien (nur im Speicher)
 const projectInput = new Map<string, NewJobInput>();
+const resumeStates = new Map<string, (ResumeState | undefined)[]>(); // Vorgang-ID → Fortsetzen-Stand je Datei
 const listeners = new Set<() => void>();
 const finishedListeners = new Set<(v: Vorgang) => void>();
 
@@ -77,6 +82,11 @@ function patchFile(id: string, index: number, change: Partial<UploadFileState>) 
 }
 
 const isBusy = () => vorgaenge.some((v) => v.status === "wartet" || v.status === "laeuft");
+// Für andere Teile der Seite (z. B. AutoRefresh): läuft gerade ein Upload?
+export const uploadsBusy = isBusy;
+// Lebenszeichen auch nach einem Fehler, solange der Vorgang noch da ist – sonst räumt der Server
+// die halb hochgeladene Datei weg, bevor jemand „Erneut versuchen“ klickt
+const needsHeartbeat = () => vorgaenge.some((v) => v.jobId && v.status !== "fertig");
 
 // ---------- Warteschlange ----------
 
@@ -98,7 +108,7 @@ async function pump() {
 }
 
 async function runVorgang(id: string) {
-  patch(id, { status: "laeuft", error: null });
+  patch(id, { status: "laeuft", error: null, notice: null });
   try {
     let v = vorgaenge.find((x) => x.id === id)!;
     const files = fileObjects.get(id) ?? [];
@@ -112,13 +122,26 @@ async function runVorgang(id: string) {
     }
     const jobId = v.jobId!;
 
-    // 2. Dateien nacheinander hochladen – schon fertige überspringen (wichtig für „Erneut versuchen“)
+    // 2. Dateien nacheinander hochladen – schon fertige überspringen, angefangene fortsetzen („Erneut versuchen“)
+    const states = resumeStates.get(id) ?? [];
+    resumeStates.set(id, states);
     for (let i = 0; i < files.length; i++) {
       if (vorgaenge.find((x) => x.id === id)?.files[i]?.done) continue;
-      patchFile(id, i, { loaded: 0 });
-      await uploadFile(jobId, v.kind === "review" ? "fertig" : "roh", files[i], (p) =>
-        patchFile(id, i, { loaded: Math.round((p / 100) * files[i].size) }),
+      await uploadFile(
+        jobId,
+        v.kind === "review" ? "fertig" : "roh",
+        files[i],
+        (p) => patchFile(id, i, { loaded: Math.round((p / 100) * files[i].size) }),
+        {
+          resume: states[i],
+          onState: (st) => (states[i] = st),
+          onWait: (text) => {
+            const cur = vorgaenge.find((x) => x.id === id);
+            if (cur && cur.notice !== text) patch(id, { notice: text });
+          },
+        },
       );
+      states[i] = undefined;
       patchFile(id, i, { done: true, loaded: files[i].size });
     }
 
@@ -138,15 +161,23 @@ async function runVorgang(id: string) {
     finishedListeners.forEach((l) => l(done));
     fileObjects.delete(id);
     projectInput.delete(id);
+    resumeStates.delete(id);
     setTimeout(() => remove(id), REMOVE_DONE_AFTER_MS);
   } catch (err) {
-    // Nicht fertige Dateien zählen wieder als 0 % (beim erneuten Versuch beginnen sie von vorn)
+    // Angefangene Dateien behalten den Stand der fertigen Teile (dort macht „Erneut versuchen“ weiter)
+    const states = resumeStates.get(id) ?? [];
     vorgaenge
       .find((x) => x.id === id)
-      ?.files.forEach((f) => {
-        if (!f.done) f.loaded = 0;
+      ?.files.forEach((f, i) => {
+        if (f.done) return;
+        const st = states[i];
+        f.loaded = st ? st.parts.reduce((sum, part, k) => sum + (st.done[k] ? part.size : 0), 0) : 0;
       });
-    patch(id, { status: "fehler", error: err instanceof Error ? err.message : "Upload fehlgeschlagen." });
+    patch(id, {
+      status: "fehler",
+      notice: null,
+      error: err instanceof Error ? err.message : "Upload fehlgeschlagen.",
+    });
   }
 }
 
@@ -154,6 +185,8 @@ function remove(id: string) {
   vorgaenge = vorgaenge.filter((v) => v.id !== id);
   fileObjects.delete(id);
   projectInput.delete(id);
+  resumeStates.delete(id);
+  stopHeartbeatIfIdle();
   emit(true);
 }
 
@@ -163,14 +196,12 @@ let heartbeat: ReturnType<typeof setInterval> | null = null;
 function startHeartbeat() {
   if (heartbeat) return;
   heartbeat = setInterval(() => {
-    const ids = vorgaenge
-      .filter((v) => v.jobId && (v.status === "laeuft" || v.status === "wartet"))
-      .map((v) => v.jobId!);
+    const ids = vorgaenge.filter((v) => v.jobId && v.status !== "fertig").map((v) => v.jobId!);
     if (ids.length) uploadHeartbeat(ids).catch(() => {});
   }, HEARTBEAT_MS);
 }
 function stopHeartbeatIfIdle() {
-  if (heartbeat && !isBusy()) {
+  if (heartbeat && !needsHeartbeat()) {
     clearInterval(heartbeat);
     heartbeat = null;
   }

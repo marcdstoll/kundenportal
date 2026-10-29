@@ -43,7 +43,7 @@ export function UploadTree() {
               />
               <Link
                 href={`/uploads/${v.id}`}
-                title={v.error ?? v.title}
+                title={v.error ?? v.notice ?? v.title}
                 className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
                   active ? "bg-raised font-medium text-text" : "text-muted hover:bg-raised/60 hover:text-text"
                 }`}
@@ -53,6 +53,8 @@ export function UploadTree() {
                   className={`shrink-0 text-xs tabular-nums ${
                     v.status === "fehler"
                       ? "text-danger"
+                      : v.status === "laeuft" && v.notice
+                        ? "font-medium text-[var(--st-ready_to_post)]"
                       : v.status === "fertig"
                         ? "text-[var(--st-online)]"
                         : v.status === "laeuft"
@@ -103,6 +105,11 @@ export function UploadStatus({ vorgang: v, compact = false }: { vorgang: Vorgang
         </p>
       )}
       <Bar percent={v.status === "fertig" ? 100 : percent} error={v.status === "fehler"} />
+      {v.status === "laeuft" && v.notice && (
+        <p className="text-sm text-[var(--st-ready_to_post)]" role="status" data-testid="upload-notice">
+          ⏳ {v.notice}
+        </p>
+      )}
 
       {v.status === "fehler" && (
         <div className="space-y-2">
@@ -116,7 +123,8 @@ export function UploadStatus({ vorgang: v, compact = false }: { vorgang: Vorgang
             </button>
           </div>
           <p className="text-xs text-muted">
-            „Erneut versuchen“ lädt nur die Dateien, die noch fehlen. „Verwerfen“ löscht
+            „Erneut versuchen“ lädt nur, was noch fehlt – angefangene Dateien machen dort weiter, wo sie abgebrochen
+            sind. „Verwerfen“ löscht
             {v.kind === "projekt" ? " das unfertige Projekt samt Dateien." : " die unvollständigen Dateien."}
           </p>
         </div>
