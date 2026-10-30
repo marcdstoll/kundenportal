@@ -9,10 +9,11 @@ import {
   AssignmentSelect,
   DeleteCutterButton,
   RegenerateInvite,
+  StaffRoleToggle,
   WelcomeVideoSection,
 } from "@/app/components/admin-forms";
 
-// Cutter bearbeiten (nur Admins): Kontakt, freigegebene Kunden, Zugang
+// Cutter bzw. Admin bearbeiten (nur Admins): Kontakt, freigegebene Kunden, Rolle, Zugang
 export default async function CutterDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const me = await getCurrentUser();
   if (!me) redirect("/login");
@@ -63,6 +64,20 @@ export default async function CutterDetailPage({ params }: { params: Promise<{ i
             />
           </Card>
         )}
+        <Card
+          title="Rolle"
+          description={
+            cutter.role === "admin"
+              ? "Admin – sieht alle Kunden und Projekte und verwaltet Nutzer, Kunden und Einstellungen."
+              : "Cutter – sieht die freigegebenen Kunden und die eigenen Projekte."
+          }
+        >
+          {cutter.id === me.id ? (
+            <p className="text-sm text-muted">Deine eigene Rolle kannst du nicht ändern.</p>
+          ) : (
+            <StaffRoleToggle userId={id} name={cutter.name} role={cutter.role === "admin" ? "admin" : "cutter"} />
+          )}
+        </Card>
         <Card
           title="Zugang"
           description={cutter.invited ? "Eingeladen – Passwort noch nicht gesetzt." : "Aktiv – Passwort gesetzt."}

@@ -200,7 +200,7 @@ export async function sendTestMail(toInput?: string) {
 
 const WELCOME_PREFIX = "frameio:";
 const WELCOME_TYPES: Record<string, string> = { "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov" };
-const WELCOME_MAX_BYTES = 300 * 1024 * 1024;
+const WELCOME_MAX_BYTES = 1024 * 1024 * 1024; // 1 GB
 
 async function welcomeFolderId(fresh = false) {
   if (!fresh) {
@@ -220,7 +220,7 @@ export async function startWelcomeUpload(userId: string, input: { size: number; 
     if (!u) throw new Error("Nutzer nicht gefunden.");
     const ext = WELCOME_TYPES[input.type.split(";")[0].trim()];
     if (!ext) throw new Error("Dieses Videoformat wird nicht unterstützt.");
-    if (!input.size || input.size > WELCOME_MAX_BYTES) throw new Error("Das Video ist zu groß (max. 300 MB).");
+    if (!input.size || input.size > WELCOME_MAX_BYTES) throw new Error("Das Video ist zu groß (max. 1 GB).");
     const stamp = new Date().toISOString().slice(0, 16).replace("T", " ").replace(":", "-");
     const name = `${u.name.replace(/[\\/:*?"<>|]/g, "")} – Begrüßung ${stamp}.${ext}`;
     let upload;
@@ -673,6 +673,27 @@ export async function setCustomerColor(customerId: string, color: string | null)
       .update(customers)
       .set({ color: color?.toLowerCase() ?? null }) // updatedAt bleibt: steuert die Bild-Versionen
       .where(eq(customers.id, customerId));
+    refresh();
+    return null;
+  });
+}
+
+// Cutter zum Admin machen bzw. einem Admin die Admin-Rechte entziehen (wird wieder Cutter) – nur Admins.
+// Die eigene Rolle lässt sich nicht ändern, und es bleibt immer mindestens ein Admin.
+// Freigegebene Kunden und Projekt-Zuordnungen bleiben gespeichert (als Cutter gelten sie wieder).
+export async function setStaffRole(userId: string, role: "admin" | "cutter") {
+  return run(async () => {
+    const me = await requireUser("admin");
+    if (role !== "admin" && role !== "cutter") throw new Error("Ungültige Rolle.");
+    if (userId === me.id) throw new Error("Deine eigene Rolle kannst du nicht ändern.");
+    const [u] = await db.select({ role: user.role }).from(user).where(eq(user.id, userId));
+    if (!u || (u.role !== "admin" && u.role !== "cutter")) throw new Error("Person nicht gefunden.");
+    if (u.role === role) return null;
+    if (role === "cutter") {
+      const admins = await db.select({ id: user.id }).from(user).where(eq(user.role, "admin"));
+      if (admins.length <= 1) throw new Error("Es muss mindestens ein Admin bleiben.");
+    }
+    await db.update(user).set({ role }).where(eq(user.id, userId));
     refresh();
     return null;
   });

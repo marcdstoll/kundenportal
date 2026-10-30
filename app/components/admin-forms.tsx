@@ -12,6 +12,7 @@ import {
   createCustomer,
   deleteCustomer,
   deleteCutter,
+  setStaffRole,
 } from "@/app/admin-actions";
 import { uploadWelcomeVideo } from "@/lib/upload";
 import { buttonPrimary, buttonSecondary, inputField } from "./ui";
@@ -502,6 +503,58 @@ export function DeleteCutterButton({
           if (!res.ok) return setError(res.error);
           setOpen(false);
           router.push("/cutter");
+        }}
+      />
+    </>
+  );
+}
+
+// Rolle wechseln: Cutter → Admin bzw. Admin → Cutter (nicht für die eigene Person)
+export function StaffRoleToggle({ userId, name, role }: { userId: string; name: string; role: "admin" | "cutter" }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const toAdmin = role === "cutter";
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setError(null);
+          setOpen(true);
+        }}
+        className={toAdmin ? buttonPrimary : buttonSecondary}
+      >
+        {toAdmin ? "Zum Admin machen" : "Admin-Rechte entziehen"}
+      </button>
+      <ConfirmDialog
+        open={open}
+        title={toAdmin ? "Zum Admin machen?" : "Admin-Rechte entziehen?"}
+        message={
+          toAdmin ? (
+            <>
+              „<b className="text-text">{name}</b>“ sieht danach alle Kunden und Projekte und kann Nutzer, Kunden und
+              Einstellungen verwalten.
+            </>
+          ) : (
+            <>
+              „<b className="text-text">{name}</b>“ ist danach wieder Cutter und sieht nur noch die freigegebenen
+              Kunden und die eigenen Projekte.
+            </>
+          )
+        }
+        confirmLabel={toAdmin ? "Zum Admin machen" : "Rechte entziehen"}
+        busy={busy}
+        error={error}
+        onCancel={() => setOpen(false)}
+        onConfirm={async () => {
+          setBusy(true);
+          const res = await setStaffRole(userId, toAdmin ? "admin" : "cutter");
+          setBusy(false);
+          if (!res.ok) return setError(res.error);
+          setOpen(false);
+          router.refresh();
         }}
       />
     </>
