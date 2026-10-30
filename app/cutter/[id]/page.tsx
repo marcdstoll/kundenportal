@@ -64,14 +64,7 @@ export default async function CutterDetailPage({ params }: { params: Promise<{ i
             />
           </Card>
         )}
-        <Card
-          title="Rolle"
-          description={
-            cutter.role === "admin"
-              ? "Admin – sieht alle Kunden und Projekte und verwaltet Nutzer, Kunden und Einstellungen."
-              : "Cutter – sieht die freigegebenen Kunden und die eigenen Projekte."
-          }
-        >
+        <Card title="Rolle">
           {cutter.id === me.id ? (
             <p className="text-sm text-muted">Deine eigene Rolle kannst du nicht ändern.</p>
           ) : (
