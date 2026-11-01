@@ -74,7 +74,7 @@ export async function runDeadlineReminders(today = todayVienna()) {
       userId: t.assigneeId,
       todoId: t.id,
       type: "deadline",
-      text: `${label} (${formatDate(t.deadline)}): ToDo „${t.title}“`,
+      text: `${label} (${formatDate(t.deadline)}): Aufgabe „${t.title}“`,
     });
     todoNotices++;
     await db.update(todos).set({ deadlineNotice: t.deadline }).where(eq(todos.id, t.id));

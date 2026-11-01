@@ -76,7 +76,7 @@ function TodoForm({
   return (
     <form
       className="space-y-4"
-      aria-label={todoId ? "ToDo bearbeiten" : "Neues ToDo"}
+      aria-label={todoId ? "Aufgabe bearbeiten" : "Neue Aufgabe"}
       onSubmit={(e) => {
         e.preventDefault();
         startTransition(async () => {
@@ -157,7 +157,7 @@ function TodoForm({
       {error && <p className="text-sm text-danger">{error}</p>}
       <div className="flex gap-2">
         <button type="submit" className={buttonPrimary} disabled={pending || !v.title.trim() || !v.assigneeId}>
-          {pending ? "Speichert …" : todoId ? "Speichern" : "ToDo anlegen"}
+          {pending ? "Speichert …" : todoId ? "Speichern" : "Aufgabe anlegen"}
         </button>
         <button type="button" className={buttonSecondary} disabled={pending} onClick={onDone}>
           Abbrechen
@@ -180,9 +180,9 @@ export function NewTodoButton({
   return (
     <>
       <button type="button" className={buttonPrimary} onClick={() => setOpen(true)}>
-        + Neues ToDo
+        + Neue Aufgabe
       </button>
-      <SlideOver open={open} title="Neues ToDo" onClose={() => setOpen(false)}>
+      <SlideOver open={open} title="Neue Aufgabe" onClose={() => setOpen(false)}>
         {open && (
           <TodoForm
             initial={{ title: "", description: "", assigneeId: isKunde ? meId : "", priority: "mittel", deadline: "" }}
@@ -245,7 +245,7 @@ function Detail({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Meldungen zu diesem ToDo als gelesen markieren
+  // Meldungen zu dieser Aufgabe als gelesen markieren
   useEffect(() => {
     if (todo.unread) markTodoRead(todo.id);
   }, [todo.id, todo.unread]);
@@ -321,7 +321,7 @@ function Detail({
       </div>
       <ConfirmDialog
         open={confirm}
-        title="ToDo löschen?"
+        title="Aufgabe löschen?"
         message={`„${todo.title}“ wird endgültig gelöscht.`}
         confirmLabel="Löschen"
         busy={busy}
@@ -361,10 +361,10 @@ export function TodoList({
     <>
       {todos.length === 0 && (
         <p className="rounded-xl border border-dashed border-line p-6 text-center text-sm text-muted">
-          Keine ToDos mit diesem Filter.
+          Keine Aufgaben mit diesem Filter.
         </p>
       )}
-      <ul hidden={todos.length === 0} className="divide-y divide-line overflow-hidden rounded-xl border border-line" aria-label="ToDos">
+      <ul hidden={todos.length === 0} className="divide-y divide-line overflow-hidden rounded-xl border border-line" aria-label="Aufgaben">
         {todos.map((t) => (
           <li key={t.id} className="flex items-start gap-3 bg-surface px-4 py-3" data-testid="todo-row">
             <span className="pt-0.5">
@@ -397,7 +397,7 @@ export function TodoList({
           </li>
         ))}
       </ul>
-      <SlideOver open={!!open} title="ToDo" onClose={() => setOpenId(null)}>
+      <SlideOver open={!!open} title="Aufgabe" onClose={() => setOpenId(null)}>
         {open && (
           <Detail key={open.id} todo={open} options={options} isKunde={isKunde} onClose={() => setOpenId(null)} />
         )}

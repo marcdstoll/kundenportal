@@ -4,6 +4,7 @@ import { useState } from "react";
 import { setFormat, setStatus } from "@/app/actions";
 import { FORMATS, STATUSES } from "@/lib/status";
 import { FormatTag, StatusBadge } from "./ui";
+import { keepInViewport } from "@/lib/popover";
 
 // Status oder Format direkt anklicken und neu wählen – wie in Notion (nur Admins)
 export function InlinePicker({ jobId, kind, value }: { jobId: string; kind: "status" | "format"; value: string }) {
@@ -48,7 +49,7 @@ export function InlinePicker({ jobId, kind, value }: { jobId: string; kind: "sta
         <>
           {/* Klick daneben schließt */}
           <span className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <ul role="listbox" className="absolute left-0 top-full z-20 mt-1 min-w-48 space-y-0.5 rounded-lg border border-line bg-surface p-1.5 shadow-xl">
+          <ul ref={keepInViewport} role="listbox" className="absolute left-0 top-full z-20 mt-1 min-w-48 space-y-0.5 rounded-lg border border-line bg-surface p-1.5 shadow-xl">
             {options.map((o) => (
               <li key={o}>
                 <button

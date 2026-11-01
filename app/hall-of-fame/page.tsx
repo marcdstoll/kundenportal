@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { clientLogos, listCustomers, loadViewFilters } from "@/lib/queries";
-import { hallOfFame, type HofRow } from "@/lib/hall-of-fame";
+import { HOF_PERIOD_ORDER, HOF_PERIODS, hallOfFame, isHofPeriod, type HofPeriod, type HofRow } from "@/lib/hall-of-fame";
 import {
   DISCIPLINES,
   PLATFORM_LABELS,
@@ -31,11 +31,27 @@ async function Content() {
   const saved = await loadViewFilters(me.id, "hall-of-fame");
   const client = clients.find((c) => c.id === saved.c) ?? clients[0] ?? null;
   const discipline: Discipline = isDiscipline(saved.d) ? saved.d : "short";
-  const [data, logos] = await Promise.all([client ? hallOfFame(client.id, discipline) : null, clientLogos()]);
+  const period: HofPeriod = isHofPeriod(saved.z) ? saved.z : "all";
+  const [data, logos] = await Promise.all([client ? hallOfFame(client.id, discipline, period) : null, clientLogos()]);
 
   return (
     <>
       <PageHeader title="Hall of Fame">
+        <div className="inline-flex rounded-lg border border-line p-0.5" role="group" aria-label="Zeitraum">
+          {HOF_PERIOD_ORDER.map((z) => (
+            <FilterButton
+              key={z}
+              view="hall-of-fame"
+              patch={{ z }}
+              aria-pressed={z === period}
+              className={`rounded-md px-3 py-1 text-sm transition-colors ${
+                z === period ? "bg-raised font-medium text-text" : "text-muted hover:text-text"
+              }`}
+            >
+              {HOF_PERIODS[z]}
+            </FilterButton>
+          ))}
+        </div>
         <div className="inline-flex rounded-lg border border-line p-0.5" role="group" aria-label="Disziplin">
           {(Object.keys(DISCIPLINES) as Discipline[]).map((d) => (
             <FilterButton
@@ -63,9 +79,12 @@ async function Content() {
         {client && data && (
           <>
             <h2 className="text-lg font-semibold">
-              {client.name} <span className="font-normal text-muted">· {DISCIPLINES[discipline].label}</span>
+              {client.name}{" "}
+              <span className="font-normal text-muted">
+                · {DISCIPLINES[discipline].label} · {HOF_PERIODS[period]}
+              </span>
             </h2>
-            <Ranking rows={data.ranking} logos={logos} />
+            <Ranking rows={data.ranking} logos={logos} period={period} />
           </>
         )}
       </div>
@@ -76,11 +95,13 @@ async function Content() {
 const MEDALS = ["#d4a017", "#9ca3af", "#b87333"];
 
 // Rangliste: nach Ø Views pro Video absteigend; Gesamtviews mit Aufteilung nach Plattform
-function Ranking({ rows, logos }: { rows: HofRow[]; logos: Map<string, string> }) {
+function Ranking({ rows, logos, period }: { rows: HofRow[]; logos: Map<string, string>; period: HofPeriod }) {
   if (rows.length === 0) {
     return (
       <p className="rounded-xl border border-dashed border-line p-6 text-center text-sm text-muted">
-        Noch keine Videos mit Views für diese Auswahl.
+        {period === "all"
+          ? "Noch keine Videos mit Views für diese Auswahl."
+          : `Keine Videos mit Views, die in den letzten ${period} Tagen veröffentlicht wurden.`}
       </p>
     );
   }

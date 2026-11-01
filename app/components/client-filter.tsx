@@ -4,6 +4,7 @@ import { useOptimistic, useState, useTransition } from "react";
 import { personColor } from "@/lib/colors";
 import { saveViewFilter } from "@/app/filter-actions";
 import type { FilterView } from "@/lib/view-filters";
+import { keepInViewport } from "@/lib/popover";
 
 // Dropdown mit Mehrfachauswahl: einen, mehrere oder alle Kunden anzeigen.
 // Die Auswahl wird pro Nutzer und Ansicht gespeichert (Board, Kalender, Ideen jeweils eigene).
@@ -63,6 +64,7 @@ export function ClientFilter({
           <div
             role="listbox"
             aria-multiselectable
+            ref={keepInViewport}
             className="absolute right-0 top-full z-20 mt-1 max-h-80 w-60 overflow-y-auto rounded-lg border border-line bg-surface p-1.5 shadow-xl"
           >
             <button

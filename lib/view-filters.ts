@@ -3,7 +3,8 @@
 //   k = Kunden (IDs, kommagetrennt), f = Formate, p = Prioritäten, s = Status bzw. Sortierspalte,
 //   d = Sortierrichtung bzw. Disziplin (Hall of Fame), c = gewählte Person bzw. Client (Reiter),
 //   m = Zuordnung (ToDos: alle / mir zugewiesen / von mir erstellt),
-//   o = aufgeklappte Bereiche (Kunden-Übersicht: kalender, projekte)
+//   o = aufgeklappte Bereiche (Kunden-Übersicht: kalender, projekte),
+//   z = Zeitraum (Hall of Fame: all, 7, 30)
 export const VIEW_FILTER_KEYS = {
   board: ["k", "f"],
   kalender: ["k"],
@@ -11,7 +12,7 @@ export const VIEW_FILTER_KEYS = {
   featureboard: ["s"],
   "nach-clients": ["c", "s", "d"],
   "nach-cutter": ["c", "s", "d"],
-  "hall-of-fame": ["c", "d"],
+  "hall-of-fame": ["c", "d", "z"],
   todos: ["s", "m"],
   uebersicht: ["o"],
 } as const;

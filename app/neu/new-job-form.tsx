@@ -246,8 +246,14 @@ export function NewJobForm({ clients, isStaff, cutters }: Props) {
         >
           <span className="block text-sm">
             {files.length > 0 ? "Andere Dateien auswählen" : "Videomaterial und Assets auswählen"}
+            {isStaff && files.length === 0 && <span className="text-muted"> (optional)</span>}
           </span>
           <span className="block text-xs text-muted">Mehrere Dateien möglich · Erlaubt: {ALLOWED_LABEL}</span>
+          {isStaff && files.length === 0 && (
+            <span className="block text-xs text-muted" data-testid="files-optional">
+              Ohne Dateien wird das Projekt direkt angelegt – Material kann später nachgereicht werden.
+            </span>
+          )}
           <input
             key={fileInputKey}
             type="file"

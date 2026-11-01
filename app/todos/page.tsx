@@ -28,7 +28,7 @@ const MINE_TABS = [
   { value: "erstellt", label: "Von mir erstellt" },
 ];
 
-// ToDos für Admins, Cutter und Kunden.
+// Aufgaben (intern „todos“) für Admins, Cutter und Kunden.
 // Sichtbar: Admins alles; alle anderen nur, was ihnen zugewiesen ist oder was sie selbst erstellt haben.
 // Filter (Status s, Zuordnung m) werden pro Nutzer gespeichert.
 async function Content({ searchParams }: { searchParams: Params }) {
@@ -114,18 +114,18 @@ async function Content({ searchParams }: { searchParams: Params }) {
 
   return (
     <>
-      <PageHeader title="ToDos">
+      <PageHeader title="Aufgaben">
         <NewTodoButton options={options} isKunde={isKunde} meId={me.id} />
       </PageHeader>
 
       <div className="space-y-4 px-4 pb-10 sm:px-6 md:px-10">
         {isKunde && (
           <p className="max-w-2xl text-sm text-muted">
-            Hier siehst du ToDos, die dir zugewiesen sind, und kannst dir eigene anlegen.
+            Hier siehst du Aufgaben, die dir zugewiesen sind, und kannst dir eigene anlegen.
           </p>
         )}
 
-        <nav className="flex flex-wrap gap-1 border-b border-line" aria-label="ToDos nach Status">
+        <nav className="flex flex-wrap gap-1 border-b border-line" aria-label="Aufgaben nach Status">
           {STATUS_TABS.map((t) => (
             <FilterButton
               key={t.value}

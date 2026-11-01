@@ -1,13 +1,29 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { jobCutters, jobs, publications, user } from "@/db/schema";
 import { DISCIPLINES, PUBLICATION_PLATFORMS, type Discipline, type PublicationPlatform } from "@/lib/publications";
+import { todayVienna } from "@/lib/deadline";
 
 // Hall of Fame je Client und Disziplin (siehe Briefing 04, Punkt 2):
 //   Gesamtviews je Cutter = Summe der Views seiner Videos (Video = Summe aller Plattform-Views)
 //   Ø Views pro Video     = Gesamtviews / Anzahl berücksichtigter Videos
 // Berücksichtigt wird ein Video, sobald mindestens eine Veröffentlichung einen Views-Stand hat.
 // Mehrere Cutter an einem Video: jeder bekommt das Video voll angerechnet (Regel noch offen).
+// Zeitraum: „7“/„30“ = nur Videos, deren Veröffentlichungsdatum in den letzten 7 bzw. 30 Tagen liegt (inkl. heute).
+
+export const HOF_PERIODS = { all: "Gesamt", "7": "Letzte 7 Tage", "30": "Letzte 30 Tage" } as const;
+export type HofPeriod = keyof typeof HOF_PERIODS;
+// Feste Reihenfolge (Objekt-Schlüssel wie „7“ würde JavaScript sonst nach vorn sortieren)
+export const HOF_PERIOD_ORDER: HofPeriod[] = ["all", "7", "30"];
+export const isHofPeriod = (v: unknown): v is HofPeriod => typeof v === "string" && Object.hasOwn(HOF_PERIODS, v);
+
+// Erster Tag des Zeitraums (YYYY-MM-DD) bzw. null für „Gesamt“
+export function periodStart(period: HofPeriod, today = todayVienna()) {
+  if (period === "all") return null;
+  const d = new Date(`${today}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - (Number(period) - 1));
+  return d.toISOString().slice(0, 10);
+}
 
 export type HofPublication = {
   platform: PublicationPlatform;
@@ -41,12 +57,22 @@ export type HofRow = {
 
 const zero = (): Record<PublicationPlatform, number> => ({ youtube: 0, tiktok: 0, instagram: 0 });
 
-export async function hallOfFame(customerId: string, discipline: Discipline) {
+export async function hallOfFame(customerId: string, discipline: Discipline, period: HofPeriod = "all") {
   const formats = [...DISCIPLINES[discipline].formats] as string[];
+  const today = todayVienna();
+  const since = periodStart(period, today);
   const jobRows = await db
     .select({ id: jobs.id, title: jobs.title, status: jobs.status, publishDate: jobs.publishDate })
     .from(jobs)
-    .where(and(eq(jobs.customerId, customerId), inArray(jobs.format, formats), ne(jobs.status, "storniert")));
+    .where(
+      and(
+        eq(jobs.customerId, customerId),
+        inArray(jobs.format, formats),
+        ne(jobs.status, "storniert"),
+        since ? gte(jobs.publishDate, since) : undefined,
+        since ? lte(jobs.publishDate, today) : undefined,
+      ),
+    );
   const ids = jobRows.map((j) => j.id);
 
   const [pubs, cutters] = ids.length

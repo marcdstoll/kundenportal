@@ -19,7 +19,7 @@ const ROLE_LABELS: Record<string, string> = {
 // Für alle Rollen gleich, unter der Hauptnavigation: Featureboard, Projekt-Ideen, Projekt anlegen (darunter der Upload-Baum)
 function projectNav(featureUnread: number, ideaUnread: number, todoUnread: number): NavItem[] {
   return [
-    { href: "/todos", label: "ToDos", badge: todoUnread },
+    { href: "/todos", label: "Aufgaben", badge: todoUnread },
     { href: "/featureboard", label: "Featureboard", badge: featureUnread },
     { href: "/ideen", label: "Projekt-Ideen", badge: ideaUnread },
     { href: "/neu", label: "Projekt-Upload" },

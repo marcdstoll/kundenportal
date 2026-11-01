@@ -163,7 +163,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/uebersicht"
                       date={t.todo.deadline}
                       meta={
                         <>
-                          <span className="font-medium text-text">ToDo</span>
+                          <span className="font-medium text-text">Aufgabe</span>
                           <PriorityChip priority={t.todo.priority} />
                           {t.todo.deadline && <span>Deadline {formatDate(t.todo.deadline)}</span>}
                           {viewAs && <span>für {t.todo.assigneeName}</span>}

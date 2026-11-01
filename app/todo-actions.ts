@@ -1,6 +1,6 @@
 "use server";
 
-// ToDos – Rechte siehe lib/todos.ts. Meldungen (Glocke): neue Zuweisung an die zuständige Person,
+// Aufgaben (intern „todos“) – Rechte siehe lib/todos.ts. Meldungen (Glocke): neue Zuweisung an die zuständige Person,
 // Erledigt an den Ersteller. Deadline-Erinnerungen kommen über den stündlichen Cron (lib/deadline-reminders.ts).
 
 import { randomUUID } from "crypto";
@@ -55,7 +55,7 @@ export async function createTodo(input: TodoInput) {
     const v = await clean(me, input);
     const id = randomUUID();
     await db.insert(todos).values({ id, ...v, createdBy: me.id });
-    await notifyTodo(id, me.id, v.assigneeId, "todo", `Neues ToDo von ${me.name}: „${short(v.title)}“`);
+    await notifyTodo(id, me.id, v.assigneeId, "todo", `Neue Aufgabe von ${me.name}: „${short(v.title)}“`);
     refresh();
     return { id };
   });
@@ -66,13 +66,13 @@ export async function updateTodo(id: string, input: TodoInput) {
   return run(async () => {
     const me = await requireUser();
     const t = await loadTodo(id);
-    if (!t || !canSeeTodo(me, t)) throw new Error("ToDo nicht gefunden.");
-    if (!canEditTodo(me, t)) throw new Error("Nur der Ersteller oder ein Admin kann das ToDo bearbeiten.");
+    if (!t || !canSeeTodo(me, t)) throw new Error("Aufgabe nicht gefunden.");
+    if (!canEditTodo(me, t)) throw new Error("Nur der Ersteller oder ein Admin kann die Aufgabe bearbeiten.");
     // Kunden bleiben selbst zuständig; bei Admin-Bearbeitung eines Kunden-ToDos die Person nicht verlieren
     const v = await clean(me, me.role === "kunde" ? { ...input, assigneeId: t.assigneeId } : input);
     await db.update(todos).set({ ...v, updatedAt: new Date() }).where(eq(todos.id, id));
     if (v.assigneeId !== t.assigneeId) {
-      await notifyTodo(id, me.id, v.assigneeId, "todo", `${me.name} hat dir ein ToDo zugewiesen: „${short(v.title)}“`);
+      await notifyTodo(id, me.id, v.assigneeId, "todo", `${me.name} hat dir eine Aufgabe zugewiesen: „${short(v.title)}“`);
     }
     refresh();
     return null;
@@ -84,7 +84,7 @@ export async function setTodoStatus(id: string, status: string) {
   return run(async () => {
     const me = await requireUser();
     const t = await loadTodo(id);
-    if (!t || !canSeeTodo(me, t)) throw new Error("ToDo nicht gefunden.");
+    if (!t || !canSeeTodo(me, t)) throw new Error("Aufgabe nicht gefunden.");
     if (!canSetTodoStatus(me, t)) throw new Error("Den Status ändern nur die zuständige Person und Admins.");
     if (status !== "offen" && status !== "abgeschlossen") throw new Error("Unbekannter Status.");
     if (status === t.status) return null;
@@ -104,8 +104,8 @@ export async function deleteTodo(id: string) {
   return run(async () => {
     const me = await requireUser();
     const t = await loadTodo(id);
-    if (!t || !canSeeTodo(me, t)) throw new Error("ToDo nicht gefunden.");
-    if (!canEditTodo(me, t)) throw new Error("Nur der Ersteller oder ein Admin kann das ToDo löschen.");
+    if (!t || !canSeeTodo(me, t)) throw new Error("Aufgabe nicht gefunden.");
+    if (!canEditTodo(me, t)) throw new Error("Nur der Ersteller oder ein Admin kann die Aufgabe löschen.");
     await db.delete(todos).where(eq(todos.id, id));
     refresh();
     return null;

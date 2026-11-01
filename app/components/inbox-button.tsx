@@ -10,7 +10,7 @@ export type InboxItem = {
   jobId: string | null; // Projekt-Meldung …
   featureId: string | null; // … oder Featureboard-Meldung …
   ideaId: string | null; // … oder Projekt-Idee …
-  todoId: string | null; // … oder ToDo
+  todoId: string | null; // … oder Aufgabe
   type: string;
   text: string;
   createdAt: Date;
@@ -125,7 +125,7 @@ export function InboxButton({ items, unread, jobHref }: { items: InboxItem[]; un
                           <StatusBadge status={n.jobStatus} />
                         ) : (
                           <span className="shrink-0 rounded bg-raised px-1.5 py-px text-[11px] text-muted">
-                            {n.ideaId ? "Projekt-Idee" : n.todoId ? "ToDo" : "Featureboard"}
+                            {n.ideaId ? "Projekt-Idee" : n.todoId ? "Aufgabe" : "Featureboard"}
                           </span>
                         )}
                       </div>
