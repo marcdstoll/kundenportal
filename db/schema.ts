@@ -106,6 +106,7 @@ export const jobs = pgTable("jobs", {
   deadlineNotice: text("deadline_notice"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdBy: text("created_by").references(() => user.id, {onDelete: "set null"})
 });
 
 // Welche Cutter an einem Projekt arbeiten (mehrere möglich)

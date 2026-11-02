@@ -1,4 +1,5 @@
 import Link from "next/link";
+import {user} from "@/db/auth-schema";
 import {
   clientLogos,
   loadComments,
@@ -77,12 +78,15 @@ function DrawerFrame({
   job,
   closeHref,
   editable = false,
+  creator,
   children,
+
 }: {
   job: JobView;
   closeHref: string;
   editable?: boolean;
   children: React.ReactNode;
+  creator?: {id: string, name: string} | null;
 }) {
   const color = statusColor(job.status);
   return (
@@ -116,6 +120,11 @@ function DrawerFrame({
           >
             Schließen
           </Link>
+          {creator !== undefined && (
+                          <span className="px-2 text-right text-xs text-muted">
+                Erstellt von <span className="text-text">{creator?.name ?? ""}</span>
+              </span>
+          )}
         </div>
         <div className="space-y-6 px-4 py-5 sm:px-6">{children}</div>
       </aside>
@@ -295,6 +304,7 @@ export async function JobDrawer({
   if (!job || !(await canSeeJob(me, job))) return null;
 
   const isAdmin = me.role === "admin";
+  const creator = job.createdBy ? ((await db.select({ id: user.id, name: user.name }).from(user).where(eq(user.id, job.createdBy)))[0] ?? null) : null;
   const isAssigned = job.cutters.some((c) => c.id === me.id);
   const rawFiles = job.files.filter((f) => f.kind === "roh");
   const video = latestVideo(job);
@@ -314,7 +324,7 @@ export async function JobDrawer({
     : [];
 
   return (
-    <DrawerFrame job={job} closeHref={closeHref} editable={isAdmin}>
+    <DrawerFrame job={job} closeHref={closeHref} editable={isAdmin} creator={isAdmin ? creator : undefined}>
       <CancelBanner job={job} isAdmin={isAdmin} />
 
       <section>

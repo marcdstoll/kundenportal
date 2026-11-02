@@ -238,6 +238,7 @@ export async function createJob(input: NewJobInput) {
       content: input.content.trim(),
       specialNotes: input.specialNotes.trim(),
       status: "entwurf",
+      createdBy: me.id,
       frameioFolderId: folder.id,
       frameioFolderUrl: folder.url,
       rawFolderId: folder.rawId,
@@ -850,6 +851,7 @@ export async function duplicateJob(jobId: string, title?: string) {
       onlineFolderId: job.onlineFolderId,
       parentJobId: job.parentJobId ?? job.id,
       submittedAt: new Date(),
+      createdBy: me.id
     });
     // Rohmaterial wird nicht kopiert: alle Teile zeigen die Dateien aus dem gemeinsamen Raw-Ordner (lib/queries.ts)
     refresh();
