@@ -249,11 +249,6 @@ export function NewJobForm({ clients, isStaff, cutters }: Props) {
             {isStaff && files.length === 0 && <span className="text-muted"> (optional)</span>}
           </span>
           <span className="block text-xs text-muted">Mehrere Dateien möglich · Erlaubt: {ALLOWED_LABEL}</span>
-          {isStaff && files.length === 0 && (
-            <span className="block text-xs text-muted" data-testid="files-optional">
-              Ohne Dateien wird das Projekt direkt angelegt – Material kann später nachgereicht werden.
-            </span>
-          )}
           <input
             key={fileInputKey}
             type="file"
