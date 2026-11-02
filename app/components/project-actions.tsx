@@ -154,8 +154,7 @@ export function DeleteJobDialog({
       title="Projekt löschen?"
       message={
         <>
-          Bist du sicher? „<b className="text-text">{title}</b>“ wird endgültig gelöscht – mit Kommentaren, Dateien
-          und dem Ordner in Frame.io. Das lässt sich nicht rückgängig machen.
+          Bist du sicher? „<b className="text-text">{title}</b>“ wird endgültig gelöscht, mit allen dazugehörigen Dateien. Das lässt sich nicht rückgängig machen.
         </>
       }
       confirmLabel="Endgültig löschen"
