@@ -80,13 +80,12 @@ function DrawerFrame({
   editable = false,
   creator,
   children,
-
 }: {
   job: JobView;
   closeHref: string;
   editable?: boolean;
   children: React.ReactNode;
-  creator?: {id: string, name: string} | null;
+  creator?: { id: string; name: string } | null; // nur in der Admin-Ansicht gesetzt
 }) {
   const color = statusColor(job.status);
   return (
@@ -113,18 +112,21 @@ function DrawerFrame({
               <DeadlineBadge label={jobDeadlineWarning(job.publishDate, job.status)} date={job.publishDate} />
             </div>
           </div>
-          <Link
-            href={closeHref}
-            scroll={false}
-            className="rounded-md px-2 py-1 text-sm text-muted hover:bg-raised hover:text-text"
-          >
-            Schließen
-          </Link>
-          {creator !== undefined && (
-                          <span className="px-2 text-right text-xs text-muted">
-                Erstellt von <span className="text-text">{creator?.name ?? ""}</span>
+          {/* Rechts: „Schließen“ oben, darunter (nur Admins) wer das Projekt angelegt hat */}
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <Link
+              href={closeHref}
+              scroll={false}
+              className="rounded-md px-2 py-1 text-sm text-muted hover:bg-raised hover:text-text"
+            >
+              Schließen
+            </Link>
+            {creator && (
+              <span className="px-2 text-right text-xs text-muted" data-testid="job-creator">
+                Erstellt von <span className="text-text">{creator.name}</span>
               </span>
-          )}
+            )}
+          </div>
         </div>
         <div className="space-y-6 px-4 py-5 sm:px-6">{children}</div>
       </aside>
