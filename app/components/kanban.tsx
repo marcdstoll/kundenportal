@@ -9,6 +9,7 @@ import { boardColumnOrder } from "@/lib/board-prefs";
 import { jobDeadlineWarning, todayVienna } from "@/lib/deadline";
 import { DeadlineBadge } from "./deadline-badge";
 import {getCurrentUser} from "@/lib/session";
+import { JobContextMenu } from "./job-context-menu";
 
 type Props = {
   jobs: JobView[];
@@ -60,6 +61,7 @@ export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread
                 key={job.id}
                 href={hrefFor(job.id)}
                 scroll={false}
+                data-job-id={job.id}
                 className="block space-y-2.5 rounded-lg border p-3 text-sm shadow-sm transition-transform hover:-translate-y-px"
                 style={{
                   background: `color-mix(in oklab, ${base} 6%, var(--card))`,
@@ -112,5 +114,21 @@ export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread
   });
 
   // key: nach dem Speichern liefert der Server die neue Reihenfolge → Reihe neu aufbauen
-  return <ColumnRow key={order.join()} order={order} columns={columns}  canReorder={canReorder}/>;
+  const row = <ColumnRow key={order.join()} order={order} columns={columns} canReorder={canReorder} />;
+  // Rechtsklick-Menü (Schnellzugriff) für Admins und Cutter – nicht in der Kundenansicht
+  if (customerView || !me || me.role === "kunde") return row;
+  return (
+    <JobContextMenu
+      isAdmin={me.role === "admin"}
+      jobs={jobs.map((j) => ({
+        id: j.id,
+        title: j.title,
+        status: j.status,
+        paused: !!j.cancelRequestedAt,
+        assigned: j.cutters.some((c) => c.id === me.id),
+      }))}
+    >
+      {row}
+    </JobContextMenu>
+  );
 }

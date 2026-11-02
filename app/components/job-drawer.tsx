@@ -444,7 +444,7 @@ export async function JobDrawer({
         isAssigned={isAssigned}
         staff={staff.map((s) => ({ id: s.id, name: s.name }))}
         beforeBilling={
-          isAdmin && DELETABLE.includes(job.status) ? (
+          isAdmin ? (
             <DeleteJobButton jobId={job.id} title={job.title} afterHref={closeHref} />
           ) : null
         }

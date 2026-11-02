@@ -132,40 +132,69 @@ export function DeleteFileButton({ fileId, name }: { fileId: string; name: strin
   );
 }
 
+// Rückfrage „Projekt löschen?“ – genutzt vom Knopf im Projekt-Panel und vom Rechtsklick-Menü
+export function DeleteJobDialog({
+  open,
+  jobId,
+  title,
+  onCancel,
+  onDeleted,
+}: {
+  open: boolean;
+  jobId: string;
+  title: string;
+  onCancel: () => void;
+  onDeleted: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <ConfirmDialog
+      open={open}
+      title="Projekt löschen?"
+      message={
+        <>
+          Bist du sicher? „<b className="text-text">{title}</b>“ wird endgültig gelöscht – mit Kommentaren, Dateien
+          und dem Ordner in Frame.io. Das lässt sich nicht rückgängig machen.
+        </>
+      }
+      confirmLabel="Endgültig löschen"
+      busy={busy}
+      error={error}
+      onCancel={() => {
+        setError(null);
+        onCancel();
+      }}
+      onConfirm={async () => {
+        setBusy(true);
+        setError(null);
+        const res = await deleteJob(jobId);
+        setBusy(false);
+        if (!res.ok) return setError(res.error);
+        onDeleted();
+      }}
+    />
+  );
+}
+
 export function DeleteJobButton({ jobId, title, afterHref }: { jobId: string; title: string; afterHref: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   return (
     <>
       <button
         type="button"
-        onClick={() => {
-          setError(null);
-          setOpen(true);
-        }}
+        onClick={() => setOpen(true)}
         className="w-full rounded-md border border-danger/40 px-3 py-2 text-sm text-danger transition-colors hover:bg-danger/10"
       >
         Projekt löschen
       </button>
-      <ConfirmDialog
+      <DeleteJobDialog
         open={open}
-        title="Projekt löschen?"
-        message={
-          <>
-            „<b className="text-text">{title}</b>“ wird mit allen Dateien endgültig gelöscht.
-          </>
-        }
-        confirmLabel="Endgültig löschen"
-        busy={busy}
-        error={error}
+        jobId={jobId}
+        title={title}
         onCancel={() => setOpen(false)}
-        onConfirm={async () => {
-          setBusy(true);
-          const res = await deleteJob(jobId);
-          setBusy(false);
-          if (!res.ok) return setError(res.error);
+        onDeleted={() => {
           setOpen(false);
           router.push(afterHref);
         }}

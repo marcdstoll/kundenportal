@@ -8,6 +8,7 @@ import { jobDeadlineWarning, todayVienna } from "@/lib/deadline";
 import { Avatar, ExternalLink, FormatTag, Person, StatusBadge, formatDate, shortLink } from "./ui";
 
 import { STATUSES } from "@/lib/status";
+import { JobContextMenu } from "./job-context-menu";
 
 // Sortierbare Spalten (pro Nutzer und Ansicht gespeichert: s=title, d=asc)
 export const SORT_KEYS = [
@@ -70,6 +71,8 @@ type Props = {
   view: FilterView;
   // Logo-URLs (Nutzer-ID → URL), damit statt Initialen das aktuelle Logo erscheint
   logos?: Map<string, string>;
+  // Angemeldete Person – aktiviert das Rechtsklick-Menü auf den Zeilen
+  meId?: string;
 };
 
 const COLUMNS: { key: SortKey; label: string }[] = [
@@ -84,13 +87,13 @@ const COLUMNS: { key: SortKey; label: string }[] = [
 ];
 
 // Tabelle wie "Projekte nach Cutter/Clients sortiert" in Notion – Klick auf Überschrift sortiert
-export function JobTable({ jobs, hrefFor, isAdmin, sort, view, logos }: Props) {
+export function JobTable({ jobs, hrefFor, isAdmin, sort, view, logos, meId }: Props) {
   if (jobs.length === 0) {
     return <p className="px-1 py-6 text-sm text-muted">Hier gibt es noch keine Projekte.</p>;
   }
   const sorted = sortJobs(jobs, sort);
   const today = todayVienna();
-  return (
+  const table = (
     <div className="space-y-2">
       <div className="overflow-x-auto rounded-xl border border-line">
         <table className="w-full min-w-[1180px] text-left text-sm">
@@ -123,7 +126,12 @@ export function JobTable({ jobs, hrefFor, isAdmin, sort, view, logos }: Props) {
           </thead>
           <tbody className="divide-y divide-line">
             {sorted.map((job) => (
-              <tr key={job.id} className="transition-colors hover:bg-surface/60">
+              <tr
+                key={job.id}
+                data-job-id={job.id}
+                data-href={hrefFor(job.id)}
+                className="transition-colors hover:bg-surface/60"
+              >
                 <td className="min-w-52 px-4 py-2.5">
                   <Link href={hrefFor(job.id)} scroll={false} className="font-medium hover:underline">
                     {job.title}
@@ -180,6 +188,22 @@ export function JobTable({ jobs, hrefFor, isAdmin, sort, view, logos }: Props) {
       {/* Anzahl der angezeigten Projekte (je nach gewählter Person) */}
       <p className="px-1 text-sm text-muted">Gesamt: {jobs.length}</p>
     </div>
+  );
+  if (!meId) return table;
+  // Rechtsklick-Menü (Schnellzugriff) auf den Zeilen
+  return (
+    <JobContextMenu
+      isAdmin={isAdmin}
+      jobs={jobs.map((j) => ({
+        id: j.id,
+        title: j.title,
+        status: j.status,
+        paused: !!j.cancelRequestedAt,
+        assigned: j.cutters.some((c) => c.id === meId),
+      }))}
+    >
+      {table}
+    </JobContextMenu>
   );
 }
 

@@ -865,12 +865,15 @@ const DELETABLE = ["entwurf", "todo"];
 const CANCELLABLE = ["warteschlange", "in_arbeit", "feedback", "feedback_client"];
 
 // Ganzes Projekt löschen – inkl. Ordner in Frame.io (außer ein Duplikat nutzt ihn noch)
+// Projekt löschen: Kunden nur in „To Dos“ (danach Stornierung anfragen), Admins in jedem Status.
+// Frame.io: der Projektordner samt Inhalt wird gelöscht – teilt er sich ihn mit anderen Teilen („Teil 2“),
+// bleibt er stehen und nur der eigene Review-Ordner dieses Teils verschwindet.
 export async function deleteJob(jobId: string) {
   return run(async () => {
     const me = await requireUser("kunde", "admin");
     const job = await getJob(jobId);
     await assertCanSee(me, job);
-    if (!DELETABLE.includes(job.status)) {
+    if (me.role !== "admin" && !DELETABLE.includes(job.status)) {
       throw new Error("Löschen geht nur in „To Dos“. Danach kannst du eine Stornierung anfragen.");
     }
     if (job.frameioFolderId && !(await folderShared(job))) {
@@ -883,6 +886,13 @@ export async function deleteJob(jobId: string) {
           .update(jobFiles)
           .set({ jobId: sibling.id })
           .where(and(eq(jobFiles.jobId, jobId), eq(jobFiles.kind, "roh")));
+      }
+      if (job.reviewFolderId) {
+        const sharedReview = await db
+          .select({ id: jobs.id })
+          .from(jobs)
+          .where(and(eq(jobs.reviewFolderId, job.reviewFolderId), ne(jobs.id, job.id)));
+        if (sharedReview.length === 0) await deleteFolder(job.reviewFolderId).catch(deleteError);
       }
     }
     await db.delete(jobs).where(eq(jobs.id, jobId));

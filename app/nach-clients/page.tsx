@@ -39,6 +39,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/nach-client
           logos={logos}
           jobs={jobs}
           isAdmin={me.role === "admin"}
+          meId={me.id}
           sort={sort}
           view="nach-clients"
           hrefFor={(id) => `${base}?job=${id}`}
