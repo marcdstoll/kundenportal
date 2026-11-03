@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { jobs as jobsTable } from "@/db/schema";
 import { getCurrentUser, resolveCustomerView } from "@/lib/session";
 import { listCustomers, loadJobs, loadViewFilters } from "@/lib/queries";
 import { calendarLockReason } from "@/lib/calendar-lock";
-import { ClientFilter } from "@/app/components/client-filter";
+import { ClientFormatChips, ClientFormatFilter } from "@/app/components/client-format-filter";
+import { decodeMatrix, matrixShows } from "@/lib/client-format-filter";
 import { both, clientIdsOfCutter, jobScope } from "@/lib/access";
 import { PageHeader, ViewAsBanner } from "@/app/components/shell";
 import { Calendar, monthKey, parseMonth } from "@/app/components/calendar";
@@ -33,14 +34,16 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
   const allowed = me.role === "cutter" ? await clientIdsOfCutter(me.id) : null;
   const clients = allowed ? allClients.filter((c) => allowed.includes(c.id)) : allClients;
   const saved = clients.length > 0 ? await loadViewFilters(me.id, "kalender") : {};
-  const pickedClients = (saved.k ?? "").split(",").filter((id) => clients.some((c) => c.id === id));
+  // Multifilter Kunde × Format (eigene Auswahl, unabhängig vom Board)
+  const filterClients = clients.map((c) => ({ id: c.id, name: c.name }));
+  const matrix = decodeMatrix(saved, filterClients.map((c) => c.id));
 
   const filter = customerId
     ? and(isNotNull(jobsTable.publishDate), eq(jobsTable.customerId, customerId))
-    : pickedClients.length > 0
-      ? and(isNotNull(jobsTable.publishDate), inArray(jobsTable.customerId, pickedClients))
-      : isNotNull(jobsTable.publishDate);
-  const jobs = await loadJobs(me.role === "cutter" ? both(await jobScope(me), filter) : filter);
+    : isNotNull(jobsTable.publishDate);
+  const jobs = (await loadJobs(me.role === "cutter" ? both(await jobScope(me), filter) : filter)).filter(
+    (j) => customerId || matrixShows(matrix, j),
+  );
 
   const lockReason = calendarLockReason(me);
 
@@ -56,19 +59,16 @@ async function Content({ searchParams }: { searchParams: PageProps<"/kalender">[
     <>
       <ViewAsBanner viewAs={customerView?.viewAs ?? null} />
       <PageHeader title="Kalender" />
-      <div className="px-4 pb-10 sm:px-6 md:px-10">
+      <div className="space-y-3 px-4 pb-10 sm:px-6 md:px-10">
+        {filterClients.length > 0 && <ClientFormatChips view="kalender" clients={filterClients} matrix={matrix} />}
         <Calendar
           month={month}
           jobs={jobs}
           showClient={!customerId}
           lockReason={lockReason}
           toolbar={
-            clients.length > 0 ? (
-              <ClientFilter
-                view="kalender"
-                clients={clients.map((c) => ({ id: c.id, name: c.name }))}
-                selected={pickedClients}
-              />
+            filterClients.length > 0 ? (
+              <ClientFormatFilter view="kalender" clients={filterClients} matrix={matrix} />
             ) : null
           }
           hrefFor={(id) => query({ job: id })}

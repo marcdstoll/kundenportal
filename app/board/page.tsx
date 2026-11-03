@@ -3,10 +3,9 @@ import { getCurrentUser } from "@/lib/session";
 import { clientLogos, listCustomers, loadJobs, loadViewFilters, unreadByJob } from "@/lib/queries";
 import { isConnected } from "@/lib/frameio";
 import { clientIdsOfCutter, jobScope } from "@/lib/access";
-import { ClientFilter } from "@/app/components/client-filter";
 import { BOARD_COLUMNS } from "@/lib/status";
-import { parseFormatFilter } from "@/lib/board-prefs";
-import { FormatFilter } from "@/app/components/format-filter";
+import { decodeMatrix, matrixShows } from "@/lib/client-format-filter";
+import { ClientFormatChips, ClientFormatFilter } from "@/app/components/client-format-filter";
 import { PageHeader } from "@/app/components/shell";
 import { AutoRefresh } from "@/app/components/auto-refresh";
 import { Kanban } from "@/app/components/kanban";
@@ -35,31 +34,23 @@ async function Board({ searchParams }: { searchParams: PageProps<"/board">["sear
   const allowedIds =
     me.role === "admin" ? null : new Set([...(await clientIdsOfCutter(me.id)), ...visible.map((j) => j.customerId)]);
   const clients = allClients.filter((c) => !allowedIds || allowedIds.has(c.id));
-  // Gespeicherte Filter des Nutzers für das Board: Kunden (k) und Formate (f) – beide wirken gemeinsam
+  // Gespeicherter Multifilter des Nutzers: je Kunde die angezeigten Formate (lib/client-format-filter.ts)
   const saved = await loadViewFilters(me.id, "board");
-  const pickedClients = (saved.k ?? "").split(",").filter((id) => clients.some((c) => c.id === id));
-  const formats = parseFormatFilter(saved.f);
+  const filterClients = clients.map((c) => ({ id: c.id, name: c.name }));
+  const matrix = decodeMatrix(saved, filterClients.map((c) => c.id));
   const href = (extra?: string) => (extra ? `/board?${extra}` : "/board");
 
-  const jobs = visible.filter(
-    (j) => formats.includes(j.format) && (pickedClients.length === 0 || pickedClients.includes(j.customerId)),
-  );
+  const jobs = visible.filter((j) => matrixShows(matrix, j));
 
   return (
     <>
       <AutoRefresh seconds={10} />
       <PageHeader title="Board">
-        <div className="flex flex-wrap items-center gap-2">
-          {clients.length > 0 && (
-            <ClientFilter
-              view="board"
-              clients={clients.map((c) => ({ id: c.id, name: c.name }))}
-              selected={pickedClients}
-            />
-          )}
-          <FormatFilter active={formats} />
-        </div>
+        {filterClients.length > 0 && <ClientFormatFilter view="board" clients={filterClients} matrix={matrix} />}
       </PageHeader>
+      <div className="-mt-2 px-4 pb-4 empty:hidden sm:px-6 md:px-10">
+        <ClientFormatChips view="board" clients={filterClients} matrix={matrix} />
+      </div>
 
       {/* Nur falls Frame.io (noch) nicht verbunden ist – sonst unsichtbar */}
       {me.role === "admin" && !(await isConnected()) && (
@@ -77,7 +68,7 @@ async function Board({ searchParams }: { searchParams: PageProps<"/board">["sear
         </div>
       )}
 
-      {/* Ein Board für alle Formate – oben per Filter auf Shortform / Longform / Clipping eingrenzen */}
+      {/* Ein Board für alle Formate – oben per Multifilter je Kunde auf Shortform / Longform / Clipping eingrenzen */}
       <div className="px-4 pb-10 sm:px-6 md:px-10">
         <Kanban jobs={jobs} meId={me.id} unread={unread} logos={logos} hrefFor={(id) => href(`job=${id}`)} />
       </div>

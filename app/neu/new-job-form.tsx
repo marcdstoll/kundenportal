@@ -6,6 +6,7 @@ import { ACCEPT, ALLOWED_LABEL, filterAllowed } from "@/lib/file-types";
 import { startProjektUpload } from "@/lib/upload-manager";
 import { MultiSelect } from "@/app/components/multi-select";
 import { UploadOverview } from "@/app/components/upload-tree";
+import { DROP_ACTIVE, useFileDrop } from "@/lib/file-drop";
 
 type FileState = { file: File };
 
@@ -105,6 +106,22 @@ export function NewJobForm({ clients, isStaff, cutters }: Props) {
     );
   }
 
+
+  // Dateien aus „Auswählen“ oder per Drag & Drop – unerlaubte (z. B. XML) still aussortieren,
+  // Hinweis nur, wenn gar nichts übrig bleibt
+  const pickFiles = (picked: File[]) => {
+    const { allowed } = filterAllowed(picked);
+    setFiles(allowed.map((file) => ({ file })));
+    setErrors((er) => ({
+      ...er,
+      files:
+        picked.length > 0 && allowed.length === 0
+          ? `Dieser Dateityp wird nicht unterstützt. Erlaubt: ${ALLOWED_LABEL}.`
+          : undefined,
+    }));
+    setSuccess(null);
+  };
+  const drop = useFileDrop(pickFiles, { disabled: busy });
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-5">
       {isStaff && (
@@ -240,9 +257,10 @@ export function NewJobForm({ clients, isStaff, cutters }: Props) {
 
       <div className="space-y-1.5">
         <label
+          {...drop.props}
           className={`block cursor-pointer space-y-2 rounded-xl border border-dashed p-5 text-center transition-colors hover:bg-surface/60 ${
             errors.files ? "border-danger bg-danger/5" : "border-line"
-          }`}
+          } ${drop.active ? DROP_ACTIVE : ""}`}
         >
           <span className="block text-sm">
             {files.length > 0 ? "Andere Dateien auswählen" : "Videomaterial und Assets auswählen"}
@@ -256,20 +274,7 @@ export function NewJobForm({ clients, isStaff, cutters }: Props) {
             accept={ACCEPT}
             disabled={busy}
             className="sr-only"
-            onChange={(e) => {
-              // Unerlaubte Dateien (z. B. XML) still aussortieren – Hinweis nur, wenn gar nichts übrig bleibt
-              const picked = Array.from(e.target.files ?? []);
-              const { allowed } = filterAllowed(picked);
-              setFiles(allowed.map((file) => ({ file })));
-              setErrors((er) => ({
-                ...er,
-                files:
-                  picked.length > 0 && allowed.length === 0
-                    ? `Dieser Dateityp wird nicht unterstützt. Erlaubt: ${ALLOWED_LABEL}.`
-                    : undefined,
-              }));
-              setSuccess(null);
-            }}
+            onChange={(e) => pickFiles(Array.from(e.target.files ?? []))}
           />
         </label>
         {errors.files && <span className="block text-xs text-danger">{errors.files}</span>}

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { savePerson, sendOwnPasswordLink } from "@/app/admin-actions";
 import { Avatar, buttonPrimary, buttonSecondary, inputField } from "./ui";
+import { DROP_ACTIVE, useFileDrop } from "@/lib/file-drop";
 
 // Bild im Browser auf max. 256 px verkleinern (klein genug für die Datenbank)
 async function shrinkImage(file: File): Promise<string> {
@@ -35,6 +36,16 @@ export function PersonForm({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const preview = logo === undefined ? logoUrl : logo;
+  const pickImage = async (f: File | undefined) => {
+    if (!f) return;
+    if (!f.type.startsWith("image/")) return setMsg({ ok: false, text: "Bitte ein Bild auswählen." });
+    try {
+      setLogo(await shrinkImage(f));
+    } catch {
+      setMsg({ ok: false, text: "Das Bild konnte nicht gelesen werden." });
+    }
+  };
+  const drop = useFileDrop((f) => pickImage(f[0]), { disabled: busy, multiple: false });
 
   return (
     <form
@@ -51,7 +62,10 @@ export function PersonForm({
         router.refresh();
       }}
     >
-      <div className="flex items-center gap-4">
+      <div
+        {...drop.props}
+        className={`-m-1.5 flex items-center gap-4 rounded-lg p-1.5 ${drop.active ? DROP_ACTIVE : ""}`}
+      >
         <Avatar name={name || "?"} id={person.id} size="lg" logoUrl={preview} />
         <div className="space-y-1 text-sm">
           <label className="cursor-pointer text-accent hover:underline">
@@ -60,15 +74,10 @@ export function PersonForm({
               type="file"
               accept="image/png,image/jpeg,image/webp"
               className="sr-only"
-              onChange={async (e) => {
+              onChange={(e) => {
                 const f = e.target.files?.[0];
                 e.target.value = "";
-                if (!f) return;
-                try {
-                  setLogo(await shrinkImage(f));
-                } catch {
-                  setMsg({ ok: false, text: "Das Bild konnte nicht gelesen werden." });
-                }
+                pickImage(f);
               }}
             />
           </label>

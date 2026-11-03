@@ -9,6 +9,7 @@ import { inviteMember, removeMember, resendMemberInvite, setMemberAdmin, updateC
 import { ConfirmDialog } from "./confirm-dialog";
 import { SlideOver } from "./slide-over";
 import { Avatar, buttonPrimary, buttonSecondary, inputField } from "./ui";
+import { DROP_ACTIVE, useFileDrop } from "@/lib/file-drop";
 
 type Links = { tiktok: string; youtube: string; instagram: string; extra: { label: string; url: string }[] };
 
@@ -68,6 +69,8 @@ export function CustomerForm({
       setMsg({ ok: false, text: "Das Bild konnte nicht gelesen werden." });
     }
   };
+  const coverDrop = useFileDrop((f) => pick(f[0], 1600, (v) => setCover(v)), { disabled: busy, multiple: false });
+  const logoDrop = useFileDrop((f) => pick(f[0], 256, (v) => setLogo(v)), { disabled: busy, multiple: false });
 
   return (
     <form
@@ -88,7 +91,10 @@ export function CustomerForm({
       {/* Titelbild */}
       <div className="space-y-2">
         <span className="text-sm text-muted">Titelbild (Galerie und Detailansicht)</span>
-        <div className="relative aspect-[16/7] overflow-hidden rounded-xl border border-line bg-raised">
+        <div
+          {...coverDrop.props}
+          className={`relative aspect-[16/7] overflow-hidden rounded-xl border border-line bg-raised ${coverDrop.active ? DROP_ACTIVE : ""}`}
+        >
           {coverPreview ? (
             // eslint-disable-next-line @next/next/no-img-element -- Vorschau bzw. Bild aus der eigenen API
             <img src={coverPreview} alt="Titelbild" className="size-full object-cover" />
@@ -114,7 +120,10 @@ export function CustomerForm({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4">
+      <div
+        {...logoDrop.props}
+        className={`-m-1.5 flex flex-wrap items-center gap-4 rounded-lg p-1.5 ${logoDrop.active ? DROP_ACTIVE : ""}`}
+      >
         <Avatar name={name || "?"} id={customer.id} size="lg" logoUrl={logoPreview} />
         <div className="space-y-1 text-sm">
           <label className="cursor-pointer text-accent hover:underline">

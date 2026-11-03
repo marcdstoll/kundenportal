@@ -19,6 +19,7 @@ import { buttonPrimary, buttonSecondary, inputField } from "./ui";
 import { MultiSelect } from "./multi-select";
 import { WelcomePlayer, WelcomeRecorder } from "./welcome-recorder";
 import { ConfirmDialog } from "./confirm-dialog";
+import { DROP_ACTIVE, useFileDrop } from "@/lib/file-drop";
 import { SlideOver } from "./slide-over";
 
 function ErrorText({ error }: { error: string | null }) {
@@ -294,6 +295,14 @@ export function WelcomeVideoSection({
     }
     setProgress(null);
   }
+  const drop = useFileDrop(
+    (files) => {
+      const file = files.find((f) => ["video/mp4", "video/quicktime", "video/webm"].includes(f.type));
+      if (file) save(file);
+      else setMsg({ ok: false, text: "Bitte ein Video (MP4, MOV oder WebM) ablegen." });
+    },
+    { disabled: progress !== null, multiple: false },
+  );
 
   if (recording) {
     return (
@@ -309,7 +318,7 @@ export function WelcomeVideoSection({
   }
 
   return (
-    <div className="space-y-2">
+    <div {...drop.props} className={`-m-1.5 space-y-2 rounded-lg p-1.5 ${drop.active ? DROP_ACTIVE : ""}`}>
       {hasVideo && progress === null && <WelcomePlayer key={version} src={`/api/welcome/${userId}?v=${version}`} />}
       {progress !== null ? (
         <div className="space-y-1 text-xs">

@@ -9,6 +9,7 @@ import { ThemeToggle } from "./theme-toggle";
 import { MobileFrame } from "./mobile-frame";
 import { InboxButton, type InboxItem } from "./inbox-button";
 import { UploadTree } from "./upload-tree";
+import { DropGuard } from "./drop-guard";
 
 const ROLE_LABELS: Record<string, string> = {
   kunde: "Client",
@@ -188,6 +189,8 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
     <>
       {/* Gewählte Personenfarben (nur geprüfte Hex-Werte, siehe lib/colors.ts) */}
       {colors && <style dangerouslySetInnerHTML={{ __html: colors }} />}
+      {/* Dateien, die neben ein Upload-Feld fallen, öffnen nicht die Seite (laufende Uploads bleiben) */}
+      <DropGuard />
       <MobileFrame inbox={inbox} sidebar={sidebar}>
         {children}
       </MobileFrame>

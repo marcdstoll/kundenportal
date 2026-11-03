@@ -19,6 +19,7 @@ import {
 } from "@/app/actions";
 import { startReviewUpload, useUploads } from "@/lib/upload-manager";
 import { UploadOverview } from "./upload-tree";
+import { DROP_ACTIVE, useFileDrop } from "@/lib/file-drop";
 import { BilledToggle } from "./billed-toggle";
 import { MultiSelect } from "./multi-select";
 import { buttonPrimary, buttonSecondary, inputField } from "./ui";
@@ -78,6 +79,15 @@ export function JobControls({ job, isAdmin, isAssigned, staff, beforeBilling }: 
   const reviewRunning = useUploads().some(
     (v) => v.jobId === job.id && v.kind === "review" && (v.status === "laeuft" || v.status === "wartet"),
   );
+  // Fertiges Video per Drag & Drop (nur ein Video)
+  const reviewDrop = useFileDrop(
+    (files) => {
+      const file = files.find((f) => f.type.startsWith("video/"));
+      if (file) startReviewUpload(job.id, job.title, file);
+      else setError("Bitte ein Video ablegen.");
+    },
+    { disabled: busy || reviewRunning, multiple: false },
+  );
 
   return (
     <div className="space-y-6 border-t border-line pt-5">
@@ -122,7 +132,10 @@ export function JobControls({ job, isAdmin, isAssigned, staff, beforeBilling }: 
 
       {job.status === "in_arbeit" && canWork && !job.paused && (
         <Section title={job.hasVideo ? "Neue Version hochladen" : "Video hochladen"}>
-          <label className="block cursor-pointer space-y-1.5 rounded-lg border border-dashed border-line p-4 text-sm transition-colors hover:bg-raised/50">
+          <label
+            {...reviewDrop.props}
+            className={`block cursor-pointer space-y-1.5 rounded-lg border border-dashed border-line p-4 text-sm transition-colors hover:bg-raised/50 ${reviewDrop.active ? DROP_ACTIVE : ""}`}
+          >
             <span className="block font-medium">Fertiges Video auswählen</span>
             <input
               type="file"

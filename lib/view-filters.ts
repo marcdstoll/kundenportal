@@ -4,10 +4,11 @@
 //   d = Sortierrichtung bzw. Disziplin (Hall of Fame), c = gewählte Person bzw. Client (Reiter),
 //   m = Zuordnung (ToDos: alle / mir zugewiesen / von mir erstellt),
 //   o = aufgeklappte Bereiche (Kunden-Übersicht: kalender, projekte),
-//   z = Zeitraum (Hall of Fame: all, 7, 30)
+//   z = Zeitraum (Hall of Fame: all, 7, 30),
+//   m = Multifilter Kunde × Format (Board, Kalender – siehe lib/client-format-filter.ts)
 export const VIEW_FILTER_KEYS = {
-  board: ["k", "f"],
-  kalender: ["k"],
+  board: ["k", "f", "m"],
+  kalender: ["k", "m"],
   ideen: ["k", "p", "s"],
   featureboard: ["s"],
   "nach-clients": ["c", "s", "d"],
@@ -29,7 +30,8 @@ export function cleanFilters(view: FilterView, input: Record<string, unknown>): 
   const out: ViewFilters = {};
   for (const key of VIEW_FILTER_KEYS[view] as readonly string[]) {
     const v = input[key];
-    if (typeof v === "string" && v.length <= 2000) out[key] = v;
+    // Der Multifilter (m) speichert pro Kunde einen Eintrag – dafür mehr Platz
+    if (typeof v === "string" && v.length <= (key === "m" ? 50000 : 2000)) out[key] = v;
   }
   return out;
 }

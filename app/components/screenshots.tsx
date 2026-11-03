@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { buttonPrimary } from "./ui";
 import { MAX_SCREENSHOT_TOTAL } from "@/lib/features";
+import { DROP_ACTIVE, useFileDrop } from "@/lib/file-drop";
 
 const MAX_EDGE = 2000; // längste Kante in Pixeln – reicht für gut lesbare Screenshots
 const MAX_ORIGINAL = 50 * 1024 * 1024; // noch größere Dateien gar nicht erst einlesen
@@ -98,9 +99,10 @@ export function ScreenshotPicker({
         : null;
     onChange(next, error);
   }
+  const drop = useFileDrop((files) => add(files), { disabled: disabled || working || full });
 
   return (
-    <div className="space-y-2">
+    <div {...drop.props} className={`-m-1.5 space-y-2 rounded-lg p-1.5 ${drop.active ? DROP_ACTIVE : ""}`}>
       {shots.length > 0 && (
         <ul className="flex flex-wrap gap-2">
           {shots.map((s, i) => (

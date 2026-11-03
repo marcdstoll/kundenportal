@@ -22,6 +22,7 @@ import {
 import { ACCEPT, ALLOWED_LABEL, filterAllowed } from "@/lib/file-types";
 import { startNachreichen, useUploads } from "@/lib/upload-manager";
 import { UploadOverview } from "./upload-tree";
+import { DROP_ACTIVE, useFileDrop } from "@/lib/file-drop";
 import { Avatar, buttonPrimary, buttonSecondary, inputField } from "./ui";
 import { MentionInput, MentionText, type MentionInputHandle } from "./mention-input";
 import { encodeMentions, toEditable, type MentionPerson } from "@/lib/mentions";
@@ -58,9 +59,21 @@ export function AddFiles({
     (v) => v.jobId === jobId && v.kind === "nachreichen" && (v.status === "laeuft" || v.status === "wartet"),
   );
 
+  // Aus „Auswählen“ oder per Drag & Drop – unerlaubte Dateien still aussortieren, Hinweis nur, wenn nichts übrig bleibt
+  const pick = (picked: File[]) => {
+    const { allowed } = filterAllowed(picked);
+    setError(picked.length > 0 && allowed.length === 0 ? `Dieser Dateityp wird nicht unterstützt.` : null);
+    if (allowed.length) startNachreichen(jobId, title, allowed);
+    setInputKey((k) => k + 1);
+  };
+  const drop = useFileDrop(pick);
+
   return (
     <div className="space-y-2">
-      <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-line px-3 py-2.5 text-sm transition-colors hover:bg-raised/50">
+      <label
+        {...drop.props}
+        className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-line px-3 py-2.5 text-sm transition-colors hover:bg-raised/50 ${drop.active ? DROP_ACTIVE : ""}`}
+      >
         <span aria-hidden>＋</span>
         {running ? "Weitere Dateien hinzufügen" : label}
         <input
@@ -69,14 +82,7 @@ export function AddFiles({
           multiple
           accept={ACCEPT}
           className="sr-only"
-          onChange={(e) => {
-            // Unerlaubte Dateien still aussortieren – Hinweis nur, wenn nichts übrig bleibt
-            const picked = Array.from(e.target.files ?? []);
-            const { allowed } = filterAllowed(picked);
-            setError(picked.length > 0 && allowed.length === 0 ? `Dieser Dateityp wird nicht unterstützt.` : null);
-            if (allowed.length) startNachreichen(jobId, title, allowed);
-            setInputKey((k) => k + 1);
-          }}
+          onChange={(e) => pick(Array.from(e.target.files ?? []))}
         />
       </label>
       <p className="text-xs text-muted">Erlaubt: {ALLOWED_LABEL}</p>

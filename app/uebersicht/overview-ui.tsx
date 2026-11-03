@@ -7,6 +7,7 @@ import { setCustomerBanner } from "@/app/admin-actions";
 import { saveViewFilter } from "@/app/filter-actions";
 import { shrink } from "@/app/components/customer-forms";
 import { ConfirmDialog } from "@/app/components/confirm-dialog";
+import { DROP_ACTIVE, useFileDrop } from "@/lib/file-drop";
 
 // ---------- Banner ----------
 // Alle sehen das Banner; ändern, verschieben und entfernen können nur Admins (in der Kundenansicht).
@@ -65,6 +66,7 @@ export function Banner({
       setError("Das Bild konnte nicht gelesen werden.");
     }
   };
+  const drop = useFileDrop((f) => pick(f[0]), { disabled: !canEdit || pending || moving, multiple: false });
 
   const fileInput = (
     <input
@@ -88,7 +90,8 @@ export function Banner({
           type="button"
           onClick={() => file.current?.click()}
           disabled={pending}
-          className="flex h-28 w-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-line text-sm text-muted transition-colors hover:border-accent hover:text-text"
+          {...drop.props}
+          className={`flex h-28 w-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-line text-sm text-muted transition-colors hover:border-accent hover:text-text ${drop.active ? DROP_ACTIVE : ""}`}
         >
           <span>{pending ? "Lädt hoch …" : "＋ Banner hinzufügen"}</span>
         </button>
@@ -102,7 +105,8 @@ export function Banner({
     <div className="group relative">
       <div
         ref={frame}
-        className={`relative h-36 overflow-hidden bg-raised sm:h-52 md:h-64 ${moving ? "cursor-grab touch-none active:cursor-grabbing" : ""}`}
+        {...(canEdit ? drop.props : {})}
+        className={`relative h-36 overflow-hidden bg-raised sm:h-52 md:h-64 ${moving ? "cursor-grab touch-none active:cursor-grabbing" : ""} ${drop.active ? DROP_ACTIVE : ""}`}
         data-testid="banner"
         onPointerDown={(e) => {
           if (!moving || !frame.current || !img.current) return;

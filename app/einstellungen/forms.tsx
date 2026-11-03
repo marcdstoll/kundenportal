@@ -6,6 +6,7 @@ import { removeOnboardingVideo, sendTestMail } from "@/app/admin-actions";
 import { uploadOnboardingVideo } from "@/lib/upload";
 import { WelcomePlayer } from "@/app/components/welcome-recorder";
 import { buttonSecondary, inputField } from "@/app/components/ui";
+import { DROP_ACTIVE, useFileDrop } from "@/lib/file-drop";
 
 // Onboarding-Video für eine Rolle: hochladen (landet in Frame.io), ansehen, ersetzen, entfernen
 export function OnboardingVideo({
@@ -37,9 +38,21 @@ export function OnboardingVideo({
     setProgress(null);
     setInputKey((k) => k + 1);
   }
+  const drop = useFileDrop(
+    (files) => {
+      const file = files.find((f) => ["video/mp4", "video/quicktime", "video/webm"].includes(f.type));
+      if (file) upload(file);
+      else setMsg({ ok: false, text: "Bitte ein Video (MP4, MOV oder WebM) ablegen." });
+    },
+    { disabled: progress !== null, multiple: false },
+  );
 
   return (
-    <div className="space-y-2" data-testid={`onboarding-${role}`}>
+    <div
+      {...drop.props}
+      className={`-m-1.5 space-y-2 rounded-lg p-1.5 ${drop.active ? DROP_ACTIVE : ""}`}
+      data-testid={`onboarding-${role}`}
+    >
       <p className="text-sm text-muted">{label}</p>
       {fileId && progress === null && <WelcomePlayer key={fileId} src={`/api/onboarding/${role}?f=${fileId}`} />}
       {oldLink && (
