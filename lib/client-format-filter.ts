@@ -13,7 +13,20 @@ const CODE: Record<string, string> = { shortform: "s", longform: "l", clipping: 
 // Kunde → angezeigte Formate (für jeden Kunden der Liste ein Eintrag)
 export type FormatMatrix = Record<string, string[]>;
 
+// Shortform und Clipping gehören zusammen: ist eins davon an, gilt beides
+function joinShortClip(formats: string[]) {
+  return formats.includes("shortform") || formats.includes("clipping")
+    ? ALL_FORMATS.filter((f) => f !== "longform" || formats.includes("longform"))
+    : formats;
+}
+
 export function decodeMatrix(saved: Record<string, string>, clientIds: string[]): FormatMatrix {
+  const m = decodeRaw(saved, clientIds);
+  for (const id of clientIds) m[id] = joinShortClip(m[id]);
+  return m;
+}
+
+function decodeRaw(saved: Record<string, string>, clientIds: string[]): FormatMatrix {
   const matrix: FormatMatrix = Object.fromEntries(clientIds.map((id) => [id, [...ALL_FORMATS]]));
   if (saved.m) {
     try {

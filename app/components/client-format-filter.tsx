@@ -1,12 +1,11 @@
 "use client";
 
-// Multifilter „Kunde × Format“ (Board und Kalender, Admins und Cutter): pro Kunde Shortform / Longform / Clipping.
+// Multifilter „Kunde × Format“ (Board und Kalender, Admins und Cutter): pro Kunde Shortform + Clipping / Longform.
 // Bedienung: Punkt = ein Format eines Kunden · Kundenname = ganze Zeile · Spaltenkopf = Format bei allen ·
 // „Alle Kunden“ = alles an/aus. Gespeichert wird beim Schließen (pro Nutzer und Ansicht, siehe lib/client-format-filter.ts).
 
 import { useState, useTransition } from "react";
 import { personColor } from "@/lib/colors";
-import { FORMATS } from "@/lib/status";
 import { saveViewFilter } from "@/app/filter-actions";
 import { ALL_FORMATS, encodeMatrix, isUnfiltered, type FormatMatrix } from "@/lib/client-format-filter";
 import { keepInViewport } from "@/lib/popover";
@@ -15,7 +14,13 @@ import { FORMAT_COLORS } from "./ui";
 type Client = { id: string; name: string };
 type View = "board" | "kalender";
 
-const SHORT: Record<string, string> = { shortform: "Short", longform: "Long", clipping: "Clip" };
+// Spalten der Matrix: Shortform und Clipping bleiben zusammen
+const GROUPS = [
+  { key: "short", label: "Short + Clip", full: "Shortform + Clipping", formats: ["shortform", "clipping"], color: FORMAT_COLORS.shortform },
+  { key: "long", label: "Long", full: "Longform", formats: ["longform"], color: FORMAT_COLORS.longform },
+];
+type Group = (typeof GROUPS)[number];
+const has = (formats: string[], g: Group) => g.formats.some((f) => formats.includes(f));
 
 function save(view: View, matrix: FormatMatrix) {
   // k/f (alte Filter) leeren – ab jetzt gilt nur noch die Matrix
@@ -41,20 +46,20 @@ export function ClientFormatFilter({ view, clients, matrix }: { view: View; clie
 
   const get = (id: string) => draft[id] ?? ALL_FORMATS;
   const setRow = (id: string, formats: string[]) => setDraft((d) => ({ ...d, [id]: ALL_FORMATS.filter((f) => formats.includes(f)) }));
-  const toggleCell = (id: string, f: string) => {
+  const toggleCell = (id: string, g: Group) => {
     const cur = get(id);
-    setRow(id, cur.includes(f) ? cur.filter((x) => x !== f) : [...cur, f]);
+    setRow(id, has(cur, g) ? cur.filter((x) => !g.formats.includes(x)) : [...cur, ...g.formats]);
   };
   const toggleRow = (id: string) => setRow(id, get(id).length === ALL_FORMATS.length ? [] : ALL_FORMATS);
-  const columnOn = (f: string) => clients.every((c) => get(c.id).includes(f));
-  const columnSome = (f: string) => clients.some((c) => get(c.id).includes(f));
-  const toggleColumn = (f: string) => {
-    const on = !columnOn(f);
+  const columnOn = (g: Group) => clients.every((c) => has(get(c.id), g));
+  const columnSome = (g: Group) => clients.some((c) => has(get(c.id), g));
+  const toggleColumn = (g: Group) => {
+    const on = !columnOn(g);
     setDraft((d) =>
       Object.fromEntries(
         clients.map((c) => {
           const cur = d[c.id] ?? ALL_FORMATS;
-          return [c.id, ALL_FORMATS.filter((x) => (x === f ? on : cur.includes(x)))];
+          return [c.id, ALL_FORMATS.filter((x) => (g.formats.includes(x) ? on : cur.includes(x)))];
         }),
       ),
     );
@@ -114,19 +119,19 @@ export function ClientFormatFilter({ view, clients, matrix }: { view: View; clie
                         Alle Kunden
                       </button>
                     </th>
-                    {FORMATS.map((f) => (
-                      <th key={f.value} className="w-14 px-1 py-1.5 text-center font-normal">
+                    {GROUPS.map((g) => (
+                      <th key={g.key} className="w-20 px-1 py-1.5 text-center font-normal">
                         <button
                           type="button"
-                          onClick={() => toggleColumn(f.value)}
-                          aria-pressed={columnOn(f.value)}
-                          title={`${f.label} bei allen Kunden ${columnOn(f.value) ? "ausblenden" : "anzeigen"}`}
-                          className={`inline-flex items-center gap-1 rounded px-1 text-xs hover:bg-raised ${
-                            columnOn(f.value) ? "text-text" : columnSome(f.value) ? "text-muted" : "text-muted/50"
+                          onClick={() => toggleColumn(g)}
+                          aria-pressed={columnOn(g)}
+                          title={`${g.full} bei allen Kunden ${columnOn(g) ? "ausblenden" : "anzeigen"}`}
+                          className={`inline-flex items-center gap-1 whitespace-nowrap rounded px-1 text-xs hover:bg-raised ${
+                            columnOn(g) ? "text-text" : columnSome(g) ? "text-muted" : "text-muted/50"
                           }`}
                         >
-                          <span className="size-2 rounded-[3px]" style={{ background: FORMAT_COLORS[f.value] }} />
-                          {SHORT[f.value]}
+                          <span className="size-2 rounded-[3px]" style={{ background: g.color }} />
+                          {g.label}
                         </button>
                       </th>
                     ))}
@@ -150,16 +155,16 @@ export function ClientFormatFilter({ view, clients, matrix }: { view: View; clie
                             <span className="truncate">{c.name}</span>
                           </button>
                         </td>
-                        {FORMATS.map((f) => {
-                          const on = row.includes(f.value);
-                          const color = FORMAT_COLORS[f.value];
+                        {GROUPS.map((g) => {
+                          const on = has(row, g);
+                          const color = g.color;
                           return (
-                            <td key={f.value} className="px-1 py-1 text-center">
+                            <td key={g.key} className="px-1 py-1 text-center">
                               <button
                                 type="button"
-                                onClick={() => toggleCell(c.id, f.value)}
+                                onClick={() => toggleCell(c.id, g)}
                                 aria-pressed={on}
-                                aria-label={`${c.name}: ${f.label}`}
+                                aria-label={`${c.name}: ${g.full}`}
                                 className="inline-flex size-6 items-center justify-center rounded-full border transition-colors"
                                 style={
                                   on
@@ -215,7 +220,7 @@ export function ClientFormatChips({ view, clients, matrix }: { view: View; clien
       {partial.map((c) => (
         <span key={c.id} className={chip}>
           <span className="size-2 rounded-full" style={{ background: personColor(c.id, c.name) }} />
-          {c.name}: {(matrix[c.id] ?? []).map((f) => SHORT[f]).join(", ")}
+          {c.name}: {GROUPS.filter((g) => has(matrix[c.id] ?? [], g)).map((g) => g.label).join(", ")}
           <button
             type="button"
             onClick={() => update({ [c.id]: [...ALL_FORMATS] })}
