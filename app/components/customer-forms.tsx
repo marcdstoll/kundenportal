@@ -10,20 +10,35 @@ import { ConfirmDialog } from "./confirm-dialog";
 import { SlideOver } from "./slide-over";
 import { Avatar, buttonPrimary, buttonSecondary, inputField } from "./ui";
 import { DROP_ACTIVE, useFileDrop } from "@/lib/file-drop";
+import { FormatField } from "@/app/components/format-field";
 
 type Links = { tiktok: string; youtube: string; instagram: string; extra: { label: string; url: string }[] };
 
-// Bild im Browser verkleinern (WebP, sonst JPEG) und als data-URL liefern
-export async function shrink(file: File, maxEdge: number, quality = 0.82): Promise<string> {
+// Bild im Browser verkleinern (WebP, sonst JPEG) und als data-URL liefern.
+// Detailreiche Fotos werden so lange stärker komprimiert bzw. verkleinert, bis sie unter maxChars liegen
+// (Formulare dürfen höchstens 5 MB schicken, siehe next.config.ts).
+export async function shrink(file: File, maxEdge: number, quality = 0.82, maxChars = 1_400_000): Promise<string> {
   const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  const webp = canvas.toDataURL("image/webp", quality);
-  return webp.startsWith("data:image/webp") ? webp : canvas.toDataURL("image/jpeg", quality);
+  let edge = Math.min(maxEdge, Math.max(bitmap.width, bitmap.height));
+  let data = "";
+  try {
+    for (let round = 0; round < 5; round++) {
+      const scale = edge / Math.max(bitmap.width, bitmap.height);
+      canvas.width = Math.round(bitmap.width * scale);
+      canvas.height = Math.round(bitmap.height * scale);
+      canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      for (const q of [quality, 0.7, 0.6]) {
+        const webp = canvas.toDataURL("image/webp", q);
+        data = webp.startsWith("data:image/webp") ? webp : canvas.toDataURL("image/jpeg", q);
+        if (data.length <= maxChars) return data;
+      }
+      edge = Math.round(edge * 0.8);
+    }
+    return data;
+  } finally {
+    bitmap.close();
+  }
 }
 
 function Msg({ msg }: { msg: { ok: boolean; text: string } | null }) {
@@ -79,7 +94,12 @@ export function CustomerForm({
         e.preventDefault();
         setBusy(true);
         setMsg(null);
-        const res = await updateCustomer(customer.id, { name, notes, links, logo, cover });
+        let res: Awaited<ReturnType<typeof updateCustomer>>;
+        try {
+          res = await updateCustomer(customer.id, { name, notes, links, logo, cover });
+        } catch {
+          res = { ok: false, error: "Speichern fehlgeschlagen – bitte ein kleineres Bild wählen oder erneut versuchen." };
+        }
         setBusy(false);
         if (!res.ok) return setMsg({ ok: false, text: res.error });
         setMsg({ ok: true, text: "Gespeichert ✓" });
@@ -152,13 +172,15 @@ export function CustomerForm({
 
       <label className="block space-y-1 text-sm">
         <span className="text-muted">Infos für die Cutter (Stil, Do&apos;s &amp; Don&apos;ts, Ansprechpartner …)</span>
-        <textarea
-          className={inputField}
-          rows={6}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          disabled={busy}
-        />
+        <FormatField>
+          <textarea
+            className={inputField}
+            rows={6}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            disabled={busy}
+          />
+        </FormatField>
       </label>
 
       <div className="flex items-center justify-end gap-3">

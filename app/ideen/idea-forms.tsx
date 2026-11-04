@@ -27,6 +27,8 @@ import {
   PRIORITY_COLORS,
   PRIORITY_LABELS,
 } from "@/lib/ideas";
+import { RichText } from "@/app/components/rich-text";
+import { FormatField } from "@/app/components/format-field";
 
 // ---------- Neue Idee ----------
 
@@ -113,14 +115,16 @@ export function NewIdeaForm({ clients }: { clients: { id: string; name: string }
         disabled={busy}
         autoFocus
       />
-      <textarea
-        className={inputField}
-        rows={4}
-        placeholder="Beschreibung (optional) – worum geht es, was ist wichtig?"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        disabled={busy}
-      />
+      <FormatField>
+        <textarea
+          className={inputField}
+          rows={4}
+          placeholder="Beschreibung (optional) – worum geht es, was ist wichtig?"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          disabled={busy}
+        />
+      </FormatField>
       <label className="flex items-center gap-2 text-sm">
         <span className="text-muted">Priorität</span>
         <select
@@ -304,14 +308,16 @@ export function IdeaCommentForm({ ideaId }: { ideaId: string }) {
         setBody("");
       }}
     >
-      <textarea
-        className={inputField}
-        rows={3}
-        placeholder="Kommentar schreiben …"
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        disabled={busy}
-      />
+      <FormatField>
+        <textarea
+          className={inputField}
+          rows={3}
+          placeholder="Kommentar schreiben …"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          disabled={busy}
+        />
+      </FormatField>
       {error && <p className="text-sm text-danger">{error}</p>}
       <div className="flex justify-end">
         <button className={buttonPrimary} disabled={busy || !body.trim()}>
@@ -371,14 +377,16 @@ export function IdeaComment({ c }: { c: IdeaCommentView }) {
             setEditing(false);
           }}
         >
-          <textarea
-            className={inputField}
-            rows={3}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            disabled={busy}
-            autoFocus
-          />
+          <FormatField>
+            <textarea
+              className={inputField}
+              rows={3}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              disabled={busy}
+              autoFocus
+            />
+          </FormatField>
           {error && <p className="text-sm text-danger">{error}</p>}
           <div className="flex justify-end gap-2">
             <button
@@ -399,7 +407,7 @@ export function IdeaComment({ c }: { c: IdeaCommentView }) {
           </div>
         </form>
       ) : (
-        <p className="whitespace-pre-wrap text-sm">{c.body}</p>
+        <RichText text={c.body} className="text-sm" />
       )}
 
       {!editing && (c.canEdit || c.canDelete) && (

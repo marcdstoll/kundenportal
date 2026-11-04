@@ -11,6 +11,7 @@ import { db } from "@/db";
 import { featureAttachments, featureComments, featureRequests, featureVotes, notifications, user } from "@/db/schema";
 import { requireUser } from "@/lib/session";
 import { FEATURE_STATUSES, FEATURE_STATUS_LABELS } from "@/lib/features";
+import { stripMarkdown } from "@/lib/rich-text";
 
 type Result<T = null> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -168,7 +169,7 @@ export async function addFeatureComment(featureId: string, body: string) {
       me.id,
       to,
       "feature_comment",
-      `Kommentar zu „${short(f.title, 50)}“: „${short(text)}“`,
+      `Kommentar zu „${short(f.title, 50)}“: „${short(stripMarkdown(text))}“`,
     );
     refresh();
     return null;

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { personColor } from "@/lib/colors";
 import type { CustomerLinks } from "@/lib/queries";
 import { Avatar } from "./ui";
+import { RichText } from "./rich-text";
 
 const LABELS = { tiktok: "TikTok", youtube: "YouTube", instagram: "Instagram" } as const;
 
@@ -127,7 +128,7 @@ export function CustomerProfileView({
       <section className="space-y-2">
         <h3 className="text-sm font-medium">Infos für die Cutter</h3>
         {customer.notes ? (
-          <p className="whitespace-pre-wrap text-sm leading-relaxed">{customer.notes}</p>
+          <RichText text={customer.notes} className="text-sm leading-relaxed" />
         ) : (
           <p className="text-sm text-muted">Noch keine Infos hinterlegt.</p>
         )}

@@ -17,6 +17,7 @@ import {
   type TodoInput,
 } from "@/app/todo-actions";
 import type { AssigneeOption } from "@/lib/todos";
+import { FormatField } from "@/app/components/format-field";
 
 export type TodoView = {
   id: string;
@@ -101,13 +102,15 @@ function TodoForm({
       </label>
       <label className="block space-y-1">
         <span className="text-sm text-muted">Beschreibung</span>
-        <textarea
-          className={`${inputField} min-h-28`}
-          value={v.description}
-          maxLength={5000}
-          onChange={(e) => set("description", e.target.value)}
-          disabled={pending}
-        />
+        <FormatField>
+          <textarea
+            className={`${inputField} min-h-28`}
+            value={v.description}
+            maxLength={5000}
+            onChange={(e) => set("description", e.target.value)}
+            disabled={pending}
+          />
+        </FormatField>
       </label>
       {!isKunde && (
         <label className="block space-y-1">

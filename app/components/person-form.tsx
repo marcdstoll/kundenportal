@@ -54,7 +54,10 @@ export function PersonForm({
         e.preventDefault();
         setBusy(true);
         setMsg(null);
-        const res = await savePerson(person.id, { name, phone, birthday, logo });
+        const res = await savePerson(person.id, { name, phone, birthday, logo }).catch(() => ({
+          ok: false as const,
+          error: "Speichern fehlgeschlagen – bitte ein kleineres Bild wählen oder erneut versuchen.",
+        }));
         setBusy(false);
         if (!res.ok) return setMsg({ ok: false, text: res.error });
         setMsg({ ok: true, text: "Gespeichert ✓" });

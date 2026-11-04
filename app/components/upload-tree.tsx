@@ -9,6 +9,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { discardVorgang, percentOf, retryUpload, uploadStore, useUploads, type Vorgang } from "@/lib/upload-manager";
 import { buttonPrimary, buttonSecondary } from "./ui";
+import { stripMarkdown } from "@/lib/rich-text";
 
 function statusLabel(v: Vorgang) {
   if (v.status === "fertig") return "✓";
@@ -101,7 +102,7 @@ export function UploadStatus({ vorgang: v, compact = false }: { vorgang: Vorgang
           className={`whitespace-pre-wrap text-sm text-muted ${compact ? "line-clamp-2" : "line-clamp-6"}`}
           data-testid="upload-description"
         >
-          {v.description}
+          {stripMarkdown(v.description)}
         </p>
       )}
       <Bar percent={v.status === "fertig" ? 100 : percent} error={v.status === "fehler"} />

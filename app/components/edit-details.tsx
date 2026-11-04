@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { buttonPrimary, buttonSecondary, inputField } from "./ui";
+import { FormatField } from "@/app/components/format-field";
 
 type Save = (input: { title: string; description: string }) => Promise<{ ok: boolean; error?: string }>;
 
@@ -73,13 +74,15 @@ export function EditDetails({
       </label>
       <label className="block space-y-1">
         <span className="text-xs text-muted">Beschreibung</span>
-        <textarea
-          className={`${inputField} min-h-32`}
-          value={d}
-          onChange={(e) => setD(e.target.value)}
-          maxLength={5000}
-          disabled={pending}
-        />
+        <FormatField>
+          <textarea
+            className={`${inputField} min-h-32`}
+            value={d}
+            onChange={(e) => setD(e.target.value)}
+            maxLength={5000}
+            disabled={pending}
+          />
+        </FormatField>
       </label>
       {error && <p className="text-sm text-danger">{error}</p>}
       <div className="flex gap-2">

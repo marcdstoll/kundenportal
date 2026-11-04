@@ -25,6 +25,7 @@ import { requireUser } from "@/lib/session";
 import { canSeeIdea } from "@/lib/access";
 import { memberIds } from "@/lib/queries";
 import { IDEA_STATUSES, IDEA_STATUS_LABELS, PRIORITIES } from "@/lib/ideas";
+import { stripMarkdown } from "@/lib/rich-text";
 
 type Result<T = null> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -219,7 +220,7 @@ export async function addIdeaComment(ideaId: string, body: string) {
       me.id,
       await participants(idea.customerId),
       "idea_comment",
-      `${me.name} zu „${short(idea.title, 50)}“: „${short(text)}“`,
+      `${me.name} zu „${short(idea.title, 50)}“: „${short(stripMarkdown(text))}“`,
     );
     refresh();
     return null;

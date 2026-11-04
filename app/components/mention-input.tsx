@@ -6,6 +6,7 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { splitMentions, type MentionPerson } from "@/lib/mentions";
 import { Avatar, inputField } from "./ui";
+import { FormatField } from "@/app/components/format-field";
 
 const MAX_HITS = 6;
 
@@ -83,35 +84,37 @@ export const MentionInput = forwardRef<
 
   return (
     <div className="relative">
-      <textarea
-        ref={area}
-        rows={rows}
-        className={inputField}
-        placeholder={placeholder}
-        value={value}
-        disabled={disabled}
-        autoFocus={autoFocus}
-        aria-autocomplete="list"
-        onChange={(e) => update(e.target.value, e.target.selectionStart)}
-        onClick={(e) => setQuery(activeQuery(value, e.currentTarget.selectionStart))}
-        onBlur={() => setTimeout(() => setQuery(null), 150)}
-        onKeyDown={(e) => {
-          if (!open) return;
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            setActive((i) => (i + 1) % hits.length);
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            setActive((i) => (i - 1 + hits.length) % hits.length);
-          } else if (e.key === "Enter" || e.key === "Tab") {
-            e.preventDefault();
-            pick(hits[active]);
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            setQuery(null);
-          }
-        }}
-      />
+      <FormatField>
+        <textarea
+          ref={area}
+          rows={rows}
+          className={inputField}
+          placeholder={placeholder}
+          value={value}
+          disabled={disabled}
+          autoFocus={autoFocus}
+          aria-autocomplete="list"
+          onChange={(e) => update(e.target.value, e.target.selectionStart)}
+          onClick={(e) => setQuery(activeQuery(value, e.currentTarget.selectionStart))}
+          onBlur={() => setTimeout(() => setQuery(null), 150)}
+          onKeyDown={(e) => {
+            if (!open) return;
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setActive((i) => (i + 1) % hits.length);
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setActive((i) => (i - 1 + hits.length) % hits.length);
+            } else if (e.key === "Enter" || e.key === "Tab") {
+              e.preventDefault();
+              pick(hits[active]);
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setQuery(null);
+            }
+          }}
+        />
+      </FormatField>
       {open && (
         <ul
           role="listbox"

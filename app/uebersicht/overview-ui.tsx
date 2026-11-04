@@ -45,7 +45,10 @@ export function Banner({
   const save = (input: { image?: string | null; pos?: number }, after?: () => void) =>
     startTransition(async () => {
       setError(null);
-      const res = await setCustomerBanner(customerId, input);
+      const res = await setCustomerBanner(customerId, input).catch(() => ({
+        ok: false as const,
+        error: "Speichern fehlgeschlagen – bitte ein kleineres Bild wählen oder erneut versuchen.",
+      }));
       if (!res.ok) {
         setError(res.error);
         setPreview(null);

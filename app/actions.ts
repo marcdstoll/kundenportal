@@ -12,6 +12,7 @@ import { keepAllowedMentions, mentionIds, toPlain } from "@/lib/mentions";
 import { canSeeJob, clientIdsOfCutter } from "@/lib/access";
 import { CUSTOMER_DATE_STATUSES, FORMATS, STATUSES, VIDEO_LENGTHS } from "@/lib/status";
 import { isAllowedFile, ALLOWED_LABEL } from "@/lib/file-types";
+import { stripMarkdown } from "@/lib/rich-text";
 
 // ---------- Hilfsfunktionen ----------
 
@@ -662,7 +663,7 @@ export async function setPublishDate(jobId: string, date: string) {
 
 // Inbox-Texte, die ein Kommentar erzeugt (zum Anpassen/Entfernen beim Bearbeiten/Löschen)
 function preview(body: string) {
-  const text = toPlain(body);
+  const text = stripMarkdown(toPlain(body));
   return text.length > 80 ? `${text.slice(0, 80)} …` : text;
 }
 function commentNotice(authorName: string, body: string) {

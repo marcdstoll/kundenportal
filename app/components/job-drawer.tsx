@@ -39,6 +39,7 @@ import {
   NewMarker,
   ClientDecision,
 } from "./project-actions";
+import { RichText } from "./rich-text";
 
 // Status, in denen Kunden noch löschen dürfen bzw. eine Stornierung anfragen können
 const DELETABLE = ["entwurf", "todo"];
@@ -141,10 +142,10 @@ function Briefing({ job }: { job: JobView }) {
         <Row label="Plattformen">{job.platform}</Row>
         {job.videoLength && <Row label="Videolänge">{job.videoLength}</Row>}
         <Row label="Inhalt">
-          <p className="whitespace-pre-wrap">{job.content}</p>
+          <RichText text={job.content} />
         </Row>
         <Row label="Besonderheiten">
-          <p className="whitespace-pre-wrap">{job.specialNotes}</p>
+          <RichText text={job.specialNotes} />
         </Row>
       </div>
     </Section>

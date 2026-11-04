@@ -7,6 +7,7 @@ import { startProjektUpload } from "@/lib/upload-manager";
 import { MultiSelect } from "@/app/components/multi-select";
 import { UploadOverview } from "@/app/components/upload-tree";
 import { DROP_ACTIVE, useFileDrop } from "@/lib/file-drop";
+import { FormatField } from "@/app/components/format-field";
 
 type FileState = { file: File };
 
@@ -234,25 +235,29 @@ export function NewJobForm({ clients, isStaff, cutters }: Props) {
       </div>
 
       <Field label="Inhalt" error={errors.content}>
-        <textarea
-          className={fieldClass(errors.content)}
-          rows={4}
-          placeholder="Worum geht es im Video?"
-          value={values.content}
-          onChange={(e) => set("content", e.target.value)}
-          disabled={busy}
-        />
+        <FormatField>
+          <textarea
+            className={fieldClass(errors.content)}
+            rows={4}
+            placeholder="Worum geht es im Video?"
+            value={values.content}
+            onChange={(e) => set("content", e.target.value)}
+            disabled={busy}
+          />
+        </FormatField>
       </Field>
 
       <Field label="Besonderheiten" error={errors.specialNotes}>
-        <textarea
-          className={fieldClass(errors.specialNotes)}
-          rows={3}
-          placeholder="Musik, Untertitel, Logo … sonst „keine“"
-          value={values.specialNotes}
-          onChange={(e) => set("specialNotes", e.target.value)}
-          disabled={busy}
-        />
+        <FormatField>
+          <textarea
+            className={fieldClass(errors.specialNotes)}
+            rows={3}
+            placeholder="Musik, Untertitel, Logo … sonst „keine“"
+            value={values.specialNotes}
+            onChange={(e) => set("specialNotes", e.target.value)}
+            disabled={busy}
+          />
+        </FormatField>
       </Field>
 
       <div className="space-y-1.5">

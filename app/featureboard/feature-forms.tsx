@@ -19,6 +19,8 @@ import { ConfirmDialog } from "@/app/components/confirm-dialog";
 import { buttonPrimary, buttonSecondary, inputField } from "@/app/components/ui";
 import { FEATURE_STATUSES, FEATURE_STATUS_COLORS, FEATURE_STATUS_LABELS } from "@/lib/features";
 import { ScreenshotPicker, releaseShots, uploadScreenshots, type Shot } from "@/app/components/screenshots";
+import { RichText } from "@/app/components/rich-text";
+import { FormatField } from "@/app/components/format-field";
 export { AddScreenshots } from "@/app/components/screenshots";
 
 // ---------- Neuer Vorschlag ----------
@@ -86,14 +88,16 @@ export function NewFeatureForm() {
         disabled={busy}
         autoFocus
       />
-      <textarea
-        className={inputField}
-        rows={4}
-        placeholder="Beschreibung (optional) – wofür brauchst du es, wie stellst du es dir vor?"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        disabled={busy}
-      />
+      <FormatField>
+        <textarea
+          className={inputField}
+          rows={4}
+          placeholder="Beschreibung (optional) – wofür brauchst du es, wie stellst du es dir vor?"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          disabled={busy}
+        />
+      </FormatField>
       <ScreenshotPicker
         shots={shots}
         disabled={busy}
@@ -220,14 +224,16 @@ export function CommentForm({ featureId }: { featureId: string }) {
         setBody("");
       }}
     >
-      <textarea
-        className={inputField}
-        rows={3}
-        placeholder="Kommentar schreiben …"
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        disabled={busy}
-      />
+      <FormatField>
+        <textarea
+          className={inputField}
+          rows={3}
+          placeholder="Kommentar schreiben …"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          disabled={busy}
+        />
+      </FormatField>
       {error && <p className="text-sm text-danger">{error}</p>}
       <div className="flex justify-end">
         <button className={buttonPrimary} disabled={busy || !body.trim()}>
@@ -284,14 +290,16 @@ export function FeatureComment({ c }: { c: CommentView }) {
             setEditing(false);
           }}
         >
-          <textarea
-            className={inputField}
-            rows={3}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            disabled={busy}
-            autoFocus
-          />
+          <FormatField>
+            <textarea
+              className={inputField}
+              rows={3}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              disabled={busy}
+              autoFocus
+            />
+          </FormatField>
           {error && <p className="text-sm text-danger">{error}</p>}
           <div className="flex justify-end gap-2">
             <button
@@ -312,7 +320,7 @@ export function FeatureComment({ c }: { c: CommentView }) {
           </div>
         </form>
       ) : (
-        <p className="whitespace-pre-wrap text-sm">{c.body}</p>
+        <RichText text={c.body} className="text-sm" />
       )}
 
       {!editing && (c.canEdit || c.canDelete) && (

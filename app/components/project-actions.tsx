@@ -24,9 +24,11 @@ import { startNachreichen, useUploads } from "@/lib/upload-manager";
 import { UploadOverview } from "./upload-tree";
 import { DROP_ACTIVE, useFileDrop } from "@/lib/file-drop";
 import { Avatar, buttonPrimary, buttonSecondary, inputField } from "./ui";
-import { MentionInput, MentionText, type MentionInputHandle } from "./mention-input";
+import { MentionInput, type MentionInputHandle } from "./mention-input";
 import { encodeMentions, toEditable, type MentionPerson } from "@/lib/mentions";
 import { ConfirmDialog } from "./confirm-dialog";
+import { RichText } from "./rich-text";
+import { FormatField } from "@/app/components/format-field";
 
 function ErrorText({ error }: { error: string | null }) {
   return error ? <p className="text-sm text-danger">{error}</p> : null;
@@ -357,9 +359,7 @@ export function JobComment({
             </div>
           </div>
         ) : (
-          <p className="whitespace-pre-wrap text-sm">
-            <MentionText body={c.body} meId={meId} />
-          </p>
+          <RichText text={c.body} meId={meId} className="text-sm" />
         )}
         {!editing && (c.canEdit || c.canDelete) && (
           <div className="flex gap-3 pt-0.5 text-xs">
@@ -582,14 +582,16 @@ export function ClientDecision({ jobId }: { jobId: string }) {
   if (mode === "changes") {
     return (
       <div className="space-y-2">
-        <textarea
-          rows={3}
-          className={inputField}
-          placeholder="Was soll geändert werden? (wird als Kommentar gespeichert)"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          disabled={busy}
-        />
+        <FormatField>
+          <textarea
+            rows={3}
+            className={inputField}
+            placeholder="Was soll geändert werden? (wird als Kommentar gespeichert)"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            disabled={busy}
+          />
+        </FormatField>
         <div className="flex justify-end gap-2">
           <button type="button" className={buttonSecondary} onClick={() => setMode("idle")} disabled={busy}>
             Abbrechen
