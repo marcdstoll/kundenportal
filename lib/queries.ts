@@ -9,6 +9,7 @@ export type JobView = typeof jobs.$inferSelect & {
   customerName: string;
   cutters: { id: string; name: string }[];
   files: JobFileView[];
+  creatorName: string | null; // wer das Projekt angelegt hat (jobs.created_by)
 };
 
 // Projekte inkl. Client-Name, Cuttern und hochgeladenen Dateien laden
@@ -59,8 +60,12 @@ export async function loadJobs(filter?: SQL): Promise<JobView[]> {
     return [...raw, ...own].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
-  // Namen derer, die Dateien hochgeladen haben
-  const uploaderIds = [...new Set(fileRows.map((f) => f.uploadedBy).filter((id): id is string => !!id))];
+  // Namen derer, die Dateien hochgeladen bzw. das Projekt angelegt haben
+  const uploaderIds = [
+    ...new Set(
+      [...fileRows.map((f) => f.uploadedBy), ...rows.map((r) => r.job.createdBy)].filter((id): id is string => !!id),
+    ),
+  ];
   const uploaders = uploaderIds.length
     ? await db.select({ id: user.id, name: user.name }).from(user).where(inArray(user.id, uploaderIds))
     : [];
@@ -69,6 +74,7 @@ export async function loadJobs(filter?: SQL): Promise<JobView[]> {
   return rows.map(({ job, customerName }) => ({
     ...job,
     customerName,
+    creatorName: job.createdBy ? (nameOf.get(job.createdBy) ?? null) : null,
     cutters: cutterRows.filter((c) => c.jobId === job.id).map((c) => ({ id: c.id, name: c.name })),
     files: filesFor(job).map((f) => ({ ...f, uploaderName: f.uploadedBy ? (nameOf.get(f.uploadedBy) ?? null) : null })),
   }));

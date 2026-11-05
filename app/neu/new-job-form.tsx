@@ -318,12 +318,16 @@ export function NewJobForm({ clients, isStaff, cutters }: Props) {
           role="status"
           className="upload-hint flex items-start gap-3 rounded-lg border-2 px-4 py-3 text-sm"
           style={{
-            borderColor: "var(--st-ready_to_post)",
-            background: "color-mix(in oklab, var(--st-ready_to_post) 14%, transparent)",
+            borderColor: "var(--st-online)",
+            background: "color-mix(in oklab, var(--st-online) 12%, transparent)",
           }}
         >
-          <span aria-hidden className="text-xl leading-none">
-            ⚠️
+          <span
+            aria-hidden
+            className="flex size-6 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+            style={{ background: "var(--st-online)" }}
+          >
+            i
           </span>
           <span>
             <b className="block">

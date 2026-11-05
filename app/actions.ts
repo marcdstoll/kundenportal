@@ -590,6 +590,63 @@ export async function markOnline(jobId: string) {
   });
 }
 
+// Briefing nachträglich bearbeiten (in jedem Status): Admins und der Cutter, der das Projekt angelegt hat.
+// Neuer Titel → Frame.io-Ordner wird mit umbenannt (nicht bei Ordnern, die sich Teile wie „Teil 2“ teilen).
+export type JobDetailsInput = {
+  title: string;
+  content: string;
+  specialNotes: string;
+  platforms: string[];
+  videoLength: string;
+  materialLink: string;
+};
+export async function updateJobDetails(jobId: string, input: JobDetailsInput) {
+  return run(async () => {
+    const me = await requireUser("cutter", "admin");
+    const job = await getJob(jobId);
+    await assertCanSee(me, job);
+    if (me.role !== "admin" && job.createdBy !== me.id) {
+      throw new Error("Bearbeiten können nur Admins und wer das Projekt angelegt hat.");
+    }
+    const title = input.title.trim();
+    const content = input.content.trim();
+    const specialNotes = input.specialNotes.trim();
+    if (!title || !content || !specialNotes) throw new Error("Bitte Titel, Inhalt und Besonderheiten ausfüllen.");
+    if (title.length > 200) throw new Error("Der Titel ist zu lang (max. 200 Zeichen).");
+    if (content.length > 10000 || specialNotes.length > 10000) throw new Error("Der Text ist zu lang.");
+    const platforms = [...new Set(input.platforms.map((p) => p.trim()).filter(Boolean))];
+    if (platforms.length === 0) throw new Error("Bitte mindestens eine Plattform auswählen.");
+    const lengths = VIDEO_LENGTHS[job.format] ?? [];
+    if (lengths.length > 0 && !lengths.includes(input.videoLength)) throw new Error("Bitte eine Videolänge auswählen.");
+    let materialLink = input.materialLink.trim();
+    if (materialLink.length > 500) throw new Error("Der Link ist zu lang.");
+    if (materialLink && !/^https?:\/\//i.test(materialLink)) materialLink = `https://${materialLink}`;
+    if (materialLink && !URL.canParse(materialLink)) throw new Error("Bitte einen gültigen Link eingeben.");
+
+    await db
+      .update(jobs)
+      .set({
+        title,
+        content,
+        specialNotes,
+        platform: platforms.join(", "),
+        videoLength: lengths.length > 0 ? input.videoLength : "",
+        materialLink: materialLink || null,
+        updatedAt: new Date(),
+      })
+      .where(eq(jobs.id, jobId));
+
+    if (title !== job.title && job.frameioFolderId && !(await folderShared(job))) {
+      const [c] = await db.select({ name: customers.name }).from(customers).where(eq(customers.id, job.customerId));
+      await renameFolder(job.frameioFolderId, `${c?.name ?? ""} – ${title}`).catch((e) =>
+        console.error("[Frame.io] Ordner nicht umbenannt:", e),
+      );
+    }
+    refresh();
+    return null;
+  });
+}
+
 // Status frei setzen (z. B. Storniert)
 export async function setStatus(jobId: string, status: string) {
   return run(async () => {

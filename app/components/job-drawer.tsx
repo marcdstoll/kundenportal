@@ -40,6 +40,7 @@ import {
   ClientDecision,
 } from "./project-actions";
 import { RichText } from "./rich-text";
+import { BriefingEditor } from "./briefing-editor";
 
 // Status, in denen Kunden noch löschen dürfen bzw. eine Stornierung anfragen können
 const DELETABLE = ["entwurf", "todo"];
@@ -135,10 +136,9 @@ function DrawerFrame({
   );
 }
 
-function Briefing({ job }: { job: JobView }) {
-  return (
-    <Section title="Briefing">
-      <div className="rounded-lg border border-line bg-canvas/40 px-3 py-1.5 text-sm">
+function Briefing({ job, canEdit }: { job: JobView; canEdit?: boolean }) {
+  const view = (
+    <div className="rounded-lg border border-line bg-canvas/40 px-3 py-1.5 text-sm">
         <Row label="Plattformen">{job.platform}</Row>
         {job.videoLength && <Row label="Videolänge">{job.videoLength}</Row>}
         <Row label="Inhalt">
@@ -148,7 +148,25 @@ function Briefing({ job }: { job: JobView }) {
           <RichText text={job.specialNotes} />
         </Row>
       </div>
-    </Section>
+  );
+  // Kundenansicht: nur lesen
+  if (canEdit === undefined) return <Section title="Briefing">{view}</Section>;
+  return (
+    <BriefingEditor
+      jobId={job.id}
+      format={job.format}
+      canEdit={canEdit}
+      initial={{
+        title: job.title,
+        content: job.content,
+        specialNotes: job.specialNotes,
+        platforms: job.platform.split(",").map((p) => p.trim()).filter(Boolean),
+        videoLength: job.videoLength ?? "",
+        materialLink: job.materialLink ?? "",
+      }}
+    >
+      {view}
+    </BriefingEditor>
   );
 }
 
@@ -360,6 +378,11 @@ export async function JobDrawer({
             <span className="text-muted">–</span>
           )}
         </Row>
+        {job.materialLink && (
+          <Row label="Material-Link">
+            <ExternalLink href={job.materialLink}>{shortLink(job.materialLink)}</ExternalLink>
+          </Row>
+        )}
         <Row label="Review-Link">
           {job.reviewUrl ? (
             <ExternalLink href={job.reviewUrl}>{shortLink(job.reviewUrl)}</ExternalLink>
@@ -388,7 +411,7 @@ export async function JobDrawer({
         </Section>
       )}
 
-      <Briefing job={job} />
+      <Briefing job={job} canEdit={isAdmin || (me.role === "cutter" && job.createdBy === me.id)} />
 
       <Section
         title={

@@ -23,6 +23,10 @@ type Props = {
   logos?: Map<string, string>;
 };
 
+// Kalendertag (YYYY-MM-DD) nach Wiener Zeit
+const dayVienna = (d: Date) =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Vienna", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+
 // Kanban-Spalten wie in Notion, jede Spalte in ihrer Status-Farbe.
 // Die Reihenfolge der Spalten kann jeder Nutzer per Drag & Drop ändern.
 export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread, logos }: Props) {
@@ -104,6 +108,12 @@ export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread
                   <FormatTag format={job.format} />
                   {job.publishDate && <span className="text-xs text-muted">{formatDate(job.publishDate)}</span>}
                 </div>
+                {!customerView && (
+                  <p className="border-t border-line/60 pt-1.5 text-[11px] text-muted" data-testid="card-created">
+                    Erstellt {formatDate(dayVienna(job.createdAt))}
+                    {job.creatorName && ` · ${job.creatorName}`}
+                  </p>
+                )}
               </Link>
             );
           })}
