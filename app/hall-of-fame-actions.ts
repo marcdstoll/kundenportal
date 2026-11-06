@@ -13,6 +13,7 @@ import {
   type PublicationPlatform,
 } from "@/lib/publications";
 import { newPublicationId, runViewSync, type SyncResult } from "@/lib/view-sync";
+import { logJob } from "@/lib/job-log";
 
 type Result<T = null> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -50,22 +51,28 @@ export async function savePublications(
   }
 
   const existing = await db.select().from(publications).where(eq(publications.jobId, jobId));
+  const touched: string[] = [];
   for (const platform of PUBLICATION_PLATFORMS) {
     const next = parsed.get(platform);
     const old = existing.find((e) => e.platform === platform);
     if (!next) {
-      if (old) await db.delete(publications).where(eq(publications.id, old.id));
+      if (old) {
+        await db.delete(publications).where(eq(publications.id, old.id));
+        touched.push(`${PLATFORM_LABELS[platform]} entfernt`);
+      }
       continue;
     }
     if (old && old.externalId === next.externalId) {
       if (old.url !== next.url) await db.update(publications).set({ url: next.url }).where(eq(publications.id, old.id));
       continue;
     }
+    touched.push(PLATFORM_LABELS[platform]);
     // Neues bzw. anderes Video: alter Stand gehört nicht mehr dazu
     if (old) await db.delete(publications).where(eq(publications.id, old.id));
     await db.insert(publications).values({ id: newPublicationId(), jobId, platform, ...next });
   }
 
+  if (touched.length) await logJob(jobId, "Veröffentlichungs-Links gespeichert", touched.join(", "));
   const sync = await runViewSync("link", jobId);
   refresh();
   return { ok: true, data: { updated: sync.updated, failed: sync.failed } };

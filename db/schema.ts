@@ -187,6 +187,22 @@ export const jobFiles = pgTable("job_files", {
 });
 
 // Kommentare am Projekt (Kunde, Cutter und Admins schreiben im selben Verlauf)
+// Historie eines Projekts: wer hat wann welchen Schritt gemacht (nur für Admins sichtbar)
+export const jobEvents = pgTable(
+  "job_events",
+  {
+    id: text("id").primaryKey(),
+    jobId: text("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    actorId: text("actor_id").references(() => user.id, { onDelete: "set null" }),
+    action: text("action").notNull(), // Schritt im Wortlaut des Workflows, z. B. „Jetzt starten“
+    detail: text("detail"), // z. B. „Warteschlange → Wird jetzt gemacht“
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("job_events_job_idx").on(t.jobId)],
+);
+
 export const jobComments = pgTable(
   "job_comments",
   {

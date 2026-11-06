@@ -14,6 +14,7 @@ import { CUSTOMER_DATE_STATUSES, FORMATS, STATUSES, VIDEO_LENGTHS } from "@/lib/
 import { isAllowedFile, ALLOWED_LABEL } from "@/lib/file-types";
 import { stripMarkdown } from "@/lib/rich-text";
 import { ensureReviewShare } from "@/lib/review-shares";
+import { logJob, statusChange } from "@/lib/job-log";
 
 // ---------- Hilfsfunktionen ----------
 
@@ -53,7 +54,14 @@ async function requireCutterOf(jobId: string) {
 }
 
 // Status nur ändern, wenn das Projekt noch im erwarteten Status ist
-async function changeStatus(jobId: string, from: string, to: string, extra: Partial<typeof jobs.$inferInsert> = {}) {
+// action: Eintrag in der Projekt-Historie (Wortlaut des Workflow-Schritts)
+async function changeStatus(
+  jobId: string,
+  from: string,
+  to: string,
+  extra: Partial<typeof jobs.$inferInsert> = {},
+  action?: string,
+) {
   const updated = await db
     .update(jobs)
     .set({ status: to, updatedAt: new Date(), ...extra })
@@ -62,6 +70,11 @@ async function changeStatus(jobId: string, from: string, to: string, extra: Part
   if (updated.length === 0) {
     throw new Error("Das Projekt wurde inzwischen geändert. Bitte Seite neu laden.");
   }
+  if (action) await logJob(jobId, action, statusChange(from, to));
+}
+
+async function userName(id: string) {
+  return (await db.select({ name: user.name }).from(user).where(eq(user.id, id)))[0]?.name ?? null;
 }
 
 async function addCutterRow(jobId: string, userId: string) {
@@ -246,6 +259,7 @@ export async function createJob(input: NewJobInput) {
       rawFolderId: folder.rawId,
     });
     for (const c of cutterIds) await addCutterRow(id, c);
+    await logJob(id, "Projekt angelegt", null, me.id);
     return { jobId: id };
   });
 }
@@ -310,6 +324,7 @@ export async function confirmUpload(fileRowId: string) {
     await assertCanSee(me, job);
     if (file.uploadedBy && file.uploadedBy !== me.id && me.role !== "admin") throw new Error("Keine Berechtigung.");
     await db.update(jobFiles).set({ uploaded: true }).where(eq(jobFiles.id, fileRowId));
+    if (file.late && file.kind === "roh") await logJob(job.id, "Material nachgereicht", file.name, me.id);
     if (file.late && file.kind === "roh") {
       // Rohmaterial gilt für alle Teile (Duplikate) – Beteiligte aller Teile informieren, jede Person nur einmal
       const notified = new Set<string>();
@@ -339,7 +354,7 @@ export async function submitJob(jobId: string) {
     // Kunden müssen Material mitschicken; Staff darf ohne Dateien anlegen (z. B. Material liegt schon in Frame.io)
     if (files.length === 0 && me.role === "kunde") throw new Error("Bitte mindestens eine Datei hochladen.");
     const assigned = (await cutterIdsOf(jobId)).length > 0;
-    await changeStatus(jobId, "entwurf", assigned ? "warteschlange" : "todo", { submittedAt: new Date() });
+    await changeStatus(jobId, "entwurf", assigned ? "warteschlange" : "todo", { submittedAt: new Date() }, "Projekt abgeschickt");
     refresh();
     return null;
   });
@@ -398,7 +413,7 @@ export async function claimJob(jobId: string) {
     const job = await getJob(jobId);
     await assertCanSee(me, job);
     assertNotPaused(job);
-    await changeStatus(jobId, "todo", "in_arbeit");
+    await changeStatus(jobId, "todo", "in_arbeit", {}, "Jetzt starten");
     await addCutterRow(jobId, me.id);
     refresh();
     return null;
@@ -412,7 +427,7 @@ export async function reserveJob(jobId: string) {
     const job = await getJob(jobId);
     await assertCanSee(me, job);
     assertNotPaused(job);
-    await changeStatus(jobId, "todo", "warteschlange");
+    await changeStatus(jobId, "todo", "warteschlange", {}, "Reservieren");
     await addCutterRow(jobId, me.id);
     refresh();
     return null;
@@ -424,7 +439,7 @@ export async function startJob(jobId: string) {
   return run(async () => {
     await requireCutterOf(jobId);
     assertNotPaused(await getJob(jobId));
-    await changeStatus(jobId, "warteschlange", "in_arbeit");
+    await changeStatus(jobId, "warteschlange", "in_arbeit", {}, "Jetzt starten");
     refresh();
     return null;
   });
@@ -452,7 +467,7 @@ export async function submitForReview(jobId: string, reviewUrl?: string) {
     if (!url || !/^https?:\/\//.test(url)) {
       throw new Error("Bitte das Video hochladen oder einen gültigen Review-Link einfügen.");
     }
-    await changeStatus(jobId, "in_arbeit", "feedback", { reviewUrl: url });
+    await changeStatus(jobId, "in_arbeit", "feedback", { reviewUrl: url }, "Zur Review eingereicht");
     refresh();
     return null;
   });
@@ -468,7 +483,8 @@ export async function addCutter(jobId: string, cutterId: string) {
     const job = await getJob(jobId);
     if (job.status === "todo") assertNotPaused(job);
     await addCutterRow(jobId, cutterId);
-    if (job.status === "todo") await changeStatus(jobId, "todo", "warteschlange");
+    await logJob(jobId, "Cutter hinzugefügt", await userName(cutterId));
+    if (job.status === "todo") await changeStatus(jobId, "todo", "warteschlange", {}, "Cutter zugewiesen");
     refresh();
     return null;
   });
@@ -497,6 +513,7 @@ export async function updateReviewUrl(jobId: string, reviewUrl: string) {
       .update(jobs)
       .set({ reviewUrl: url || null })
       .where(eq(jobs.id, jobId));
+    await logJob(jobId, url ? "Review-Link geändert" : "Review-Link entfernt", url || null);
     refresh();
     return null;
   });
@@ -508,7 +525,7 @@ export async function updateReviewUrl(jobId: string, reviewUrl: string) {
 export async function sendBack(jobId: string) {
   return run(async () => {
     await requireUser("admin");
-    await changeStatus(jobId, "feedback", "warteschlange");
+    await changeStatus(jobId, "feedback", "warteschlange", {}, "Zurück in Warteschlange");
     refresh();
     return null;
   });
@@ -518,7 +535,7 @@ export async function sendBack(jobId: string) {
 export async function markReady(jobId: string) {
   return run(async () => {
     await requireUser("admin");
-    await changeStatus(jobId, "feedback", "ready_to_post");
+    await changeStatus(jobId, "feedback", "ready_to_post", {}, "Ready to post");
     refresh();
     return null;
   });
@@ -529,7 +546,7 @@ export async function sendToClient(jobId: string) {
   return run(async () => {
     const me = await requireUser("admin");
     const job = await getJob(jobId);
-    await changeStatus(jobId, "feedback", "feedback_client");
+    await changeStatus(jobId, "feedback", "feedback_client", {}, "An Kunden schicken");
     await notify(job, me, "status", `Dein Video „${job.title}“ ist fertig – bitte ansehen und freigeben`, undefined, new Set(), [
       job.customerId,
     ]);
@@ -545,7 +562,7 @@ export async function clientApprove(jobId: string) {
     const job = await getJob(jobId);
     if (me.role === "cutter") throw new Error("Keine Berechtigung.");
     if (me.role === "kunde" && job.customerId !== me.customerId) throw new Error("Keine Berechtigung.");
-    await changeStatus(jobId, "feedback_client", "ready_to_post");
+    await changeStatus(jobId, "feedback_client", "ready_to_post", {}, me.role === "kunde" ? "Video freigeben" : "Ready to post");
     const to = [...(await cutterIdsOf(jobId)), ...(await adminIds()), job.customerId];
     await notify(job, me, "status", `${me.name} hat „${job.title}“ freigegeben`, undefined, new Set(), to);
     refresh();
@@ -564,7 +581,13 @@ export async function clientRequestChanges(jobId: string, note: string) {
     const text = note.trim();
     if (me.role === "kunde" && !text) throw new Error("Bitte beschreib kurz, was geändert werden soll.");
     if (text.length > 5000) throw new Error("Der Text ist zu lang (max. 5000 Zeichen).");
-    await changeStatus(jobId, "feedback_client", "warteschlange");
+    await changeStatus(
+      jobId,
+      "feedback_client",
+      "warteschlange",
+      {},
+      me.role === "kunde" ? "Zurückschicken" : "Zurück in Warteschlange",
+    );
     if (text) await db.insert(jobComments).values({ id: randomUUID(), jobId, authorId: me.id, body: text });
     const preview = text.length > 80 ? `${text.slice(0, 80)} …` : text;
     const to = [...(await cutterIdsOf(jobId)), ...(await adminIds()), job.customerId];
@@ -586,7 +609,7 @@ export async function clientRequestChanges(jobId: string, note: string) {
 export async function markOnline(jobId: string) {
   return run(async () => {
     await requireUser("admin");
-    await changeStatus(jobId, "ready_to_post", "online");
+    await changeStatus(jobId, "ready_to_post", "online", {}, "Als online markieren");
     await nameReviewFolder(jobId, true);
     refresh();
     return null;
@@ -639,6 +662,16 @@ export async function updateJobDetails(jobId: string, input: JobDetailsInput) {
       })
       .where(eq(jobs.id, jobId));
 
+    const changed = [
+      title !== job.title && "Titel",
+      platforms.join(", ") !== job.platform && "Plattformen",
+      (lengths.length > 0 ? input.videoLength : "") !== (job.videoLength ?? "") && "Videolänge",
+      content !== job.content && "Inhalt",
+      specialNotes !== job.specialNotes && "Besonderheiten",
+      (materialLink || null) !== job.materialLink && "Material-Link",
+    ].filter(Boolean);
+    if (changed.length) await logJob(jobId, "Briefing bearbeitet", changed.join(", "), me.id);
+
     if (title !== job.title && job.frameioFolderId && !(await folderShared(job))) {
       const [c] = await db.select({ name: customers.name }).from(customers).where(eq(customers.id, job.customerId));
       await renameFolder(job.frameioFolderId, `${c?.name ?? ""} – ${title}`).catch((e) =>
@@ -657,6 +690,7 @@ export async function setStatus(jobId: string, status: string) {
     if (!(STATUSES as readonly string[]).includes(status)) throw new Error("Unbekannter Status.");
     const before = await getJob(jobId);
     await db.update(jobs).set({ status, updatedAt: new Date() }).where(eq(jobs.id, jobId));
+    if (status !== before.status) await logJob(jobId, "Status geändert", statusChange(before.status, status));
     if (status === "online" && before.status !== "online") await nameReviewFolder(jobId, true);
     if (status !== "online" && before.status === "online") await nameReviewFolder(jobId, false);
     refresh();
@@ -668,7 +702,10 @@ export async function setFormat(jobId: string, format: string) {
   return run(async () => {
     await requireUser("admin");
     if (!FORMATS.some((f) => f.value === format)) throw new Error("Unbekanntes Format.");
+    const before = await getJob(jobId);
     await db.update(jobs).set({ format, updatedAt: new Date() }).where(eq(jobs.id, jobId));
+    const label = (v: string) => FORMATS.find((f) => f.value === v)?.label ?? v;
+    if (before.format !== format) await logJob(jobId, "Format geändert", `${label(before.format)} → ${label(format)}`);
     refresh();
     return null;
   });
@@ -683,6 +720,7 @@ export async function setBilled(jobId: string, value: boolean, which: "cutter" |
       .update(jobs)
       .set(which === "kunde" ? { billedCustomer: value } : { billed: value })
       .where(eq(jobs.id, jobId));
+    await logJob(jobId, "Abgerechnet", `${which === "kunde" ? "Kunde" : "Cutter"}: ${value ? "Ja" : "Nein"}`);
     refresh();
     return null;
   });
@@ -692,6 +730,7 @@ export async function removeCutter(jobId: string, cutterId: string) {
   return run(async () => {
     await requireUser("admin");
     await db.delete(jobCutters).where(and(eq(jobCutters.jobId, jobId), eq(jobCutters.userId, cutterId)));
+    await logJob(jobId, "Cutter entfernt", await userName(cutterId));
     refresh();
     return null;
   });
@@ -714,6 +753,9 @@ export async function setPublishDate(jobId: string, date: string) {
       .update(jobs)
       .set({ publishDate: date || null })
       .where(eq(jobs.id, jobId));
+    if ((job.publishDate ?? "") !== date) {
+      await logJob(jobId, "Veröffentlichung geändert", date ? date.split("-").reverse().join(".") : "entfernt");
+    }
     refresh();
     return null;
   });
@@ -915,6 +957,8 @@ export async function duplicateJob(jobId: string, title?: string) {
       createdBy: me.id
     });
     // Rohmaterial wird nicht kopiert: alle Teile zeigen die Dateien aus dem gemeinsamen Raw-Ordner (lib/queries.ts)
+    await logJob(id, "Projekt dupliziert", `aus „${job.title}“`, me.id);
+    await logJob(jobId, "Weiterer Teil angelegt", `„${newTitle}“`, me.id);
     refresh();
     return { jobId: id, title: newTitle };
   });
@@ -991,6 +1035,7 @@ export async function deleteJobFile(fileRowId: string) {
         ),
       ),
     );
+    await logJob(file.jobId, "Datei gelöscht", file.name, me.id);
     refresh();
     return null;
   });
@@ -1009,6 +1054,7 @@ export async function requestCancel(jobId: string, reason: string) {
       .update(jobs)
       .set({ cancelRequestedAt: new Date(), cancelRequestedBy: me.id, cancelReason: why || null, updatedAt: new Date() })
       .where(eq(jobs.id, jobId));
+    await logJob(jobId, "Stornierung angefragt", why || null, me.id);
     await notify(
       job,
       me,
@@ -1035,6 +1081,12 @@ export async function decideCancel(jobId: string, approve: boolean) {
         updatedAt: new Date(),
       })
       .where(eq(jobs.id, jobId));
+    await logJob(
+      jobId,
+      approve ? "Stornierung bestätigt" : "Stornierung abgelehnt",
+      approve ? statusChange(job.status, "storniert") : null,
+      me.id,
+    );
     await notify(
       job,
       me,

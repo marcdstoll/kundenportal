@@ -84,13 +84,16 @@ export function JobContextMenu({
     if (!menu) return;
     const close = () => setMenu(null);
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    // Scrollen direkt nach dem Öffnen (Karte wird ins Bild geholt, Trackpad-Nachlauf) nicht als Schließen werten
+    const openedAt = Date.now();
+    const onScroll = () => Date.now() - openedAt > 300 && close();
     window.addEventListener("keydown", onKey);
     window.addEventListener("resize", close);
-    window.addEventListener("scroll", close, true);
+    window.addEventListener("scroll", onScroll, true);
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("resize", close);
-      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("scroll", onScroll, true);
     };
   }, [menu]);
 

@@ -21,9 +21,9 @@ import { PublishDateField } from "./publish-date-field";
 import { DeadlineBadge } from "./deadline-badge";
 import { jobDeadlineWarning } from "@/lib/deadline";
 import { PublicationsForm, type PublicationView } from "./publications-form";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { publications } from "@/db/schema";
+import { jobEvents, publications } from "@/db/schema";
 import { PUBLICATION_STATUSES, type PublicationPlatform } from "@/lib/publications";
 import { InlinePicker } from "./inline-picker";
 import {
@@ -473,7 +473,44 @@ export async function JobDrawer({
           ) : null
         }
       />
+
+      {isAdmin && <JobHistory job={job} />}
     </DrawerFrame>
+  );
+}
+
+// Historie (nur Admins): wer hat wann welchen Schritt gemacht – neueste oben
+async function JobHistory({ job }: { job: JobView }) {
+  const rows = await db
+    .select({ id: jobEvents.id, action: jobEvents.action, detail: jobEvents.detail, at: jobEvents.createdAt, name: user.name })
+    .from(jobEvents)
+    .leftJoin(user, eq(user.id, jobEvents.actorId))
+    .where(eq(jobEvents.jobId, job.id))
+    .orderBy(desc(jobEvents.createdAt));
+  // Ältere Projekte (vor der Historie): Anlage aus den Projektdaten ergänzen
+  const entries = rows.some((r) => r.action === "Projekt angelegt" || r.action === "Projekt dupliziert")
+    ? rows
+    : [...rows, { id: "angelegt", action: "Projekt angelegt", detail: null, at: job.createdAt, name: job.creatorName }];
+  return (
+    <details className="group border-t border-line pt-4" data-testid="job-history">
+      <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium">
+        <span aria-hidden className="inline-block text-xs text-muted transition-transform group-open:rotate-90">
+          ▶
+        </span>
+        Historie ({entries.length})
+      </summary>
+      <ol className="mt-3 space-y-2 text-sm">
+        {entries.map((e) => (
+          <li key={e.id} className="grid grid-cols-[auto_1fr] gap-x-3" data-testid="history-entry">
+            <span className="whitespace-nowrap text-xs tabular-nums text-muted">{formatDateTime(e.at)}</span>
+            <span className="min-w-0 break-words">
+              <span className="font-medium">{e.name ?? "Unbekannt"}</span> · {e.action}
+              {e.detail && <span className="text-muted"> · {e.detail}</span>}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </details>
   );
 }
 
