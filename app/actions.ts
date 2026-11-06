@@ -13,6 +13,7 @@ import { canSeeJob, clientIdsOfCutter } from "@/lib/access";
 import { CUSTOMER_DATE_STATUSES, FORMATS, STATUSES, VIDEO_LENGTHS } from "@/lib/status";
 import { isAllowedFile, ALLOWED_LABEL } from "@/lib/file-types";
 import { stripMarkdown } from "@/lib/rich-text";
+import { ensureReviewShare } from "@/lib/review-shares";
 
 // ---------- Hilfsfunktionen ----------
 
@@ -435,8 +436,10 @@ export async function startJob(jobId: string) {
 export async function submitForReview(jobId: string, reviewUrl?: string) {
   return run(async () => {
     await requireCutterOf(jobId);
-    assertNotPaused(await getJob(jobId));
+    const job = await getJob(jobId);
+    assertNotPaused(job);
     let url = reviewUrl?.trim();
+    if (!url) url = (await ensureReviewShare(job)) ?? undefined;
     if (!url) {
       const [latest] = await db
         .select({ url: jobFiles.frameioUrl })

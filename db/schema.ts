@@ -109,6 +109,9 @@ export const jobs = pgTable("jobs", {
   createdBy: text("created_by").references(() => user.id, {onDelete: "set null"}),
   // Zusätzlicher Link zum Material (z. B. Frame.io), nachträglich eintragbar – etwa bei Projekten ohne Upload
   materialLink: text("material_link"),
+  // Öffentlicher Frame.io-Share auf den Review-Ordner (Kunden haben keinen Frame.io-Zugang)
+  reviewShareId: text("review_share_id"),
+  reviewShareUrl: text("review_share_url"),
 });
 
 // Welche Cutter an einem Projekt arbeiten (mehrere möglich)

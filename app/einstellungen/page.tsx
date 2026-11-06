@@ -5,6 +5,8 @@ import { mailInfo } from "@/lib/mail";
 import { PageHeader } from "@/app/components/shell";
 import { OnboardingVideo, TestMailButton } from "./forms";
 import { ViewSyncButton } from "./hall-of-fame-settings";
+import { ReviewShareButton } from "./review-share-settings";
+import { countMissingReviewShares } from "@/lib/review-shares";
 
 // Einstellungen (nur Admins): Onboarding-Videos, E-Mail-Versand, Hall of Fame (Views-Abruf)
 export default async function SettingsPage() {
@@ -12,9 +14,10 @@ export default async function SettingsPage() {
   if (!me) redirect("/login");
   if (me.role !== "admin") redirect("/dashboard");
 
-  const [kunde, cutter] = await Promise.all([
+  const [kunde, cutter, missingShares] = await Promise.all([
     getSetting(SETTING_KEYS.onboardingKunde),
     getSetting(SETTING_KEYS.onboardingCutter),
+    countMissingReviewShares(),
   ]);
   const smtp = mailInfo();
 
@@ -40,6 +43,11 @@ export default async function SettingsPage() {
             Die Views aller hinterlegten Veröffentlichungs-Links werden täglich um 00:00 Uhr abgerufen.
           </p>
           <ViewSyncButton />
+        </section>
+
+        <section className="space-y-3" aria-label="Review-Links">
+          <h2 className="font-medium">Review-Links</h2>
+          <ReviewShareButton missing={missingShares} />
         </section>
 
         <section className="space-y-3">

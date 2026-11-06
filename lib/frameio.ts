@@ -111,7 +111,7 @@ export class FrameioError extends Error {
 
 // ---------- Projekt, Ordner, Uploads ----------
 
-type Target = { accountId: string; rootFolderId: string };
+type Target = { accountId: string; projectId: string; rootFolderId: string };
 let cachedTarget: Target | null = null;
 
 // Konto und Hauptordner des Projekts "Kundenportal" ermitteln (wird zwischengespeichert)
@@ -125,7 +125,7 @@ async function getTarget(): Promise<Target> {
       const projects = await frameio(`/accounts/${account.id}/workspaces/${workspace.id}/projects?page_size=100`);
       const project = projects.data.find((p: { name: string }) => p.name === PROJECT_NAME);
       if (project) {
-        cachedTarget = { accountId: account.id, rootFolderId: project.root_folder_id };
+        cachedTarget = { accountId: account.id, projectId: project.id, rootFolderId: project.root_folder_id };
         return cachedTarget;
       }
     }
@@ -141,6 +141,30 @@ export async function createFolder(parentId: string, name: string) {
     body: JSON.stringify({ data: { name } }),
   });
   return { id: res.data.id as string, url: res.data.view_url as string };
+}
+
+// Öffentlicher Share-Link (für Kunden ohne Frame.io-Zugang) auf einen Ordner oder eine Datei:
+// ohne Passwort und Ablaufdatum, Kommentare und Download erlaubt. Neue Dateien im Ordner erscheinen automatisch.
+export async function createShare(assetId: string, name: string) {
+  const { accountId, projectId } = await getTarget();
+  const res = await frameio(`/accounts/${accountId}/projects/${projectId}/shares`, {
+    method: "POST",
+    body: JSON.stringify({
+      data: {
+        type: "asset",
+        name: name.replace(/\s+/g, " ").trim().slice(0, 200) || "Review",
+        access: "public",
+        asset_ids: [assetId],
+        commenting_enabled: true,
+        downloading_enabled: true,
+        passphrase: null,
+        expiration: null,
+      },
+    }),
+  });
+  const url = res.data.short_url as string | null;
+  if (!url) throw new Error("Frame.io hat keinen Share-Link geliefert.");
+  return { id: res.data.id as string, url };
 }
 
 // Ordner direkt im Hauptordner des Projekts anlegen (z. B. "Registrierung")
