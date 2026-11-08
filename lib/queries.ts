@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { account, customerMembers, customers, cutterClients, featureRequests, projectIdeas, jobComments, jobCutters, jobFiles, jobs, notifications, profiles, user, todos } from "@/db/schema";
+import { canSeeComment } from "@/lib/mentions";
 import { cleanFilters, type FilterView, type ViewFilters } from "@/lib/view-filters";
 
 export type JobFileView = typeof jobFiles.$inferSelect & { uploaderName: string | null };
@@ -10,12 +11,17 @@ export type JobView = typeof jobs.$inferSelect & {
   cutters: { id: string; name: string }[];
   files: JobFileView[];
   creatorName: string | null; // wer das Projekt angelegt hat (jobs.created_by)
+  customerHasUsers: boolean; // ohne Nutzer beim Kunden entfällt die Kundenabnahme
 };
 
 // Projekte inkl. Client-Name, Cuttern und hochgeladenen Dateien laden
 export async function loadJobs(filter?: SQL): Promise<JobView[]> {
   const rows = await db
-    .select({ job: jobs, customerName: customers.name })
+    .select({
+      job: jobs,
+      customerName: customers.name,
+      customerHasUsers: sql<boolean>`exists (select 1 from ${customerMembers} where ${customerMembers.customerId} = ${customers.id})`,
+    })
     .from(jobs)
     .innerJoin(customers, eq(jobs.customerId, customers.id))
     .where(filter ? and(ne(jobs.status, "entwurf"), filter) : ne(jobs.status, "entwurf"))
@@ -71,9 +77,10 @@ export async function loadJobs(filter?: SQL): Promise<JobView[]> {
     : [];
   const nameOf = new Map(uploaders.map((u) => [u.id, u.name]));
 
-  return rows.map(({ job, customerName }) => ({
+  return rows.map(({ job, customerName, customerHasUsers }) => ({
     ...job,
     customerName,
+    customerHasUsers: !!customerHasUsers,
     creatorName: job.createdBy ? (nameOf.get(job.createdBy) ?? null) : null,
     cutters: cutterRows.filter((c) => c.jobId === job.id).map((c) => ({ id: c.id, name: c.name })),
     files: filesFor(job).map((f) => ({ ...f, uploaderName: f.uploadedBy ? (nameOf.get(f.uploadedBy) ?? null) : null })),
@@ -192,8 +199,8 @@ export async function loadInbox(userId: string, limit = 200) {
 }
 
 // Kommentare eines Projekts mit Namen und Rolle der Verfasser
-export async function loadComments(jobId: string) {
-  return db
+export async function loadComments(jobId: string, viewer: { id: string; role: string | null }) {
+  const rows = await db
     .select({
       id: jobComments.id,
       body: jobComments.body,
@@ -207,6 +214,7 @@ export async function loadComments(jobId: string) {
     .leftJoin(user, eq(jobComments.authorId, user.id))
     .where(eq(jobComments.jobId, jobId))
     .orderBy(asc(jobComments.createdAt));
+  return rows.filter((c) => canSeeComment(c, viewer));
 }
 
 // ---------- Personen mit Profil (Verwaltung, Meine Clients) ----------

@@ -4,7 +4,8 @@
 // Fast alles hier dürfen nur Admins – Ausnahme: acceptInvite (die eingeladene Person selbst).
 
 import { randomBytes, randomUUID } from "crypto";
-import { and, eq, gt, inArray, isNull } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, ne } from "drizzle-orm";
+import { backToTodoIfNoCutter } from "@/lib/cutterless";
 import { headers } from "next/headers";
 import { refresh } from "next/cache";
 import { hashPassword } from "better-auth/crypto";
@@ -14,7 +15,7 @@ import { requireUser } from "@/lib/session";
 import { inviteMail, mailConfigured, testMail, trySendMail } from "@/lib/mail";
 import { SETTING_KEYS, getSetting, onboardingVideoFor, setSetting } from "@/lib/settings";
 
-import { account, customerMembers, customers, cutterClients, invites, jobs, profiles, user } from "@/db/schema";
+import { account, customerMembers, customers, cutterClients, invites, jobCutters, jobs, profiles, user } from "@/db/schema";
 import { activeJobsOnlyWith, memberIds } from "@/lib/queries";
 import { FrameioError, createRootFolder, createUpload, deleteFile, deleteFolder } from "@/lib/frameio";
 
@@ -438,6 +439,13 @@ export async function createCustomer(input: {
     const me = await requireUser("admin");
     const name = input.name.trim();
     if (!name) throw new Error("Bitte einen Namen für den Kunden eingeben.");
+    // Ohne E-Mail: Kunde ohne Nutzer (kein Login, keine Kundenabnahme)
+    if (!input.email.trim()) {
+      const customerId = randomUUID();
+      await db.insert(customers).values({ id: customerId, name });
+      refresh();
+      return { customerId, userId: null, email: null, mailError: null };
+    }
     if (!EMAIL_RE.test(input.email.trim())) throw new Error("Bitte eine gültige E-Mail-Adresse eingeben.");
     const [exists] = await db
       .select({ id: user.id })
@@ -531,10 +539,22 @@ export async function resendMemberInvite(userId: string) {
 // Cutter und Kunden-Nutzer. Erlaubt: die Person selbst, Admins, Admins des Kunden für ihre Nutzer.
 export async function savePerson(
   userId: string,
-  input: { name: string; phone: string; birthday: string; logo?: string | null },
+  input: { name: string; phone: string; birthday: string; logo?: string | null; email?: string },
 ) {
   return run(async () => {
     const me = await requireUser();
+    // E-Mail (Login) ändern: Admins bei allen, sonst nur bei sich selbst
+    const [current] = await db.select({ email: user.email }).from(user).where(eq(user.id, userId));
+    if (!current) throw new Error("Nutzer nicht gefunden.");
+    const email = input.email?.trim().toLowerCase();
+    const emailChanged = !!email && email !== current.email;
+    if (input.email !== undefined && !email) throw new Error("Die E-Mail-Adresse darf nicht leer sein.");
+    if (emailChanged) {
+      if (me.id !== userId && me.role !== "admin") throw new Error("Keine Berechtigung.");
+      if (!EMAIL_RE.test(email) || email.length > 200) throw new Error("Bitte eine gültige E-Mail-Adresse eingeben.");
+      const [taken] = await db.select({ id: user.id }).from(user).where(and(eq(user.email, email), ne(user.id, userId)));
+      if (taken) throw new Error("Diese E-Mail-Adresse ist bereits registriert.");
+    }
     if (me.id !== userId && me.role !== "admin") {
       const [m] = await db.select().from(customerMembers).where(eq(customerMembers.userId, userId));
       if (!m) throw new Error("Keine Berechtigung.");
@@ -553,7 +573,10 @@ export async function savePerson(
         throw new Error("Bitte ein gültiges Geburtsdatum eingeben.");
       }
     }
-    await db.update(user).set({ name, updatedAt: new Date() }).where(eq(user.id, userId));
+    await db
+      .update(user)
+      .set({ name, ...(emailChanged ? { email } : {}), updatedAt: new Date() })
+      .where(eq(user.id, userId));
     const values = {
       phone: input.phone.trim() || null,
       birthday,
@@ -710,6 +733,9 @@ export async function deleteCutter(cutterId: string) {
     if (u.id === me.id) throw new Error("Du kannst dich nicht selbst löschen.");
 
     const orphaned = await activeJobsOnlyWith(cutterId);
+    const ownJobs = (
+      await db.select({ id: jobCutters.jobId }).from(jobCutters).where(eq(jobCutters.userId, cutterId))
+    ).map((r) => r.id);
 
     // Persönliches Begrüßungsvideo gehört nur ihm → in Frame.io löschen
     const [prof] = await db
@@ -723,6 +749,7 @@ export async function deleteCutter(cutterId: string) {
     // Person löschen: Login, Profil, Einladungen, Kunden-Freigaben und Projekt-Zuordnungen gehen automatisch mit.
     // Kommentare bleiben (Verfasser wird leer → „Gelöschter Nutzer“), Dateien bleiben unverändert.
     await db.delete(user).where(eq(user.id, cutterId));
+    await backToTodoIfNoCutter(ownJobs);
 
     refresh();
     return { withoutCutter: orphaned };

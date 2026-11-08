@@ -136,6 +136,7 @@ export async function Kanban({ jobs, hrefFor, meId, customerView = false, unread
         status: j.status,
         paused: !!j.cancelRequestedAt,
         assigned: j.cutters.some((c) => c.id === me.id),
+        noClient: !j.customerHasUsers,
       }))}
     >
       {row}

@@ -8,12 +8,13 @@ import { customers, jobComments, jobCutters, jobFiles, jobs, notifications, user
 import { FrameioError, createFolder, createJobFolder, createUpload, deleteFile, deleteFolder, renameFolder } from "@/lib/frameio";
 import { requireUser } from "@/lib/session";
 import { memberIds, mentionCandidates, nextPartTitle } from "@/lib/queries";
-import { keepAllowedMentions, mentionIds, toPlain } from "@/lib/mentions";
+import { isPrivateComment, keepAllowedMentions, mentionIds, toPlain } from "@/lib/mentions";
 import { canSeeJob, clientIdsOfCutter } from "@/lib/access";
 import { CUSTOMER_DATE_STATUSES, FORMATS, STATUSES, VIDEO_LENGTHS } from "@/lib/status";
 import { isAllowedFile, ALLOWED_LABEL } from "@/lib/file-types";
 import { stripMarkdown } from "@/lib/rich-text";
 import { ensureReviewShare } from "@/lib/review-shares";
+import { backToTodoIfNoCutter } from "@/lib/cutterless";
 import { logJob, statusChange } from "@/lib/job-log";
 
 // ---------- Hilfsfunktionen ----------
@@ -546,6 +547,12 @@ export async function sendToClient(jobId: string) {
   return run(async () => {
     const me = await requireUser("admin");
     const job = await getJob(jobId);
+    // Kunde ohne Nutzer: niemand kann abnehmen → direkt Ready to post
+    if ((await memberIds(job.customerId)).length === 0) {
+      await changeStatus(jobId, "feedback", "ready_to_post", {}, "Ready to post");
+      refresh();
+      return null;
+    }
     await changeStatus(jobId, "feedback", "feedback_client", {}, "An Kunden schicken");
     await notify(job, me, "status", `Dein Video „${job.title}“ ist fertig – bitte ansehen und freigeben`, undefined, new Set(), [
       job.customerId,
@@ -731,6 +738,7 @@ export async function removeCutter(jobId: string, cutterId: string) {
     await requireUser("admin");
     await db.delete(jobCutters).where(and(eq(jobCutters.jobId, jobId), eq(jobCutters.userId, cutterId)));
     await logJob(jobId, "Cutter entfernt", await userName(cutterId));
+    await backToTodoIfNoCutter([jobId]);
     refresh();
     return null;
   });
@@ -813,8 +821,8 @@ export async function addComment(jobId: string, body: string) {
     const { text, ids } = await cleanMentions(job, me, body.trim());
     await db.insert(jobComments).values({ id: randomUUID(), jobId, authorId: me.id, body: text });
     await notifyMentions(job, me, ids, text);
-    // Wer erwähnt wurde, bekommt nicht zusätzlich die normale Kommentar-Meldung
-    await notify(job, me, "comment", commentNotice(me.name, text), undefined, new Set(ids));
+    // Mit Erwähnung ist der Kommentar privat → keine allgemeine Kommentar-Meldung
+    if (!isPrivateComment(text)) await notify(job, me, "comment", commentNotice(me.name, text), undefined, new Set(ids));
     refresh();
     return null;
   });
@@ -853,11 +861,16 @@ export async function editComment(commentId: string, body: string) {
     const before = new Set(mentionIds(c.body));
     const added = ids.filter((id) => !before.has(id));
     const removed = [...before].filter((id) => !ids.includes(id));
-    // Bestehende Meldungen zeigen den neuen Text
-    await db
-      .update(notifications)
-      .set({ text: commentNotice(me.name, text) })
-      .where(noticesOf(c.jobId, me.id, me.name, c.body, "comment"));
+    // Bestehende Meldungen zeigen den neuen Text – wird der Kommentar privat, verschwinden die allgemeinen Meldungen
+    if (isPrivateComment(text)) {
+      await db.delete(notifications).where(noticesOf(c.jobId, me.id, me.name, c.body, "comment"));
+    } else {
+      await db
+        .update(notifications)
+        .set({ text: commentNotice(me.name, text) })
+        .where(noticesOf(c.jobId, me.id, me.name, c.body, "comment"));
+      if (isPrivateComment(c.body)) await notify(job, me, "comment", commentNotice(me.name, text), undefined, new Set(ids));
+    }
     if (removed.length) {
       await db
         .delete(notifications)

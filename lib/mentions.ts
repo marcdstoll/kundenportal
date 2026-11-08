@@ -14,6 +14,16 @@ export function mentionIds(body: string): string[] {
   return [...new Set([...body.matchAll(TOKEN)].map((m) => m[2]))];
 }
 
+// Kommentare mit @Erwähnung sehen nur die Erwähnten, der Verfasser und Admins
+export function isPrivateComment(body: string) {
+  return mentionIds(body).length > 0;
+}
+
+export function canSeeComment(c: { body: string; authorId: string | null }, viewer: { id: string; role: string | null }) {
+  if (viewer.role === "admin" || !isPrivateComment(c.body)) return true;
+  return c.authorId === viewer.id || mentionIds(c.body).includes(viewer.id);
+}
+
 // Für Inbox-Texte, Vorschauen usw.: Tokens → „@Name“
 export function toPlain(body: string) {
   return body.replace(TOKEN, (_, name: string) => `@${name}`);

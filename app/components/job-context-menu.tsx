@@ -17,6 +17,7 @@ import {
   markOnline,
   reserveJob,
   sendBack,
+  markReady,
   sendToClient,
   startJob,
   type Result,
@@ -29,6 +30,7 @@ export type MenuJob = {
   status: string;
   paused: boolean; // Stornierung angefragt → Arbeit ruht
   assigned: boolean; // aktueller Nutzer ist als Cutter eingetragen
+  noClient?: boolean; // Kunde ohne Nutzer → keine Kundenabnahme
 };
 
 type Item = { label: string; run?: () => Promise<Result>; open?: true; danger?: true; primary?: true };
@@ -48,7 +50,8 @@ function itemsFor(job: MenuJob, isAdmin: boolean): Item[][] {
   if (isAdmin) {
     if (job.status === "feedback") {
       flow.push({ label: "Zurück in Warteschlange", run: () => sendBack(job.id) });
-      flow.push({ label: "An Kunden schicken", run: () => sendToClient(job.id), primary: true });
+      if (job.noClient) flow.push({ label: "Ready to post", run: () => markReady(job.id), primary: true });
+      else flow.push({ label: "An Kunden schicken", run: () => sendToClient(job.id), primary: true });
     }
     if (job.status === "feedback_client") {
       flow.push({ label: "Zurück in Warteschlange", run: () => clientRequestChanges(job.id, "") });

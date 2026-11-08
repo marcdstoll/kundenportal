@@ -12,6 +12,7 @@ import {
   markOnline,
   removeCutter,
   sendBack,
+  markReady,
   sendToClient,
   submitForReview,
   updateReviewUrl,
@@ -37,6 +38,8 @@ type Props = {
     hasVideo: boolean;
     // Stornierung angefragt: Arbeit ruht, bis ein Admin entscheidet
     paused: boolean;
+    // Kunde ohne Nutzer → keine Kundenabnahme
+    noClient: boolean;
   };
   isAdmin: boolean;
   isAssigned: boolean;
@@ -184,9 +187,15 @@ export function JobControls({ job, isAdmin, isAssigned, staff, beforeBilling }: 
             <button disabled={busy} onClick={() => run(() => sendBack(job.id))} className={buttonSecondary}>
               Zurück in Warteschlange
             </button>
-            <button disabled={busy} onClick={() => run(() => sendToClient(job.id))} className={buttonPrimary}>
-              An Kunden schicken
-            </button>
+            {job.noClient ? (
+              <button disabled={busy} onClick={() => run(() => markReady(job.id))} className={buttonPrimary}>
+                Ready to post
+              </button>
+            ) : (
+              <button disabled={busy} onClick={() => run(() => sendToClient(job.id))} className={buttonPrimary}>
+                An Kunden schicken
+              </button>
+            )}
           </div>
         </Section>
       )}

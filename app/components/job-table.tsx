@@ -200,6 +200,7 @@ export function JobTable({ jobs, hrefFor, isAdmin, sort, view, logos, meId }: Pr
         status: j.status,
         paused: !!j.cancelRequestedAt,
         assigned: j.cutters.some((c) => c.id === meId),
+        noClient: !j.customerHasUsers,
       }))}
     >
       {table}

@@ -30,6 +30,8 @@ function SuccessText({ text }: { text: string | null }) {
   return text ? <p className="text-sm text-[var(--st-online)]">{text}</p> : null;
 }
 
+const WELCOME_FILE_TYPES = ["video/mp4", "video/quicktime", "video/webm"];
+
 const timeNow = () => new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 
 // ---------- Neuer Kunde / neuer Cutter ----------
@@ -49,12 +51,43 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
   const [video, setVideo] = useState<{ blob: Blob; url: string } | null>(null);
   const [recording, setRecording] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
+  const [videoKey, setVideoKey] = useState(0);
   const label = role === "kunde" ? "Neuer Kunde" : "Neuer Cutter";
+  // Kunde ohne E-Mail → kein Nutzer, keine Einladung
+  const noLogin = role === "kunde" && !email.trim();
 
   function dropVideo() {
     if (video) URL.revokeObjectURL(video.url);
     setVideo(null);
   }
+
+  function pickVideo(file: File) {
+    if (!WELCOME_FILE_TYPES.includes(file.type)) return setError("Bitte ein Video (MP4, MOV oder WebM) wählen.");
+    setError(null);
+    dropVideo();
+    setVideo({ blob: file, url: URL.createObjectURL(file) });
+  }
+  const videoDrop = useFileDrop(
+    (files) => {
+      const file = files[0];
+      if (file) pickVideo(file);
+    },
+    { disabled: busy, multiple: false },
+  );
+  const videoInput = (
+    <input
+      key={videoKey}
+      type="file"
+      accept={WELCOME_FILE_TYPES.join(",")}
+      className="sr-only"
+      disabled={busy}
+      onChange={(e) => {
+        const file = e.target.files?.[0];
+        setVideoKey((k) => k + 1);
+        if (file) pickVideo(file);
+      }}
+    />
+  );
 
   const close = () => {
     dropVideo();
@@ -93,18 +126,31 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
               setBusy(false);
               return setError(res.error);
             }
+            const newUserId = res.data.userId;
+            if (!newUserId) {
+              setBusy(false);
+              setDone({ ok: true, text: `✓ ${firm.trim() || name} angelegt.` });
+              dropVideo();
+              setName("");
+              setFirm("");
+              setEmail("");
+              setPhone("");
+              setOpen(false);
+              router.refresh();
+              return;
+            }
             let mailError = res.data.mailError;
             let videoError: string | null = null;
             if (video) {
               // Erst das Video hochladen, dann die Einladung schicken – so ist es beim Klick auf den Link schon da
               setProgress(0);
               try {
-                await uploadWelcomeVideo(res.data.userId, video.blob, setProgress);
+                await uploadWelcomeVideo(newUserId, video.blob, setProgress);
               } catch (err) {
                 videoError = err instanceof Error ? err.message : "Upload fehlgeschlagen.";
               }
               setProgress(null);
-              const sent = await regenerateInvite(res.data.userId);
+              const sent = await regenerateInvite(newUserId);
               mailError = sent.ok ? null : sent.error;
             }
             setBusy(false);
@@ -156,7 +202,7 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
             <input
               className={inputField}
               type="email"
-              placeholder="E-Mail (Login)"
+              placeholder={role === "kunde" ? "E-Mail (Login, optional)" : "E-Mail (Login)"}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={busy}
@@ -170,8 +216,8 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
             />
           </div>
 
-          {/* Persönliches Begrüßungsvideo (optional) */}
-          {recording ? (
+          {/* Persönliches Begrüßungsvideo (optional) – aufnehmen oder Datei wählen; nur mit Nutzer */}
+          {noLogin ? null : recording ? (
             <WelcomeRecorder
               onAccept={(blob) => {
                 dropVideo();
@@ -189,6 +235,10 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
                   <button type="button" className="text-muted hover:text-text" onClick={() => setRecording(true)}>
                     Neu aufnehmen
                   </button>
+                  <label className="cursor-pointer text-muted hover:text-text">
+                    Andere Datei
+                    {videoInput}
+                  </label>
                   <button type="button" className="text-muted hover:text-danger" onClick={dropVideo}>
                     Entfernen
                   </button>
@@ -196,14 +246,20 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
               )}
             </div>
           ) : (
-            <button
-              type="button"
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-line px-3 py-2.5 text-sm text-muted transition-colors hover:bg-raised/50 hover:text-text"
-              onClick={() => setRecording(true)}
-              disabled={busy}
-            >
-              <span aria-hidden>🎥</span> Persönliches Begrüßungsvideo aufnehmen (optional)
-            </button>
+            <div {...videoDrop.props} className={`flex gap-2 rounded-lg ${videoDrop.active ? DROP_ACTIVE : ""}`}>
+              <button
+                type="button"
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-dashed border-line px-3 py-2.5 text-sm text-muted transition-colors hover:bg-raised/50 hover:text-text"
+                onClick={() => setRecording(true)}
+                disabled={busy}
+              >
+                <span aria-hidden>🎥</span> Persönliches Begrüßungsvideo aufnehmen (optional)
+              </button>
+              <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-line px-3 py-2.5 text-sm text-muted transition-colors hover:bg-raised/50 hover:text-text">
+                Datei wählen
+                {videoInput}
+              </label>
+            </div>
           )}
 
           {progress !== null && (
@@ -227,7 +283,9 @@ export function NewUserForm({ role }: { role: "kunde" | "cutter" }) {
                 ? progress !== null
                   ? "Video wird hochgeladen …"
                   : "Wird angelegt …"
-                : "Anlegen & Einladung senden"}
+                : noLogin
+                  ? "Anlegen"
+                  : "Anlegen & Einladung senden"}
             </button>
           </div>
         </form>
@@ -297,7 +355,7 @@ export function WelcomeVideoSection({
   }
   const drop = useFileDrop(
     (files) => {
-      const file = files.find((f) => ["video/mp4", "video/quicktime", "video/webm"].includes(f.type));
+      const file = files.find((f) => WELCOME_FILE_TYPES.includes(f.type));
       if (file) save(file);
       else setMsg({ ok: false, text: "Bitte ein Video (MP4, MOV oder WebM) ablegen." });
     },
@@ -341,7 +399,7 @@ export function WelcomeVideoSection({
             <input
               key={fileKey}
               type="file"
-              accept="video/mp4,video/quicktime,video/webm"
+              accept={WELCOME_FILE_TYPES.join(",")}
               className="sr-only"
               onChange={(e) => {
                 const file = e.target.files?.[0];

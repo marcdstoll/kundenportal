@@ -17,7 +17,7 @@ import { ExternalLink, FormatTag, Person, StatusBadge, formatDate, formatDateTim
 import { JobControls } from "./job-controls";
 import { VideoBlock } from "./video-block";
 import { DownloadAll } from "./download-all";
-import { PublishDateField } from "./publish-date-field";
+import { InlinePublishDate, PublishDateField } from "./publish-date-field";
 import { DeadlineBadge } from "./deadline-badge";
 import { jobDeadlineWarning } from "@/lib/deadline";
 import { PublicationsForm, type PublicationView } from "./publications-form";
@@ -253,7 +253,7 @@ async function Comments({
   viewer: { id: string; role: string };
   canWrite: boolean;
 }) {
-  const [comments, candidates] = await Promise.all([loadComments(job.id), mentionCandidates(job, viewer)]);
+  const [comments, candidates] = await Promise.all([loadComments(job.id, viewer), mentionCandidates(job, viewer)]);
   const isAdmin = viewer.role === "admin";
   const isKunde = viewer.role === "kunde";
   // Kunden sehen das Team als „Team“, alle anderen die Rolle
@@ -391,7 +391,13 @@ export async function JobDrawer({
           )}
         </Row>
         <Row label="Veröffentlichung">
-          {job.publishDate ? formatDate(job.publishDate) : <span className="text-muted">Noch offen</span>}
+          {isAdmin ? (
+            <InlinePublishDate key={job.publishDate ?? ""} jobId={job.id} value={job.publishDate} />
+          ) : job.publishDate ? (
+            formatDate(job.publishDate)
+          ) : (
+            <span className="text-muted">Noch offen</span>
+          )}
         </Row>
         <Row label="Abgerechnet">
           <span className="flex flex-wrap gap-x-4">
@@ -432,12 +438,6 @@ export async function JobDrawer({
 
       <Comments job={job} viewer={me} canWrite={job.status !== "storniert"} />
 
-      {isAdmin && (
-        <Section title="Veröffentlichungsdatum">
-          <PublishDateField jobId={job.id} value={job.publishDate} />
-        </Section>
-      )}
-
       {canPublish && (
         <Section title="Veröffentlichungen">
           <PublicationsForm key={pubs.map((p) => `${p.url}|${p.views}`).join(",")} jobId={job.id} publications={pubs} />
@@ -463,6 +463,7 @@ export async function JobDrawer({
           cutterIds: job.cutters.map((c) => c.id),
           hasVideo: versions > 0,
           paused,
+          noClient: !job.customerHasUsers,
         }}
         isAdmin={isAdmin}
         isAssigned={isAssigned}

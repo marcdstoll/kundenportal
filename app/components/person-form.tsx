@@ -29,6 +29,7 @@ export function PersonForm({
 }) {
   const router = useRouter();
   const [name, setName] = useState(person.name);
+  const [email, setEmail] = useState(person.email);
   const [phone, setPhone] = useState(person.phone ?? "");
   const [birthday, setBirthday] = useState(person.birthday ?? "");
   // undefined = Bild nicht geändert, null = entfernen, string = neues Bild
@@ -54,7 +55,7 @@ export function PersonForm({
         e.preventDefault();
         setBusy(true);
         setMsg(null);
-        const res = await savePerson(person.id, { name, phone, birthday, logo }).catch(() => ({
+        const res = await savePerson(person.id, { name, phone, birthday, logo, email }).catch(() => ({
           ok: false as const,
           error: "Speichern fehlgeschlagen – bitte ein kleineres Bild wählen oder erneut versuchen.",
         }));
@@ -99,7 +100,13 @@ export function PersonForm({
         </label>
         <label className="space-y-1 text-sm">
           <span className="text-muted">E-Mail (Login)</span>
-          <input className={`${inputField} text-muted`} value={person.email} readOnly aria-readonly />
+          <input
+            className={inputField}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={busy}
+          />
         </label>
         <label className="space-y-1 text-sm">
           <span className="text-muted">Telefon</span>
