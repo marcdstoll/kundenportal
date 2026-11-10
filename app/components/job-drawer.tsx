@@ -328,7 +328,8 @@ export async function JobDrawer({
   const creator = job.createdBy ? ((await db.select({ id: user.id, name: user.name }).from(user).where(eq(user.id, job.createdBy)))[0] ?? null) : null;
   const isAssigned = job.cutters.some((c) => c.id === me.id);
   const rawFiles = job.files.filter((f) => f.kind === "roh");
-  const video = latestVideo(job);
+  // Zurück in Warteschlange / in Arbeit: alte Version nicht als Vorschau zeigen (Review-Link bleibt)
+  const video = ["todo", "warteschlange", "in_arbeit"].includes(job.status) ? null : latestVideo(job);
   const versions = job.files.filter((f) => f.kind === "fertig").length;
   const paused = !!job.cancelRequestedAt;
   const suggestion = job.status !== "entwurf" ? await nextPartTitle(job) : "";

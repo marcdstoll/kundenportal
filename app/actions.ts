@@ -15,6 +15,7 @@ import { isAllowedFile, ALLOWED_LABEL } from "@/lib/file-types";
 import { stripMarkdown } from "@/lib/rich-text";
 import { ensureReviewShare } from "@/lib/review-shares";
 import { backToTodoIfNoCutter } from "@/lib/cutterless";
+import { todayVienna } from "@/lib/deadline";
 import { logJob, statusChange } from "@/lib/job-log";
 
 // ---------- Hilfsfunktionen ----------
@@ -616,7 +617,8 @@ export async function clientRequestChanges(jobId: string, note: string) {
 export async function markOnline(jobId: string) {
   return run(async () => {
     await requireUser("admin");
-    await changeStatus(jobId, "ready_to_post", "online", {}, "Als online markieren");
+    // Online gehen = heute veröffentlicht
+    await changeStatus(jobId, "ready_to_post", "online", { publishDate: todayVienna() }, "Als online markieren");
     await nameReviewFolder(jobId, true);
     refresh();
     return null;
@@ -696,9 +698,13 @@ export async function setStatus(jobId: string, status: string) {
     await requireUser("admin");
     if (!(STATUSES as readonly string[]).includes(status)) throw new Error("Unbekannter Status.");
     const before = await getJob(jobId);
-    await db.update(jobs).set({ status, updatedAt: new Date() }).where(eq(jobs.id, jobId));
+    const goesOnline = status === "online" && before.status !== "online";
+    await db
+      .update(jobs)
+      .set({ status, ...(goesOnline ? { publishDate: todayVienna() } : {}), updatedAt: new Date() })
+      .where(eq(jobs.id, jobId));
     if (status !== before.status) await logJob(jobId, "Status geändert", statusChange(before.status, status));
-    if (status === "online" && before.status !== "online") await nameReviewFolder(jobId, true);
+    if (goesOnline) await nameReviewFolder(jobId, true);
     if (status !== "online" && before.status === "online") await nameReviewFolder(jobId, false);
     refresh();
     return null;
