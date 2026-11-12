@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { autoOnline } from "@/lib/auto-online";
 import { cleanupStaleUploads } from "@/lib/cleanup";
 
 // Wird regelmäßig von Coolify aufgerufen (Scheduled Task, alle 15 Minuten).
@@ -7,5 +8,7 @@ export async function POST(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return new Response("CRON_SECRET ist nicht gesetzt", { status: 503 });
   if (req.headers.get("authorization") !== `Bearer ${secret}`) return new Response("Nicht erlaubt", { status: 401 });
-  return NextResponse.json(await cleanupStaleUploads());
+  const cleaned = await cleanupStaleUploads();
+  const online = await autoOnline();
+  return NextResponse.json({ ...cleaned, autoOnline: online });
 }

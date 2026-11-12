@@ -16,6 +16,7 @@ import { stripMarkdown } from "@/lib/rich-text";
 import { ensureReviewShare } from "@/lib/review-shares";
 import { backToTodoIfNoCutter } from "@/lib/cutterless";
 import { todayVienna } from "@/lib/deadline";
+import { nameReviewFolder } from "@/lib/review-folder";
 import { logJob, statusChange } from "@/lib/job-log";
 
 // ---------- Hilfsfunktionen ----------
@@ -168,20 +169,6 @@ async function folderShared(job: Job) {
 async function familyOf(job: Job): Promise<Job[]> {
   if (!job.rawFolderId) return [job];
   return db.select().from(jobs).where(eq(jobs.rawFolderId, job.rawFolderId));
-}
-
-// Beim Status "Online" heißt der Review-Ordner "Online" (bei Duplikaten mit Titel), sonst wieder "ToBeReviewed".
-// Schlägt das fehl (z. B. Frame.io kurz nicht erreichbar), bleibt der Status trotzdem gesetzt.
-async function nameReviewFolder(jobId: string, online: boolean) {
-  try {
-    const job = await getJob(jobId);
-    if (!job.reviewFolderId) return;
-    const base = online ? "Online" : "ToBeReviewed";
-    const shared = !!job.parentJobId || (await folderShared(job));
-    await renameFolder(job.reviewFolderId, shared ? `${base} – ${job.title}` : base);
-  } catch (e) {
-    console.error("Review-Ordner konnte nicht umbenannt werden:", e);
-  }
 }
 
 // Frame.io-Fehler beim Löschen verständlich an die Oberfläche geben
@@ -617,8 +604,15 @@ export async function clientRequestChanges(jobId: string, note: string) {
 export async function markOnline(jobId: string) {
   return run(async () => {
     await requireUser("admin");
-    // Online gehen = heute veröffentlicht
-    await changeStatus(jobId, "ready_to_post", "online", { publishDate: todayVienna() }, "Als online markieren");
+    // Online gehen ohne Datum = heute veröffentlicht
+    const job = await getJob(jobId);
+    await changeStatus(
+      jobId,
+      "ready_to_post",
+      "online",
+      job.publishDate ? {} : { publishDate: todayVienna() },
+      "Als online markieren",
+    );
     await nameReviewFolder(jobId, true);
     refresh();
     return null;
@@ -701,7 +695,7 @@ export async function setStatus(jobId: string, status: string) {
     const goesOnline = status === "online" && before.status !== "online";
     await db
       .update(jobs)
-      .set({ status, ...(goesOnline ? { publishDate: todayVienna() } : {}), updatedAt: new Date() })
+      .set({ status, ...(goesOnline && !before.publishDate ? { publishDate: todayVienna() } : {}), updatedAt: new Date() })
       .where(eq(jobs.id, jobId));
     if (status !== before.status) await logJob(jobId, "Status geändert", statusChange(before.status, status));
     if (goesOnline) await nameReviewFolder(jobId, true);
@@ -1025,7 +1019,7 @@ export async function deleteJob(jobId: string) {
   });
 }
 
-// Einzelne Rohdatei löschen (nur solange kein Teil in Bearbeitung ist) – verschwindet bei Original und Duplikaten
+// Einzelne Rohdatei löschen (Kunden nur solange kein Teil in Bearbeitung ist, Admins jederzeit) – verschwindet bei Original und Duplikaten
 export async function deleteJobFile(fileRowId: string) {
   return run(async () => {
     const me = await requireUser("kunde", "admin");
@@ -1035,7 +1029,8 @@ export async function deleteJobFile(fileRowId: string) {
     await assertCanSee(me, job);
     if (file.kind !== "roh") throw new Error("Nur Rohmaterial kann gelöscht werden.");
     const family = await familyOf(job);
-    const busy = family.find((j) => !DELETABLE.includes(j.status));
+    // Admins dürfen jederzeit löschen
+    const busy = me.role === "admin" ? undefined : family.find((j) => !DELETABLE.includes(j.status));
     if (busy) {
       throw new Error(
         family.length === 1

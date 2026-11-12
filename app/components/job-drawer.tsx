@@ -432,7 +432,7 @@ export async function JobDrawer({
           files={rawFiles}
           unread={unread.files}
           canDownload
-          canDelete={isAdmin && DELETABLE.includes(job.status)}
+          canDelete={isAdmin}
         />
         {job.status !== "storniert" && <AddFiles jobId={job.id} title={job.title} />}
       </Section>
@@ -536,7 +536,7 @@ export async function CustomerJobDrawer({
 
   const video = CUSTOMER_VIDEO_STATUSES.includes(job.status) ? latestVideo(job) : null;
   const rawFiles = job.files.filter((f) => f.kind === "roh");
-  const canDelete = DELETABLE.includes(job.status);
+  const canDelete = viewerRole === "admin" || DELETABLE.includes(job.status);
   const canRequestCancel = CANCELLABLE.includes(job.status) && !job.cancelRequestedAt;
 
   return (
