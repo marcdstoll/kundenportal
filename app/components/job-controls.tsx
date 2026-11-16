@@ -23,7 +23,7 @@ import { startReviewUpload, useUploads } from "@/lib/upload-manager";
 import { UploadOverview } from "./upload-tree";
 import { DROP_ACTIVE, useFileDrop } from "@/lib/file-drop";
 import { BilledToggle } from "./billed-toggle";
-import { MultiSelect } from "./multi-select";
+import { NameSelect } from "./name-select";
 import { buttonPrimary, buttonSecondary, inputField } from "./ui";
 
 type Props = {
@@ -242,7 +242,7 @@ export function JobControls({ job, isAdmin, isAssigned, staff, beforeBilling }: 
           {job.status === "todo" && (
             <p className="text-xs text-muted">Mit Cutter wandert das Projekt direkt in dessen Warteschlange.</p>
           )}
-          <MultiSelect
+          <NameSelect
             label="Cutter"
             options={staff.map((s) => ({ value: s.id, label: s.name }))}
             value={job.cutterIds}

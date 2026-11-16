@@ -18,7 +18,7 @@ import {
 } from "@/app/todo-actions";
 import type { AssigneeOption } from "@/lib/todos";
 import { FormatField } from "@/app/components/format-field";
-import { MultiSelect } from "@/app/components/multi-select";
+import { NameSelect } from "@/app/components/name-select";
 
 export type TodoView = {
   id: string;
@@ -115,7 +115,7 @@ function TodoForm({
       {!isKunde && (
         <div className="space-y-1">
           <span className="text-sm text-muted">Zuständig</span>
-          <MultiSelect
+          <NameSelect
             label="Zuständig"
             options={options.map((o) => ({ value: o.id, label: o.label }))}
             value={v.assigneeIds}

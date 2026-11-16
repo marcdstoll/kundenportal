@@ -17,6 +17,7 @@ import {
 import { uploadWelcomeVideo } from "@/lib/upload";
 import { buttonPrimary, buttonSecondary, inputField } from "./ui";
 import { MultiSelect } from "./multi-select";
+import { NameSelect } from "./name-select";
 import { WelcomePlayer, WelcomeRecorder } from "./welcome-recorder";
 import { ConfirmDialog } from "./confirm-dialog";
 import { DROP_ACTIVE, useFileDrop } from "@/lib/file-drop";
@@ -468,7 +469,11 @@ export function AssignmentSelect({
 
   return (
     <div className="space-y-1.5">
-      <MultiSelect options={options} value={value} onChange={change} label={label} placeholder={placeholder} />
+      {side === "client" ? (
+        <NameSelect options={options} value={value} onChange={change} label={label} placeholder={placeholder} />
+      ) : (
+        <MultiSelect options={options} value={value} onChange={change} label={label} placeholder={placeholder} />
+      )}
       <ErrorText error={error} />
     </div>
   );

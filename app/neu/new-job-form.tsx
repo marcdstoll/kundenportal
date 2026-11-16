@@ -5,6 +5,7 @@ import { FORMATS, PLATFORMS, VIDEO_LENGTHS } from "@/lib/status";
 import { ACCEPT, ALLOWED_LABEL, filterAllowed } from "@/lib/file-types";
 import { startProjektUpload } from "@/lib/upload-manager";
 import { MultiSelect } from "@/app/components/multi-select";
+import { NameSelect } from "@/app/components/name-select";
 import { UploadOverview } from "@/app/components/upload-tree";
 import { DROP_ACTIVE, useFileDrop } from "@/lib/file-drop";
 import { FormatField } from "@/app/components/format-field";
@@ -147,7 +148,7 @@ export function NewJobForm({ clients, isStaff, cutters }: Props) {
       {cutters.length > 0 && (
         <div className="space-y-1.5">
           <span className="text-sm text-muted">Cutter (optional)</span>
-          <MultiSelect
+          <NameSelect
             label="Cutter"
             options={cutters}
             value={cutterIds}
