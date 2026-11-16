@@ -1,30 +1,51 @@
-import { eq, inArray, or, type SQL } from "drizzle-orm";
+import { eq, exists, inArray, or, and, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { customerMembers, customers, todos, user } from "@/db/schema";
+import { customerMembers, customers, todoAssignees, todos, user } from "@/db/schema";
 import { clientIdsOfCutter } from "@/lib/access";
 
 // ToDos – Regeln:
-// - sehen: zuständige Person, Ersteller, Admins
+// - sehen: zuständige Personen (mehrere möglich), Ersteller, Admins
 // - anlegen: Admins/Cutter für eine Person ihrer Wahl (Cutter: Team + Nutzer ihrer freigegebenen Kunden),
 //   Kunden nur für sich selbst
 // - bearbeiten (Titel, Beschreibung, Zuständig, Priorität, Deadline) und löschen: Ersteller und Admins
-// - Status (offen/abgeschlossen): zuständige Person und Admins
+// - Status (offen/abgeschlossen): jede zuständige Person und Admins
 
 export const TODO_STATUSES = ["offen", "abgeschlossen"] as const;
 
 type Viewer = { id: string; role: string };
 type TodoRow = typeof todos.$inferSelect;
+export type TodoWithAssignees = TodoRow & { assigneeIds: string[] };
 
-export const canSeeTodo = (me: Viewer, t: Pick<TodoRow, "assigneeId" | "createdBy">) =>
-  me.role === "admin" || t.assigneeId === me.id || t.createdBy === me.id;
+export const canSeeTodo = (me: Viewer, t: Pick<TodoWithAssignees, "assigneeIds" | "createdBy">) =>
+  me.role === "admin" || t.assigneeIds.includes(me.id) || t.createdBy === me.id;
 export const canEditTodo = (me: Viewer, t: Pick<TodoRow, "createdBy">) => me.role === "admin" || t.createdBy === me.id;
-export const canSetTodoStatus = (me: Viewer, t: Pick<TodoRow, "assigneeId">) =>
-  me.role === "admin" || t.assigneeId === me.id;
+export const canSetTodoStatus = (me: Viewer, t: Pick<TodoWithAssignees, "assigneeIds">) =>
+  me.role === "admin" || t.assigneeIds.includes(me.id);
 
 // Filter für die Liste: Admins alles, sonst nur zugewiesene oder selbst erstellte
 export function todoScope(me: Viewer): SQL | undefined {
   if (me.role === "admin") return undefined;
-  return or(eq(todos.assigneeId, me.id), eq(todos.createdBy, me.id));
+  return or(
+    exists(
+      db
+        .select()
+        .from(todoAssignees)
+        .where(and(eq(todoAssignees.todoId, todos.id), eq(todoAssignees.userId, me.id))),
+    ),
+    eq(todos.createdBy, me.id),
+  );
+}
+
+// Zuständige je Aufgabe
+export async function assigneesOf(todoIds: string[]) {
+  const map = new Map<string, string[]>();
+  if (todoIds.length === 0) return map;
+  const rows = await db
+    .select({ todoId: todoAssignees.todoId, userId: todoAssignees.userId })
+    .from(todoAssignees)
+    .where(inArray(todoAssignees.todoId, todoIds));
+  for (const r of rows) map.set(r.todoId, [...(map.get(r.todoId) ?? []), r.userId]);
+  return map;
 }
 
 export type AssigneeOption = { id: string; label: string; role: string };
@@ -58,7 +79,8 @@ export async function assigneeOptions(me: Viewer & { name: string }): Promise<As
   ];
 }
 
-export async function loadTodo(id: string) {
+export async function loadTodo(id: string): Promise<TodoWithAssignees | null> {
   const [t] = await db.select().from(todos).where(eq(todos.id, id));
-  return t ?? null;
+  if (!t) return null;
+  return { ...t, assigneeIds: (await assigneesOf([id])).get(id) ?? [] };
 }

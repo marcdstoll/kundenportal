@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/session";
 import { loadViewFilters, unreadByJob } from "@/lib/queries";
 import { PRIORITY_RANK } from "@/lib/ideas";
 import { todayVienna, todoDeadlineWarning } from "@/lib/deadline";
-import { assigneeOptions, canEditTodo, canSetTodoStatus, todoScope } from "@/lib/todos";
+import { assigneeOptions, assigneesOf, canEditTodo, canSetTodoStatus, todoScope } from "@/lib/todos";
 import { PageHeader } from "@/app/components/shell";
 import { FilterButton } from "@/app/components/filter-button";
 import { NewTodoButton, TodoList, type TodoView } from "./todo-ui";
@@ -41,13 +41,17 @@ async function Content({ searchParams }: { searchParams: Params }) {
   const mine = MINE_TABS.some((t) => t.value === saved.m) ? saved.m : "alle";
   const openId = typeof params.t === "string" ? params.t : null;
 
-  const [rows, options, unread] = await Promise.all([
+  const [plain, options, unread] = await Promise.all([
     db.select().from(todos).where(and(todoScope(me))),
     assigneeOptions(me),
     unreadByJob(me.id).then((u) => u.todos),
   ]);
+  const assigned = await assigneesOf(plain.map((t) => t.id));
+  const rows = plain.map((t) => ({ ...t, assigneeIds: assigned.get(t.id) ?? [] }));
 
-  const nameIds = [...new Set(rows.flatMap((t) => [t.assigneeId, t.createdBy, t.doneBy]).filter(Boolean))] as string[];
+  const nameIds = [
+    ...new Set(rows.flatMap((t) => [...t.assigneeIds, t.createdBy, t.doneBy]).filter(Boolean)),
+  ] as string[];
   const names = new Map(
     nameIds.length
       ? (await db.select({ id: user.id, name: user.name }).from(user).where(inArray(user.id, nameIds))).map(
@@ -58,14 +62,14 @@ async function Content({ searchParams }: { searchParams: Params }) {
 
   const today = todayVienna();
   const byMine = rows.filter(
-    (t) => mine === "alle" || (mine === "mir" ? t.assigneeId === me.id : t.createdBy === me.id),
+    (t) => mine === "alle" || (mine === "mir" ? t.assigneeIds.includes(me.id) : t.createdBy === me.id),
   );
   const statusCount = (s: string) => byMine.filter((t) => s === "alle" || t.status === s).length;
   const mineCount = (m: string) =>
     rows.filter(
       (t) =>
         (status === "alle" || t.status === status) &&
-        (m === "alle" || (m === "mir" ? t.assigneeId === me.id : t.createdBy === me.id)),
+        (m === "alle" || (m === "mir" ? t.assigneeIds.includes(me.id) : t.createdBy === me.id)),
     ).length;
 
   // Offene zuerst, dann nächste Deadline (ohne Deadline hinten), dann Priorität, dann neueste
@@ -87,11 +91,10 @@ async function Content({ searchParams }: { searchParams: Params }) {
     status: t.status,
     deadline: t.deadline,
     warning: todoDeadlineWarning(t.deadline, t.status, today),
-    assigneeId: t.assigneeId,
-    assigneeName: names.get(t.assigneeId) ?? "–",
+    assignees: t.assigneeIds.map((id) => ({ id, name: names.get(id) ?? "–" })),
     creatorName: t.createdBy ? (names.get(t.createdBy) ?? null) : null,
     createdByMe: t.createdBy === me.id,
-    assignedToMe: t.assigneeId === me.id,
+    assignedToMe: t.assigneeIds.includes(me.id),
     createdAt: t.createdAt.toISOString(),
     doneAt: t.doneAt ? t.doneAt.toISOString() : null,
     doneByName: t.doneBy ? (names.get(t.doneBy) ?? null) : null,

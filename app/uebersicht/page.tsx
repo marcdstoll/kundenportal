@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { customers, jobs as jobsTable, todos, user } from "@/db/schema";
+import { customers, jobs as jobsTable, todoAssignees, todos, user } from "@/db/schema";
 import { getCurrentUser, resolveCustomerView } from "@/lib/session";
 import { loadJobs, loadViewFilters, memberIds, unreadByJob } from "@/lib/queries";
 import { calendarLockReason } from "@/lib/calendar-lock";
@@ -72,7 +72,7 @@ async function Content({ searchParams }: { searchParams: PageProps<"/uebersicht"
 
   // Offene ToDos für den Kunden: der Kunde sieht seine eigenen, Admins in der Kundenansicht die aller Nutzer des Kunden
   const assignees = viewAs ? await memberIds(customer.id) : [me.id];
-  const openTodos = assignees.length
+  const todoRows = assignees.length
     ? await db
         .select({
           id: todos.id,
@@ -83,9 +83,20 @@ async function Content({ searchParams }: { searchParams: PageProps<"/uebersicht"
           assigneeName: user.name,
         })
         .from(todos)
-        .innerJoin(user, eq(user.id, todos.assigneeId))
-        .where(and(eq(todos.status, "offen"), inArray(todos.assigneeId, assignees)))
+        .innerJoin(todoAssignees, eq(todoAssignees.todoId, todos.id))
+        .innerJoin(user, eq(user.id, todoAssignees.userId))
+        .where(and(eq(todos.status, "offen"), inArray(todoAssignees.userId, assignees)))
     : [];
+  // Eine Aufgabe mit mehreren Zuständigen nur einmal, Namen zusammengefasst
+  const openTodos = [
+    ...todoRows
+      .reduce((m, r) => {
+        const prev = m.get(r.id);
+        m.set(r.id, prev ? { ...prev, assigneeName: `${prev.assigneeName}, ${r.assigneeName}` } : r);
+        return m;
+      }, new Map<string, (typeof todoRows)[number]>())
+      .values(),
+  ];
   const v = info?.version.getTime() ?? 0;
   const bannerUrl = info?.hasBanner ? `/api/banner/${customer.id}?v=${v}` : null;
   const logoUrl = info?.hasLogo ? `/api/logo/${customer.id}?v=${v}` : null;

@@ -1,7 +1,7 @@
 "use client";
 
 // Briefing im Projekt-Panel – mit „Bearbeiten“ für Admins und den Cutter, der das Projekt angelegt hat
-// (Titel, Plattformen, Videolänge, Inhalt, Besonderheiten, Material-Link; in jedem Status).
+// (Titel, Plattformen, Videolänge, Inhalt, Besonderheiten, Besonderheiten intern, Material-Link; in jedem Status).
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -122,6 +122,18 @@ export function BriefingEditor({
                 rows={3}
                 value={v.specialNotes}
                 onChange={(e) => set("specialNotes", e.target.value)}
+                disabled={pending}
+              />
+            </FormatField>
+          </label>
+          <label className="block space-y-1">
+            <span className="text-muted">Besonderheiten intern (optional)</span>
+            <FormatField>
+              <textarea
+                className={inputField}
+                rows={3}
+                value={v.internalNotes}
+                onChange={(e) => set("internalNotes", e.target.value)}
                 disabled={pending}
               />
             </FormatField>

@@ -1,13 +1,13 @@
 "use server";
 
-// Aufgaben (intern „todos“) – Rechte siehe lib/todos.ts. Meldungen (Glocke): neue Zuweisung an die zuständige Person,
+// Aufgaben (intern „todos“) – Rechte siehe lib/todos.ts. Meldungen (Glocke): neue Zuweisung an die zuständigen Personen,
 // Erledigt an den Ersteller. Deadline-Erinnerungen kommen über den stündlichen Cron (lib/deadline-reminders.ts).
 
 import { randomUUID } from "crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { db } from "@/db";
-import { notifications, todos } from "@/db/schema";
+import { notifications, todoAssignees, todos } from "@/db/schema";
 import { requireUser } from "@/lib/session";
 import { PRIORITIES } from "@/lib/ideas";
 import { assigneeOptions, canEditTodo, canSeeTodo, canSetTodoStatus, loadTodo } from "@/lib/todos";
@@ -23,17 +23,23 @@ async function run<T>(fn: () => Promise<T>): Promise<Result<T>> {
   }
 }
 
-export type TodoInput = { title: string; description: string; assigneeId: string; priority: string; deadline: string };
+export type TodoInput = { title: string; description: string; assigneeIds: string[]; priority: string; deadline: string };
 
 const short = (s: string, n = 80) => (s.length > n ? `${s.slice(0, n)} …` : s);
 
-async function notifyTodo(todoId: string, actorId: string, userId: string | null, type: string, text: string) {
-  if (!userId || userId === actorId) return;
-  await db.insert(notifications).values({ id: randomUUID(), userId, todoId, type, text, actorId });
+async function notifyTodo(todoId: string, actorId: string, userIds: (string | null)[], type: string, text: string) {
+  const to = [...new Set(userIds)].filter((id): id is string => !!id && id !== actorId);
+  if (to.length === 0) return;
+  await db.insert(notifications).values(to.map((userId) => ({ id: randomUUID(), userId, todoId, type, text, actorId })));
 }
 
-// Eingaben prüfen; die zuständige Person muss für den Anlegenden erlaubt sein
-async function clean(me: Awaited<ReturnType<typeof requireUser>>, input: TodoInput) {
+async function setAssignees(todoId: string, ids: string[]) {
+  await db.delete(todoAssignees).where(eq(todoAssignees.todoId, todoId));
+  if (ids.length) await db.insert(todoAssignees).values(ids.map((userId) => ({ todoId, userId })));
+}
+
+// Eingaben prüfen
+function clean(input: TodoInput) {
   const title = input.title.trim();
   const description = input.description.trim();
   if (!title) throw new Error("Bitte einen Titel eingeben.");
@@ -42,20 +48,30 @@ async function clean(me: Awaited<ReturnType<typeof requireUser>>, input: TodoInp
   const priority = (PRIORITIES as readonly string[]).includes(input.priority) ? input.priority : "mittel";
   const deadline = input.deadline.trim() || null;
   if (deadline && !/^\d{4}-\d{2}-\d{2}$/.test(deadline)) throw new Error("Bitte ein gültiges Datum wählen.");
-  const assigneeId = me.role === "kunde" ? me.id : input.assigneeId;
-  if (!(await assigneeOptions(me)).some((o) => o.id === assigneeId)) {
-    throw new Error("Diese Person kannst du nicht auswählen.");
-  }
-  return { title, description: description || null, priority, deadline, assigneeId };
+  return { title, description: description || null, priority, deadline };
+}
+
+// Zuständige prüfen: müssen für den Anlegenden erlaubt sein (bereits Zuständige bleiben erlaubt).
+// Kunden sind immer selbst zuständig bzw. ändern die Zuständigen nicht.
+async function cleanAssignees(me: Awaited<ReturnType<typeof requireUser>>, wanted: string[], current: string[] = []) {
+  if (me.role === "kunde") return current.length ? current : [me.id];
+  const ids = [...new Set(wanted)];
+  if (ids.length === 0) throw new Error("Bitte mindestens eine Person auswählen.");
+  if (ids.length > 50) throw new Error("Zu viele Personen ausgewählt.");
+  const allowed = new Set([...(await assigneeOptions(me)).map((o) => o.id), ...current]);
+  if (ids.some((id) => !allowed.has(id))) throw new Error("Diese Person kannst du nicht auswählen.");
+  return ids;
 }
 
 export async function createTodo(input: TodoInput) {
   return run(async () => {
     const me = await requireUser();
-    const v = await clean(me, input);
+    const v = clean(input);
+    const assigneeIds = await cleanAssignees(me, input.assigneeIds);
     const id = randomUUID();
     await db.insert(todos).values({ id, ...v, createdBy: me.id });
-    await notifyTodo(id, me.id, v.assigneeId, "todo", `Neue Aufgabe von ${me.name}: „${short(v.title)}“`);
+    await setAssignees(id, assigneeIds);
+    await notifyTodo(id, me.id, assigneeIds, "todo", `Neue Aufgabe von ${me.name}: „${short(v.title)}“`);
     refresh();
     return { id };
   });
@@ -68,12 +84,12 @@ export async function updateTodo(id: string, input: TodoInput) {
     const t = await loadTodo(id);
     if (!t || !canSeeTodo(me, t)) throw new Error("Aufgabe nicht gefunden.");
     if (!canEditTodo(me, t)) throw new Error("Nur der Ersteller oder ein Admin kann die Aufgabe bearbeiten.");
-    // Kunden bleiben selbst zuständig; bei Admin-Bearbeitung eines Kunden-ToDos die Person nicht verlieren
-    const v = await clean(me, me.role === "kunde" ? { ...input, assigneeId: t.assigneeId } : input);
+    const v = clean(input);
+    const assigneeIds = await cleanAssignees(me, input.assigneeIds, t.assigneeIds);
     await db.update(todos).set({ ...v, updatedAt: new Date() }).where(eq(todos.id, id));
-    if (v.assigneeId !== t.assigneeId) {
-      await notifyTodo(id, me.id, v.assigneeId, "todo", `${me.name} hat dir eine Aufgabe zugewiesen: „${short(v.title)}“`);
-    }
+    await setAssignees(id, assigneeIds);
+    const added = assigneeIds.filter((uid) => !t.assigneeIds.includes(uid));
+    await notifyTodo(id, me.id, added, "todo", `${me.name} hat dir eine Aufgabe zugewiesen: „${short(v.title)}“`);
     refresh();
     return null;
   });
@@ -93,8 +109,8 @@ export async function setTodoStatus(id: string, status: string) {
       .update(todos)
       .set({ status, doneAt: done ? new Date() : null, doneBy: done ? me.id : null, updatedAt: new Date() })
       .where(eq(todos.id, id));
-    if (done) await notifyTodo(id, me.id, t.createdBy, "todo_status", `${me.name} hat „${short(t.title)}“ erledigt`);
-    else await notifyTodo(id, me.id, t.assigneeId, "todo_status", `${me.name} hat „${short(t.title)}“ wieder geöffnet`);
+    if (done) await notifyTodo(id, me.id, [t.createdBy], "todo_status", `${me.name} hat „${short(t.title)}“ erledigt`);
+    else await notifyTodo(id, me.id, t.assigneeIds, "todo_status", `${me.name} hat „${short(t.title)}“ wieder geöffnet`);
     refresh();
     return null;
   });

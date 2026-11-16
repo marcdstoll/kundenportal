@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, inArray, isNotNull, isNull, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { account, customerMembers, customers, cutterClients, featureRequests, projectIdeas, jobComments, jobCutters, jobFiles, jobs, notifications, profiles, user, todos } from "@/db/schema";
 import { canSeeComment } from "@/lib/mentions";
@@ -6,7 +6,7 @@ import { cleanFilters, type FilterView, type ViewFilters } from "@/lib/view-filt
 
 export type JobFileView = typeof jobFiles.$inferSelect & { uploaderName: string | null };
 
-export type JobView = typeof jobs.$inferSelect & {
+export type JobView = Omit<typeof jobs.$inferSelect, "internalNotes"> & {
   customerName: string;
   cutters: { id: string; name: string }[];
   files: JobFileView[];
@@ -15,10 +15,19 @@ export type JobView = typeof jobs.$inferSelect & {
 };
 
 // Projekte inkl. Client-Name, Cuttern und hochgeladenen Dateien laden
+// Besonderheiten intern gehören nie in die Projektliste (die auch Kunden bekommen) – nur über loadInternalNotes
+const { internalNotes: _internal, ...jobColumns } = getTableColumns(jobs);
+void _internal;
+
+export async function loadInternalNotes(jobId: string) {
+  const [row] = await db.select({ notes: jobs.internalNotes }).from(jobs).where(eq(jobs.id, jobId));
+  return row?.notes ?? "";
+}
+
 export async function loadJobs(filter?: SQL): Promise<JobView[]> {
   const rows = await db
     .select({
-      job: jobs,
+      job: jobColumns,
       customerName: customers.name,
       customerHasUsers: sql<boolean>`exists (select 1 from ${customerMembers} where ${customerMembers.customerId} = ${customers.id})`,
     })
@@ -53,7 +62,7 @@ export async function loadJobs(filter?: SQL): Promise<JobView[]> {
   const folderOf = new Map(familyRows.map((f) => [f.id, f.rawFolderId]));
 
   // Dateien eines Projekts: eigene fertige Videos + Rohmaterial der ganzen Familie (jede Datei nur einmal)
-  function filesFor(job: typeof jobs.$inferSelect) {
+  function filesFor(job: Omit<typeof jobs.$inferSelect, "internalNotes">) {
     const own = fileRows.filter((f) => f.jobId === job.id && f.kind !== "roh");
     const seen = new Set<string>();
     const raw = fileRows.filter((f) => {

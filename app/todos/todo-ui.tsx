@@ -18,6 +18,7 @@ import {
 } from "@/app/todo-actions";
 import type { AssigneeOption } from "@/lib/todos";
 import { FormatField } from "@/app/components/format-field";
+import { MultiSelect } from "@/app/components/multi-select";
 
 export type TodoView = {
   id: string;
@@ -27,8 +28,7 @@ export type TodoView = {
   status: string;
   deadline: string | null;
   warning: string | null; // Deadline-Hinweis (2 Tage vorher), sonst null
-  assigneeId: string;
-  assigneeName: string;
+  assignees: { id: string; name: string }[];
   creatorName: string | null;
   createdByMe: boolean;
   assignedToMe: boolean;
@@ -72,7 +72,7 @@ function TodoForm({
   const [v, setV] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const set = (k: keyof TodoInput, value: string) => setV((x) => ({ ...x, [k]: value }));
+  const set = (k: Exclude<keyof TodoInput, "assigneeIds">, value: string) => setV((x) => ({ ...x, [k]: value }));
 
   return (
     <form
@@ -113,22 +113,17 @@ function TodoForm({
         </FormatField>
       </label>
       {!isKunde && (
-        <label className="block space-y-1">
+        <div className="space-y-1">
           <span className="text-sm text-muted">Zuständig</span>
-          <select
-            className={inputField}
-            value={v.assigneeId}
-            onChange={(e) => set("assigneeId", e.target.value)}
+          <MultiSelect
+            label="Zuständig"
+            options={options.map((o) => ({ value: o.id, label: o.label }))}
+            value={v.assigneeIds}
+            onChange={(next) => setV((x) => ({ ...x, assigneeIds: next }))}
+            placeholder="@Name …"
             disabled={pending}
-          >
-            <option value="">Person wählen …</option>
-            {options.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
+          />
+        </div>
       )}
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block space-y-1">
@@ -159,7 +154,7 @@ function TodoForm({
       </div>
       {error && <p className="text-sm text-danger">{error}</p>}
       <div className="flex gap-2">
-        <button type="submit" className={buttonPrimary} disabled={pending || !v.title.trim() || !v.assigneeId}>
+        <button type="submit" className={buttonPrimary} disabled={pending || !v.title.trim() || v.assigneeIds.length === 0}>
           {pending ? "Speichert …" : todoId ? "Speichern" : "Aufgabe anlegen"}
         </button>
         <button type="button" className={buttonSecondary} disabled={pending} onClick={onDone}>
@@ -188,7 +183,7 @@ export function NewTodoButton({
       <SlideOver open={open} title="Neue Aufgabe" onClose={() => setOpen(false)}>
         {open && (
           <TodoForm
-            initial={{ title: "", description: "", assigneeId: isKunde ? meId : "", priority: "mittel", deadline: "" }}
+            initial={{ title: "", description: "", assigneeIds: isKunde ? [meId] : [], priority: "mittel", deadline: "" }}
             options={options}
             isKunde={isKunde}
             onDone={() => setOpen(false)}
@@ -219,7 +214,7 @@ function StatusToggle({ todo, compact = false }: { todo: TodoView; compact?: boo
         disabled={!todo.canStatus || pending}
         onChange={toggle}
         aria-label={done ? `„${todo.title}“ wieder öffnen` : `„${todo.title}“ abschließen`}
-        title={todo.canStatus ? undefined : "Status ändern nur die zuständige Person und Admins"}
+        title={todo.canStatus ? undefined : "Status ändern nur die zuständigen Personen und Admins"}
       />
     );
   }
@@ -260,11 +255,16 @@ function Detail({
         initial={{
           title: todo.title,
           description: todo.description ?? "",
-          assigneeId: todo.assigneeId,
+          assigneeIds: todo.assignees.map((a) => a.id),
           priority: todo.priority,
           deadline: todo.deadline ?? "",
         }}
-        options={options.some((o) => o.id === todo.assigneeId) ? options : [{ id: todo.assigneeId, label: todo.assigneeName, role: "" }, ...options]}
+        options={[
+          ...todo.assignees
+            .filter((a) => !options.some((o) => o.id === a.id))
+            .map((a) => ({ id: a.id, label: a.name, role: "" })),
+          ...options,
+        ]}
         isKunde={isKunde}
         onDone={() => setEditing(false)}
       />
@@ -287,7 +287,7 @@ function Detail({
       </div>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
         <dt className="text-muted">Zuständig</dt>
-        <dd>{todo.assigneeName}</dd>
+        <dd>{todo.assignees.map((a) => a.name).join(", ") || "–"}</dd>
         <dt className="text-muted">Von</dt>
         <dd>{todo.createdByMe ? "dir" : (todo.creatorName ?? "Gelöschter Nutzer")}</dd>
         <dt className="text-muted">Deadline</dt>
@@ -392,7 +392,11 @@ export function TodoList({
               </span>
               <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                 <PriorityChip priority={t.priority} />
-                <span>{t.assignedToMe ? "Dir zugewiesen" : `Zuständig: ${t.assigneeName}`}</span>
+                <span>
+                  {t.assignedToMe && t.assignees.length === 1
+                    ? "Dir zugewiesen"
+                    : `Zuständig: ${t.assignees.map((a) => a.name).join(", ") || "–"}`}
+                </span>
                 {!t.createdByMe && t.creatorName && <span>von {t.creatorName}</span>}
                 {t.deadline && <span>Deadline {formatDate(t.deadline)}</span>}
               </span>

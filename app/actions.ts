@@ -187,6 +187,7 @@ export type NewJobInput = {
   videoLength: string;
   content: string;
   specialNotes: string;
+  internalNotes?: string; // nur Admins/Cutter: Besonderheiten intern (Kunden sehen sie nie)
   customerId?: string; // nur Admins/Cutter: Projekt für einen Client anlegen
   cutterIds?: string[]; // nur Admins: Cutter direkt zuordnen → Projekt landet in der Warteschlange
 };
@@ -230,6 +231,9 @@ export async function createJob(input: NewJobInput) {
           .map((u) => u.id)
       : [];
 
+    const internalNotes = me.role === "kunde" ? "" : (input.internalNotes ?? "").trim();
+    if (internalNotes.length > 10000) throw new Error("Der Text ist zu lang.");
+
     const folder = await createJobFolder(`${customer.name} – ${input.title.trim()}`);
     const id = randomUUID();
     await db.insert(jobs).values({
@@ -241,6 +245,7 @@ export async function createJob(input: NewJobInput) {
       videoLength: input.videoLength.trim(),
       content: input.content.trim(),
       specialNotes: input.specialNotes.trim(),
+      internalNotes: internalNotes || null,
       status: "entwurf",
       createdBy: me.id,
       frameioFolderId: folder.id,
@@ -462,6 +467,18 @@ export async function submitForReview(jobId: string, reviewUrl?: string) {
   });
 }
 
+// Wartet auf Feedback → zurück in Arbeit: der Cutter nimmt seine Einreichung zurück (Review-Link bleibt)
+export async function takeBackReview(jobId: string) {
+  return run(async () => {
+    const me = await requireCutterOf(jobId);
+    const job = await getJob(jobId);
+    await changeStatus(jobId, "feedback", "in_arbeit", {}, "Zurückgenommen");
+    await notify(job, me, "status", `${me.name} hat „${job.title}“ zurückgenommen`, undefined, new Set(), await adminIds());
+    refresh();
+    return null;
+  });
+}
+
 // Weiteren Cutter zum Projekt hinzufügen (Admin oder bereits zugeordneter Cutter).
 // Ein To-do mit zugeordnetem Cutter wandert direkt in die Warteschlange.
 export async function addCutter(jobId: string, cutterId: string) {
@@ -625,6 +642,7 @@ export type JobDetailsInput = {
   title: string;
   content: string;
   specialNotes: string;
+  internalNotes: string;
   platforms: string[];
   videoLength: string;
   materialLink: string;
@@ -642,7 +660,10 @@ export async function updateJobDetails(jobId: string, input: JobDetailsInput) {
     const specialNotes = input.specialNotes.trim();
     if (!title || !content || !specialNotes) throw new Error("Bitte Titel, Inhalt und Besonderheiten ausfüllen.");
     if (title.length > 200) throw new Error("Der Titel ist zu lang (max. 200 Zeichen).");
-    if (content.length > 10000 || specialNotes.length > 10000) throw new Error("Der Text ist zu lang.");
+    const internalNotes = input.internalNotes.trim();
+    if (content.length > 10000 || specialNotes.length > 10000 || internalNotes.length > 10000) {
+      throw new Error("Der Text ist zu lang.");
+    }
     const platforms = [...new Set(input.platforms.map((p) => p.trim()).filter(Boolean))];
     if (platforms.length === 0) throw new Error("Bitte mindestens eine Plattform auswählen.");
     const lengths = VIDEO_LENGTHS[job.format] ?? [];
@@ -658,6 +679,7 @@ export async function updateJobDetails(jobId: string, input: JobDetailsInput) {
         title,
         content,
         specialNotes,
+        internalNotes: internalNotes || null,
         platform: platforms.join(", "),
         videoLength: lengths.length > 0 ? input.videoLength : "",
         materialLink: materialLink || null,
@@ -671,6 +693,7 @@ export async function updateJobDetails(jobId: string, input: JobDetailsInput) {
       (lengths.length > 0 ? input.videoLength : "") !== (job.videoLength ?? "") && "Videolänge",
       content !== job.content && "Inhalt",
       specialNotes !== job.specialNotes && "Besonderheiten",
+      (internalNotes || null) !== (job.internalNotes || null) && "Besonderheiten intern",
       (materialLink || null) !== job.materialLink && "Material-Link",
     ].filter(Boolean);
     if (changed.length) await logJob(jobId, "Briefing bearbeitet", changed.join(", "), me.id);
@@ -959,6 +982,7 @@ export async function duplicateJob(jobId: string, title?: string) {
       videoLength: job.videoLength,
       content: job.content,
       specialNotes: job.specialNotes,
+      internalNotes: job.internalNotes,
       status: "todo",
       // gleicher Frame.io-Ordner und gleiches Rohmaterial, eigener Review-Ordner beim ersten Upload
       frameioFolderId: job.frameioFolderId,

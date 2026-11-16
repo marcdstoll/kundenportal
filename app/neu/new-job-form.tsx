@@ -39,7 +39,7 @@ function Field({ label, error, children }: { label: string; error?: string; chil
   );
 }
 
-const EMPTY = { customerId: "", title: "", videoLength: "", content: "", specialNotes: "" };
+const EMPTY = { customerId: "", title: "", videoLength: "", content: "", specialNotes: "", internalNotes: "" };
 
 export function NewJobForm({ clients, isStaff, cutters }: Props) {
   const [values, setValues] = useState(EMPTY);
@@ -89,6 +89,7 @@ export function NewJobForm({ clients, isStaff, cutters }: Props) {
         videoLength: values.videoLength,
         content: values.content,
         specialNotes: values.specialNotes,
+        internalNotes: isStaff ? values.internalNotes : undefined,
         customerId: isStaff ? values.customerId : undefined,
         cutterIds: cutters.length ? cutterIds : undefined,
       },
@@ -259,6 +260,20 @@ export function NewJobForm({ clients, isStaff, cutters }: Props) {
           />
         </FormatField>
       </Field>
+
+      {isStaff && (
+        <Field label="Besonderheiten intern (optional)">
+          <FormatField>
+            <textarea
+              className={fieldClass()}
+              rows={3}
+              value={values.internalNotes}
+              onChange={(e) => set("internalNotes", e.target.value)}
+              disabled={busy}
+            />
+          </FormatField>
+        </Field>
+      )}
 
       <div className="space-y-1.5">
         <label

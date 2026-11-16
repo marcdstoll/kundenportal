@@ -9,6 +9,7 @@ import {
   clientRequestChanges,
   reserveJob,
   startJob,
+  takeBackReview,
   markOnline,
   removeCutter,
   sendBack,
@@ -179,7 +180,14 @@ export function JobControls({ job, isAdmin, isAssigned, staff, beforeBilling }: 
       )}
 
       {job.status === "feedback" && !isAdmin && (
-        <p className="rounded-lg border border-line p-3 text-sm text-muted">Wartet auf Feedback.</p>
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-line p-3 text-sm text-muted">
+          Wartet auf Feedback.
+          {isAssigned && (
+            <button disabled={busy} onClick={() => run(() => takeBackReview(job.id))} className={buttonSecondary}>
+              Zurücknehmen
+            </button>
+          )}
+        </div>
       )}
       {job.status === "feedback" && isAdmin && (
         <Section title="Feedback">

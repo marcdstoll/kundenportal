@@ -3,6 +3,7 @@ import { and, eq, inArray, isNotNull, lte } from "drizzle-orm";
 import { db } from "@/db";
 import { jobCutters, jobs, notifications, todos, user } from "@/db/schema";
 import { memberIds } from "@/lib/queries";
+import { assigneesOf } from "@/lib/todos";
 import { DEADLINE_WARN_DAYS, daysUntil, deadlineLabel, todayVienna } from "@/lib/deadline";
 import { formatDate } from "@/app/components/ui";
 
@@ -63,20 +64,26 @@ export async function runDeadlineReminders(today = todayVienna()) {
 
   // ---------- ToDos ----------
   const dueTodos = await db
-    .select({ id: todos.id, title: todos.title, assigneeId: todos.assigneeId, deadline: todos.deadline, notice: todos.deadlineNotice })
+    .select({ id: todos.id, title: todos.title, deadline: todos.deadline, notice: todos.deadlineNotice })
     .from(todos)
     .where(and(eq(todos.status, "offen"), isNotNull(todos.deadline), lte(todos.deadline, limit)));
+  const todoAssigned = await assigneesOf(dueTodos.filter((t) => t.notice !== t.deadline).map((t) => t.id));
   for (const t of dueTodos) {
     if (t.notice === t.deadline) continue;
     const label = deadlineLabel(daysUntil(t.deadline!, today));
-    await db.insert(notifications).values({
-      id: randomUUID(),
-      userId: t.assigneeId,
-      todoId: t.id,
-      type: "deadline",
-      text: `${label} (${formatDate(t.deadline)}): Aufgabe „${t.title}“`,
-    });
-    todoNotices++;
+    const to = todoAssigned.get(t.id) ?? [];
+    if (to.length) {
+      await db.insert(notifications).values(
+        to.map((userId) => ({
+          id: randomUUID(),
+          userId,
+          todoId: t.id,
+          type: "deadline",
+          text: `${label} (${formatDate(t.deadline)}): Aufgabe „${t.title}“`,
+        })),
+      );
+      todoNotices += to.length;
+    }
     await db.update(todos).set({ deadlineNotice: t.deadline }).where(eq(todos.id, t.id));
   }
 

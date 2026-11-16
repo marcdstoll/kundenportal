@@ -4,6 +4,7 @@ import {
   clientLogos,
   loadComments,
   mentionCandidates,
+  loadInternalNotes,
   loadJob,
   listUsers,
   nextPartTitle,
@@ -136,7 +137,7 @@ function DrawerFrame({
   );
 }
 
-function Briefing({ job, canEdit }: { job: JobView; canEdit?: boolean }) {
+function Briefing({ job, canEdit, internalNotes }: { job: JobView; canEdit?: boolean; internalNotes?: string }) {
   const view = (
     <div className="rounded-lg border border-line bg-canvas/40 px-3 py-1.5 text-sm">
         <Row label="Plattformen">{job.platform}</Row>
@@ -147,9 +148,14 @@ function Briefing({ job, canEdit }: { job: JobView; canEdit?: boolean }) {
         <Row label="Besonderheiten">
           <RichText text={job.specialNotes} />
         </Row>
+        {canEdit !== undefined && internalNotes && (
+          <Row label="Besonderheiten intern">
+            <RichText text={internalNotes} />
+          </Row>
+        )}
       </div>
   );
-  // Kundenansicht: nur lesen
+  // Kundenansicht: nur lesen, ohne interne Besonderheiten
   if (canEdit === undefined) return <Section title="Briefing">{view}</Section>;
   return (
     <BriefingEditor
@@ -160,6 +166,7 @@ function Briefing({ job, canEdit }: { job: JobView; canEdit?: boolean }) {
         title: job.title,
         content: job.content,
         specialNotes: job.specialNotes,
+        internalNotes: internalNotes ?? "",
         platforms: job.platform.split(",").map((p) => p.trim()).filter(Boolean),
         videoLength: job.videoLength ?? "",
         materialLink: job.materialLink ?? "",
@@ -316,11 +323,12 @@ export async function JobDrawer({
   closeHref: string;
   me: { id: string; role: string };
 }) {
-  const [job, staff, unread, logos] = await Promise.all([
+  const [job, staff, unread, logos, internalNotes] = await Promise.all([
     loadJob(jobId),
     listUsers("cutter", "admin"),
     unreadByJob(me.id),
     clientLogos(),
+    loadInternalNotes(jobId),
   ]);
   if (!job || !(await canSeeJob(me, job))) return null;
 
@@ -418,7 +426,11 @@ export async function JobDrawer({
         </Section>
       )}
 
-      <Briefing job={job} canEdit={isAdmin || (me.role === "cutter" && job.createdBy === me.id)} />
+      <Briefing
+        job={job}
+        canEdit={isAdmin || (me.role === "cutter" && job.createdBy === me.id)}
+        internalNotes={internalNotes}
+      />
 
       <Section
         title={

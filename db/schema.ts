@@ -79,6 +79,8 @@ export const jobs = pgTable("jobs", {
   videoLength: text("video_length").notNull(),
   content: text("content").notNull(),
   specialNotes: text("special_notes").notNull(),
+  // Besonderheiten intern: nur für Admins und Cutter, Kunden sehen das Feld nie
+  internalNotes: text("internal_notes"),
   status: text("status").notNull().default("entwurf"),
   feedbackNote: text("feedback_note"),
   reviewUrl: text("review_url"),
@@ -230,9 +232,6 @@ export const todos = pgTable(
     id: text("id").primaryKey(),
     title: text("title").notNull(),
     description: text("description"),
-    assigneeId: text("assignee_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
     // hoch | mittel | niedrig
     priority: text("priority").notNull().default("mittel"),
@@ -246,7 +245,21 @@ export const todos = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (t) => [index("todos_assignee_idx").on(t.assigneeId), index("todos_created_by_idx").on(t.createdBy)],
+  (t) => [index("todos_created_by_idx").on(t.createdBy)],
+);
+
+// Zuständige einer Aufgabe (mehrere möglich)
+export const todoAssignees = pgTable(
+  "todo_assignees",
+  {
+    todoId: text("todo_id")
+      .notNull()
+      .references(() => todos.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.todoId, t.userId] }), index("todo_assignees_user_idx").on(t.userId)],
 );
 
 export const notifications = pgTable(
