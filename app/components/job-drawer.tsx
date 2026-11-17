@@ -12,6 +12,7 @@ import {
   type JobFileView,
   type JobView,
 } from "@/lib/queries";
+import { groupHistory, groupLabel } from "@/lib/job-history";
 import { CUSTOMER_DATE_STATUSES, CUSTOMER_VIDEO_STATUSES, statusColor } from "@/lib/status";
 import { canSeeJob } from "@/lib/access";
 import { ExternalLink, FormatTag, Person, StatusBadge, formatDate, formatDateTime, formatSize, shortLink } from "./ui";
@@ -496,7 +497,14 @@ export async function JobDrawer({
 // Historie (nur Admins): wer hat wann welchen Schritt gemacht – neueste oben
 async function JobHistory({ job }: { job: JobView }) {
   const rows = await db
-    .select({ id: jobEvents.id, action: jobEvents.action, detail: jobEvents.detail, at: jobEvents.createdAt, name: user.name })
+    .select({
+      id: jobEvents.id,
+      action: jobEvents.action,
+      detail: jobEvents.detail,
+      at: jobEvents.createdAt,
+      name: user.name,
+      actorId: jobEvents.actorId,
+    })
     .from(jobEvents)
     .leftJoin(user, eq(user.id, jobEvents.actorId))
     .where(eq(jobEvents.jobId, job.id))
@@ -504,25 +512,62 @@ async function JobHistory({ job }: { job: JobView }) {
   // Ältere Projekte (vor der Historie): Anlage aus den Projektdaten ergänzen
   const entries = rows.some((r) => r.action === "Projekt angelegt" || r.action === "Projekt dupliziert")
     ? rows
-    : [...rows, { id: "angelegt", action: "Projekt angelegt", detail: null, at: job.createdAt, name: job.creatorName }];
+    : [
+        ...rows,
+        { id: "angelegt", action: "Projekt angelegt", detail: null, at: job.createdAt, name: job.creatorName, actorId: job.createdBy },
+      ];
+  const items = groupHistory(entries);
+  // Größe der (noch vorhandenen) Dateien für die Zusammenfassung
+  const sizes = new Map(job.files.filter((f) => f.kind === "roh").map((f) => [f.name, f.size ?? 0]));
   return (
     <details className="group border-t border-line pt-4" data-testid="job-history">
       <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium">
         <span aria-hidden className="inline-block text-xs text-muted transition-transform group-open:rotate-90">
           ▶
         </span>
-        Historie ({entries.length})
+        Historie ({items.length})
       </summary>
       <ol className="mt-3 space-y-2 text-sm">
-        {entries.map((e) => (
-          <li key={e.id} className="grid grid-cols-[auto_1fr] gap-x-3" data-testid="history-entry">
-            <span className="whitespace-nowrap text-xs tabular-nums text-muted">{formatDateTime(e.at)}</span>
-            <span className="min-w-0 break-words">
-              <span className="font-medium">{e.name ?? "Unbekannt"}</span> · {e.action}
-              {e.detail && <span className="text-muted"> · {e.detail}</span>}
-            </span>
-          </li>
-        ))}
+        {items.map((it) => {
+          if (it.kind === "single") {
+            const e = it.entry;
+            return (
+              <li key={e.id} className="grid grid-cols-[auto_1fr] gap-x-3" data-testid="history-entry">
+                <span className="whitespace-nowrap text-xs tabular-nums text-muted">{formatDateTime(e.at)}</span>
+                <span className="min-w-0 break-words">
+                  <span className="font-medium">{e.name ?? "Unbekannt"}</span> · {e.action}
+                  {e.detail && <span className="text-muted"> · {e.detail}</span>}
+                </span>
+              </li>
+            );
+          }
+          const bytes =
+            it.action === "Material nachgereicht"
+              ? it.entries.reduce((sum, e) => sum + (e.detail ? (sizes.get(e.detail) ?? 0) : 0), 0)
+              : 0;
+          return (
+            <li key={it.id} className="grid grid-cols-[auto_1fr] gap-x-3" data-testid="history-entry">
+              <span className="whitespace-nowrap text-xs tabular-nums text-muted">{formatDateTime(it.at)}</span>
+              <details className="group/files min-w-0">
+                <summary className="cursor-pointer list-none break-words">
+                  <span className="font-medium">{it.name ?? "Unbekannt"}</span> ·{" "}
+                  {groupLabel(it.action, it.entries.map((e) => e.detail))}
+                  {bytes > 0 && <span className="text-muted"> · {formatSize(bytes)}</span>}
+                  <span aria-hidden className="ml-1.5 inline-block text-[10px] text-muted transition-transform group-open/files:rotate-90">
+                    ▶
+                  </span>
+                </summary>
+                <ul className="mt-1.5 space-y-0.5 border-l border-line pl-3 text-xs text-muted">
+                  {it.entries.map((e) => (
+                    <li key={e.id} className="break-words">
+                      <span className="tabular-nums">{formatDateTime(e.at)}</span> · {e.detail ?? "–"}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </li>
+          );
+        })}
       </ol>
     </details>
   );
