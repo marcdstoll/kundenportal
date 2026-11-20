@@ -21,6 +21,7 @@ import {
   sendToClient,
   startJob,
   takeBackReview,
+  unstartJob,
   type Result,
 } from "@/app/actions";
 import { DeleteJobDialog } from "./project-actions";
@@ -47,6 +48,9 @@ function itemsFor(job: MenuJob, isAdmin: boolean): Item[][] {
     if (job.status === "warteschlange" && canWork) {
       flow.push({ label: "Jetzt starten", run: () => startJob(job.id), primary: true });
     }
+  }
+  if (job.status === "in_arbeit" && canWork) {
+    flow.push({ label: "Zurück in Warteschlange", run: () => unstartJob(job.id) });
   }
   if (!isAdmin && job.assigned && job.status === "feedback") {
     flow.push({ label: "Zurücknehmen", run: () => takeBackReview(job.id) });

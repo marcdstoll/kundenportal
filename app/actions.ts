@@ -439,6 +439,16 @@ export async function startJob(jobId: string) {
   });
 }
 
+// Wird jetzt gemacht → zurück in die Warteschlange (Cutter bleibt zugeordnet)
+export async function unstartJob(jobId: string) {
+  return run(async () => {
+    await requireCutterOf(jobId);
+    await changeStatus(jobId, "in_arbeit", "warteschlange", {}, "Zurück in Warteschlange");
+    refresh();
+    return null;
+  });
+}
+
 // Wird jetzt gemacht → Wartet auf Feedback
 // Mit Link: Cutter fügt einen vorhandenen Review-Link ein.
 // Ohne Link: der Link des zuletzt in der App hochgeladenen Videos wird genommen.

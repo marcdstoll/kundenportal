@@ -10,6 +10,7 @@ import {
   reserveJob,
   startJob,
   takeBackReview,
+  unstartJob,
   markOnline,
   removeCutter,
   sendBack,
@@ -177,6 +178,12 @@ export function JobControls({ job, isAdmin, isAssigned, staff, beforeBilling }: 
             </button>
           </div>
         </Section>
+      )}
+
+      {job.status === "in_arbeit" && canWork && (
+        <button disabled={busy || reviewRunning} onClick={() => run(() => unstartJob(job.id))} className={`${buttonSecondary} w-full`}>
+          Zurück in Warteschlange
+        </button>
       )}
 
       {job.status === "feedback" && !isAdmin && (

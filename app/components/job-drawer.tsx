@@ -15,6 +15,7 @@ import {
 import { groupHistory, groupLabel } from "@/lib/job-history";
 import { CUSTOMER_DATE_STATUSES, CUSTOMER_VIDEO_STATUSES, statusColor } from "@/lib/status";
 import { canSeeJob } from "@/lib/access";
+import { CopyButton } from "./copy-button";
 import { ExternalLink, FormatTag, Person, StatusBadge, formatDate, formatDateTime, formatSize, shortLink } from "./ui";
 import { JobControls } from "./job-controls";
 import { VideoBlock } from "./video-block";
@@ -54,6 +55,16 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
       <span className="text-muted">{label}</span>
       <div className="min-w-0">{children}</div>
     </div>
+  );
+}
+
+// Link mit Kopier-Symbol daneben
+function LinkWithCopy({ href }: { href: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1">
+      <ExternalLink href={href}>{shortLink(href)}</ExternalLink>
+      <CopyButton text={href} />
+    </span>
   );
 }
 
@@ -383,19 +394,19 @@ export async function JobDrawer({
         </Row>
         <Row label="Footage">
           {job.frameioFolderUrl ? (
-            <ExternalLink href={job.frameioFolderUrl}>{shortLink(job.frameioFolderUrl)}</ExternalLink>
+            <LinkWithCopy href={job.frameioFolderUrl} />
           ) : (
             <span className="text-muted">–</span>
           )}
         </Row>
         {job.materialLink && (
           <Row label="Material-Link">
-            <ExternalLink href={job.materialLink}>{shortLink(job.materialLink)}</ExternalLink>
+            <LinkWithCopy href={job.materialLink} />
           </Row>
         )}
         <Row label="Review-Link">
           {job.reviewUrl ? (
-            <ExternalLink href={job.reviewUrl}>{shortLink(job.reviewUrl)}</ExternalLink>
+            <LinkWithCopy href={job.reviewUrl} />
           ) : (
             <span className="text-muted">Noch keiner</span>
           )}
@@ -622,14 +633,12 @@ export async function CustomerJobDrawer({
         <Section title="Deine Abnahme">
           <p className="text-sm text-muted">Schau dir das Video an und entscheide: freigeben oder zurückschicken.</p>
           {job.reviewUrl && (
-            <a
-              href={job.reviewUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-block text-sm text-accent hover:underline"
-            >
-              Video im Review ansehen und kommentieren ↗
-            </a>
+            <span className="flex items-center gap-1">
+              <a href={job.reviewUrl} target="_blank" rel="noreferrer" className="text-sm text-accent hover:underline">
+                Video im Review ansehen und kommentieren ↗
+              </a>
+              <CopyButton text={job.reviewUrl} />
+            </span>
           )}
           <ClientDecision jobId={job.id} />
         </Section>
